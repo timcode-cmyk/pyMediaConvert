@@ -8,7 +8,6 @@
 """
 from pathlib import Path
 import argparse
-import worker
 import config
 
 def main():
@@ -33,7 +32,7 @@ def main():
     
     ConverterClass = mode_config['class']
     params = mode_config.get('params', {})
-    output_suffix = mode_config.get('output_suffix')
+    output_ext = mode_config.get('output_ext')
     if args.ext:
         support_exts = args.ext.split(',')
     else:
@@ -42,7 +41,7 @@ def main():
         converter = ConverterClass(
             params=params,
             support_exts=support_exts,
-            output_suffix=output_suffix
+            output_ext=output_ext
         )
     except SystemExit:
         print(f"初始化模式 '{args.mode}' 失败，请检查配置。")
