@@ -24,6 +24,8 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+dist-nuitka/
+nuitka-crash-report.xml
 
 # ----------------------------------------------------
 # 常见 IDE 和编辑器文件

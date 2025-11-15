@@ -8,7 +8,7 @@
 """
 from pathlib import Path
 import subprocess
-from utils import get_resource_path, get_ffmpeg_exe, get_ffprobe_exe
+from .utils import get_ffmpeg_exe, get_ffprobe_exe, get_resource_path
 from tqdm import tqdm 
 import sys
 from abc import ABC, abstractmethod

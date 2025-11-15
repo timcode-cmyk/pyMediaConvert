@@ -1,50 +1,30 @@
 import sys
-import os
 from pathlib import Path
 
-def get_base_path() -> Path:
-    """获取程序运行时的根目录路径。"""
-    # 检查是否是冻结（打包）环境
-    if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
-        # PyInstaller 打包环境
-        return Path(sys._MEIPASS)
-    # 开发环境或沙盒环境
-    return Path(__file__).resolve().parent.parent
-
-def get_resource_path(relative_path: str) -> Path:
+def get_base_dir() -> Path:
     """
-    根据相对路径获取资源的绝对路径。
-    Args:
-        relative_path: 相对于项目根目录的相对路径。
+    返回项目根目录：
+    - 开发环境：pyMediaConvert/utils.py 的父目录的父目录
+    - 打包环境（Nuitka/frozen）：sys.executable 所在目录
     """
-    # 逻辑保持不变，确保在沙盒环境中正确解析 'bin/ffmpeg' 等路径
-    if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
-        base_path = Path(sys._MEIPASS)
-        return base_path / 'src' / relative_path
+    if getattr(sys, "frozen", False):
+        # 打包后可执行文件
+        return Path(sys.executable).parent
     else:
-        return Path(relative_path) 
+        # 开发环境
+        return Path(__file__).resolve().parent.parent
 
-# --- FFmpeg/FFprobe 路径获取逻辑 ---
+BASE_DIR = get_base_dir()
+BIN_DIR = BASE_DIR / "bin"
+ASSET_DIR = BASE_DIR / "assets"
+
+def get_resource_path(*parts) -> Path:
+    return BASE_DIR.joinpath(*parts)
+
 def get_ffmpeg_exe() -> str:
-    """返回当前平台下 ffmpeg 可执行文件的路径（字符串格式，用于 subprocess）。"""
-    if sys.platform == "win32":
-        return str(get_resource_path("bin/ffmpeg.exe"))
-    elif sys.platform == "darwin":
-        return str(get_resource_path("bin/ffmpeg"))
-    elif "aarch64" in os.uname().machine:
-        return str(get_resource_path("bin/ffmpeglinuxarm"))
-    else:
-        # 默认 Linux (x86-64)
-        return str(get_resource_path("bin/ffmpeglinux64"))
+    exe_name = "ffmpeg.exe" if sys.platform == "win32" else "ffmpeg"
+    return str(BIN_DIR / exe_name)
 
 def get_ffprobe_exe() -> str:
-    """返回 ffprobe 可执行文件的路径（字符串格式，用于 subprocess）。"""
-    if sys.platform == "win32":
-        return str(get_resource_path("bin/ffprobe.exe"))
-    elif sys.platform == "darwin":
-        return str(get_resource_path("bin/ffprobe"))
-    elif "aarch64" in os.uname().machine:
-        return str(get_resource_path("bin/ffprobelinuxarm")) 
-    else:
-        # 默认 Linux (x86-64)
-        return str(get_resource_path("bin/ffprobelinux64"))
+    exe_name = "ffprobe.exe" if sys.platform == "win32" else "ffprobe"
+    return str(BIN_DIR / exe_name)

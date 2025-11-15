@@ -8,7 +8,8 @@
 """
 from pathlib import Path
 import argparse
-import config
+import pyMediaConvert.config as config
+
 
 def main():
     parser = argparse.ArgumentParser(description="视频批处理工具 (使用 FFmpeg)")

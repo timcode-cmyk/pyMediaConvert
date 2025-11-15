@@ -1,22 +1,22 @@
 import sys
 import os
-import time
 from pathlib import Path
-from PyQt5.QtWidgets import (
+from PySide6.QtWidgets import ( # <-- 更改为 PySide6
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QFormLayout, QLabel, QLineEdit, QPushButton, QComboBox,
     QProgressBar, QMessageBox, QFileDialog, QSizePolicy, QGroupBox
 )
-from PyQt5.QtCore import (
-    QObject, QThread, pyqtSignal, pyqtSlot, Qt
+from PySide6.QtCore import ( # <-- 更改为 PySide6
+    QObject, QThread, Signal, Slot, Qt # <-- pyqtSignal/pyqtSlot 更改为 Signal/Slot
 )
-from PyQt5.QtGui import QPalette, QColor, QFont, QGuiApplication
+from PySide6.QtGui import QPalette, QColor, QFont, QGuiApplication # <-- 更改为 PySide6
 
 # --- 1. Import Config and Worker Classes ---
 try:
-    from config import MODES
-    import worker
-    from utils import get_ffmpeg_exe, get_ffprobe_exe 
+    # 假设这些文件已存在且适用于 PySide6 环境
+    from pyMediaConvert.config import MODES
+    from pyMediaConvert import worker
+    from pyMediaConvert.utils import get_ffmpeg_exe, get_ffprobe_exe
 except ImportError as e:
     MODES = {}
     print(f"FATAL: 无法导入依赖文件 (config.py/worker.py/utils.py)。错误: {e}", file=sys.stderr)
@@ -25,10 +25,9 @@ except ImportError as e:
 # --- 2. 自定义 QLineEdit 以支持拖放 (Drag-and-Drop) ---
 class DropLineEdit(QLineEdit):
     """一个支持拖放文件/文件夹路径的 QLineEdit。"""
-    pathDropped = pyqtSignal(str)
+    pathDropped = Signal(str) # <-- 更改为 Signal
 
     def __init__(self, parent=None):
-        # 🐛 修复：必须调用 super().__init__(parent) 而不是 super().__init>(parent)
         super().__init__(parent)
         self.setDragEnabled(True)
         self.setAcceptDrops(True)
@@ -64,8 +63,8 @@ class ProgressMonitor(QObject):
     """
     作为 worker.py 和 GUI 线程之间的信号桥梁。
     """
-    file_progress = pyqtSignal(float, float, str)
-    overall_progress = pyqtSignal(int, int, str)
+    file_progress = Signal(float, float, str) # <-- 更改为 Signal
+    overall_progress = Signal(int, int, str) # <-- 更改为 Signal
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -87,7 +86,7 @@ class ProgressMonitor(QObject):
 # --- 4. 转换工作线程 (Worker Thread) ---
 class ConversionWorker(QObject):
     """在单独的线程中执行 worker.MediaConverter.run() 方法。"""
-    finished = pyqtSignal(bool) # bool: True for success/stopped, False for error
+    finished = Signal(bool) # <-- 更改为 Signal
 
     def __init__(self, input_dir, output_dir, mode_config, monitor, parent=None):
         super().__init__(parent)
@@ -96,11 +95,12 @@ class ConversionWorker(QObject):
         self.mode_config = mode_config
         self.monitor = monitor
 
-    @pyqtSlot()
+    @Slot() # <-- 更改为 Slot
     def run(self):
         """主循环：实例化真实的转换器并运行批处理."""
         is_successful = False
         try:
+            # 假设 worker 模块已正确配置 GlobalProgressMonitor
             worker.GlobalProgressMonitor = self.monitor
             ConverterClass = self.mode_config['class']
             
@@ -109,6 +109,12 @@ class ConversionWorker(QObject):
                 support_exts=self.mode_config.get('support_exts'),
                 output_ext=self.mode_config.get('output_ext')
             )
+            
+            # 在 run() 中调用 find_files 或在外部调用并传递文件列表，取决于 worker 的实现
+            # 如果 worker.run() 内部处理 find_files，则此处不需要调用。
+            # 为了兼容原代码的结构，此处假设 find_files 在 run 外部的 startConversion 中被调用过
+            # 但是，worker.run() 可能需要访问文件列表，为了安全，这里假设 run 方法会处理文件查找或接收文件列表。
+            # 由于原 ConversionWorker.run() 仅调用了 converter.run()，我们保持这种结构。
             
             converter.run(Path(self.input_dir), Path(self.output_dir))
             
@@ -126,7 +132,7 @@ class ConversionWorker(QObject):
 class MediaConverterApp(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("PyQt5 媒体转换工具 (自动跟随系统主题)")
+        self.setWindowTitle("媒体转换工具") # 更改标题
         self.setGeometry(100, 100, 800, 700)
         
         # 线程和状态管理
@@ -144,13 +150,11 @@ class MediaConverterApp(QMainWindow):
     def applyStyles(self):
         """
         应用结构和通用的 QSS 样式。
-        不设置颜色和背景，让 QPalette 和系统 QStyle 接管。
-        进度条的 chunk 颜色使用 Highlight 调色板颜色，确保跟随系统高亮色。
         """
-        # 使用 QPalette.Highlight 确保进度条颜色跟随系统主题或深色模式的高亮色
         # 强制更新调色板以确保获取到当前系统主题的颜色
         QApplication.setPalette(QGuiApplication.palette())
-        progress_bar_chunk_color = QApplication.palette().color(QPalette.Highlight).name()
+        # QPalette.ColorRole.Highlight 在 PySide6 中同样兼容
+        progress_bar_chunk_color = QApplication.palette().color(QPalette.ColorRole.Highlight).name()
 
         style = f"""
             /* 结构样式 - 遵循系统主题 */
@@ -198,7 +202,7 @@ class MediaConverterApp(QMainWindow):
             QLabel {{
                 padding: 5px 0;
             }}
-            /* 启动/停止按钮特殊样式 (使用属性选择器解决边界和提示样式问题) */
+            /* 启动/停止按钮特殊样式 */
             #StartStopButton {{ 
                 padding: 12px; 
                 font-size: 18px; 
@@ -206,12 +210,10 @@ class MediaConverterApp(QMainWindow):
                 border-radius: 8px;
             }}
             #StartStopButton[converting="false"] {{
-                /* 使用固定的绿色和白色文本，因为这是核心操作按钮 */
                 background-color: #10b981; /* 绿色 */
                 color: white;
             }}
             #StartStopButton[converting="true"] {{
-                /* 使用固定的红色和白色文本 */
                 background-color: #ef4444; /* 红色 */
                 color: white;
             }}
@@ -226,23 +228,22 @@ class MediaConverterApp(QMainWindow):
 
     def initUI(self):
         central_widget = QWidget()
-        # 增加主布局的边距，修复整体边界问题
         main_layout = QVBoxLayout(central_widget)
         main_layout.setContentsMargins(30, 30, 30, 30) 
         main_layout.setSpacing(20)
         
         # Title
         title = QLabel("<h1>媒体转换器</h1>")
-        title.setFont(QFont("Arial", 18, QFont.Bold)) 
+        title.setFont(QFont("Arial", 18, QFont.Weight.Bold)) 
         main_layout.addWidget(title)
         
         # Mode Selection
         mode_group = QGroupBox("转换模式设置")
         mode_layout = QFormLayout(mode_group)
-        mode_layout.setFieldGrowthPolicy(QFormLayout.ExpandingFieldsGrow)
+        mode_layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
         
         self.mode_combo = QComboBox()
-        self.mode_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.mode_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.mode_combo.currentIndexChanged.connect(self.updateModeDescription)
         
         self.desc_label = QLabel("模式说明: 请选择一个转换模式。")
@@ -256,7 +257,7 @@ class MediaConverterApp(QMainWindow):
         # Path Settings
         path_group = QGroupBox("路径设置")
         path_layout = QFormLayout(path_group)
-        path_layout.setFieldGrowthPolicy(QFormLayout.ExpandingFieldsGrow)
+        path_layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
         
         # Input Path (使用自定义的 DropLineEdit)
         self.input_path_edit = DropLineEdit()
@@ -285,7 +286,7 @@ class MediaConverterApp(QMainWindow):
 
         main_layout.addWidget(path_group)
 
-        # Start/Stop Button (使用 setObjectName 和 setProperty 进行 QSS 状态控制)
+        # Start/Stop Button
         self.start_stop_button = QPushButton("🚀 开始转换")
         self.start_stop_button.setObjectName("StartStopButton")
         self.start_stop_button.setProperty("converting", "false")
@@ -314,10 +315,10 @@ class MediaConverterApp(QMainWindow):
         self.file_progress_bar = QProgressBar()
         self.file_progress_bar.setRange(0, 100)
         progress_layout.addWidget(self.file_progress_bar)
-        progress_layout.addWidget(self.file_progress_text) # 调整进度文本位置
+        progress_layout.addWidget(self.file_progress_text) 
 
         main_layout.addWidget(progress_group)
-        main_layout.addStretch(1) # 增加弹性空间
+        main_layout.addStretch(1) 
 
         self.setCentralWidget(central_widget)
 
@@ -341,7 +342,8 @@ class MediaConverterApp(QMainWindow):
             return
 
         for key, config in MODES.items():
-            display_text = f"[{key}] - {config['description']}"
+            # 兼容原代码的 description 字段
+            display_text = f"[{key}] - {config['description']}" 
             self.mode_combo.addItem(display_text, key)
         self.updateModeDescription()
 
@@ -356,6 +358,7 @@ class MediaConverterApp(QMainWindow):
             self.desc_label.setText("模式说明: 未知模式或配置未加载。")
 
     def selectInputPath(self):
+        # 允许选择单个文件（以获取其目录）或选择目录
         path, _ = QFileDialog.getOpenFileName(self, "选择输入文件 (将使用其目录) 或选择目录", "", "All Files (*);;Videos (*.mp4 *.mkv *.mov)")
         if not path:
              path = QFileDialog.getExistingDirectory(self, "选择输入目录")
@@ -373,7 +376,7 @@ class MediaConverterApp(QMainWindow):
         if path:
             self.output_path_edit.setText(path)
 
-    @pyqtSlot(str)
+    @Slot(str) # <-- 更改为 Slot
     def updateOutputPath(self, input_path: str):
         """根据输入的路径自动设置默认输出路径。"""
         input_path = input_path.strip()
@@ -414,6 +417,7 @@ class MediaConverterApp(QMainWindow):
         
         try:
             # 检查文件数
+            # 警告: 这里的实现依赖于 worker.MediaConverter 内部的 find_files 方法
             temp_worker = mode_config['class'](params=mode_config['params'])
             temp_worker.find_files(Path(input_dir))
             files_to_process_count = len(temp_worker.files)
@@ -469,7 +473,7 @@ class MediaConverterApp(QMainWindow):
             self.status_label.setText("正在发送停止请求... FFMPEG 进程正在终止，请稍候。")
             self.start_stop_button.setEnabled(False) # 禁用按钮直到线程真正停止
 
-    @pyqtSlot(float, float, str)
+    @Slot(float, float, str) # <-- 更改为 Slot
     def updateFileProgress(self, seconds: float, duration: float, file_name: str):
         """由 Monitor 接收，更新单个文件进度条。"""
         if duration > 0:
@@ -481,7 +485,7 @@ class MediaConverterApp(QMainWindow):
              self.file_progress_text.setText(f"🎬 {file_name}: 无法获取时长，进度未知...")
 
 
-    @pyqtSlot(int, int, str)
+    @Slot(int, int, str) # <-- 更改为 Slot
     def updateOverallProgress(self, current: int, total: int, status: str):
         """由 Monitor 接收，更新总进度条和状态。"""
         if total > 0:
@@ -498,7 +502,7 @@ class MediaConverterApp(QMainWindow):
         if self.is_converting:
              self.start_stop_button.setText(f"🛑 停止转换 (已完成: {current}/{total})")
 
-    @pyqtSlot(bool)
+    @Slot(bool) # <-- 更改为 Slot
     def conversionFinished(self, is_successful):
         """在转换线程结束后执行。"""
         self.is_converting = False
@@ -526,12 +530,10 @@ class MediaConverterApp(QMainWindow):
 
 # --- 6. Application Entry ---
 if __name__ == '__main__':
-    # 启用高 DPI 缩放支持
-    QApplication.setAttribute(Qt.AA_EnableHighDpiScaling)
-    QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps)
-    
+
     app = QApplication(sys.argv)
     
     ex = MediaConverterApp()
     ex.show()
-    sys.exit(app.exec_())
+    # PySide6 和 PyQt6 都使用 app.exec()
+    sys.exit(app.exec())

@@ -3,7 +3,14 @@
 定义所有可用的处理模式及其参数。
 """
 
-import worker
+from .worker import (
+    LogoConverter,
+    H264Converter,
+    DnxhrConverter,
+    PngConverter,
+    Mp3Converter,
+    WavConverter
+)
 # from src.utils import get_resource_path
 
 # 模式配置
@@ -22,7 +29,7 @@ import worker
 #
 MODES = {
     'hailuo': {
-        'class': worker.LogoConverter,
+        'class': LogoConverter,
         'description': "添加海螺 Logo (竖屏)",
         'output_ext': "_hailuo.mp4",
         'support_exts': [".mp4"],
@@ -34,7 +41,7 @@ MODES = {
             }
         },
     'vidu': {
-        'class': worker.LogoConverter,
+        'class': LogoConverter,
         'description': "添加 Vidu Logo (竖屏)",
         'output_ext': "_vidu.mp4",
         'support_exts': [".mp4"],
@@ -46,7 +53,7 @@ MODES = {
             }
         },
     'veo': {
-        'class': worker.LogoConverter,
+        'class': LogoConverter,
         'description': "添加 Veo Logo (竖屏)",
         'output_ext': "_veo.mp4",
         'support_exts': [".mp4"],
@@ -58,7 +65,7 @@ MODES = {
             }
         },
     'dream': {
-        'class': worker.LogoConverter,
+        'class': LogoConverter,
         'description': "添加 Dream Logo (竖屏)",
         'output_ext': "_veo.mp4",
         'support_exts': [".mp4"],
@@ -71,35 +78,35 @@ MODES = {
         },
 
     'h264': {
-        'class': worker.H264Converter,
+        'class': H264Converter,
         'description': "转换为 H.264 (MP4)",
         'output_ext': "_h264.mp4",
         'support_exts': [".mov", ".avi", ".mkv"], 
         'params': {}
         },
     'dnxhr': {
-        'class': worker.DnxhrConverter,
+        'class': DnxhrConverter,
         'description': "转换为 DNxHR (MOV)",
         'output_ext': "_dnxhr.mov",
         'support_exts': [".mp4", ".avi", ".mkv"], 
         'params': {}
         },
     'png': {
-        'class': worker.PngConverter,
+        'class': PngConverter,
         'description': "图片转换为 PNG",
         'output_ext': "_processed.png",
         'support_exts': [".jpg", ".jpeg", ".webp"], 
         'params': {}
         },
     'mp3': {
-        'class': worker.Mp3Converter,
+        'class': Mp3Converter,
         'description': "音频转换为 MP3",
         'output_ext': "_processed.mp3",
         'support_exts': [".wav", ".flac", ".aac"], 
         'params': {}
         },
     'wav': {
-        'class': worker.WavConverter,
+        'class': WavConverter,
         'description': "音频转换为 WAV",
         'output_ext': "_processed.wav",
         'support_exts': [".mp3", ".flac", ".aac"], 
