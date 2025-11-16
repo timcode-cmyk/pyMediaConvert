@@ -465,7 +465,6 @@ class PngConverter(MediaConverter):
     """
     转换为PNG
     """
-    DEFAULT_SUPPORT_EXTS = {".jpg", ".bmp", ".png", ".webp", ".tiff"}
 
     def __init__(self, params: dict, support_exts=None, output_ext: str = None):
         super().__init__(support_exts, output_ext)
@@ -484,7 +483,6 @@ class Mp3Converter(MediaConverter):
     """
     转换为MP3
     """
-    DEFAULT_SUPPORT_EXTS = ['.mp3', '.wav', '.flac', '.ogg', '.mpeg', '.m4a', '.aiff']
 
     def __init__(self, params: dict, support_exts=None, output_ext: str = None):
         super().__init__(support_exts, output_ext)
@@ -502,7 +500,6 @@ class WavConverter(MediaConverter):
     """
     转换为Wav
     """
-    DEFAULT_SUPPORT_EXTS = ['.mp3', '.wav', '.flac', '.ogg', '.mpeg', '.m4a', '.aiff']
 
     def __init__(self, params: dict, support_exts=None, output_ext: str = None):
         super().__init__(support_exts, output_ext)

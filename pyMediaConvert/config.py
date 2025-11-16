@@ -81,35 +81,35 @@ MODES = {
         'class': H264Converter,
         'description': "转换为 H.264 (MP4)",
         'output_ext': "_h264.mp4",
-        'support_exts': [".mov", ".avi", ".mkv"], 
+        'support_exts': [".mov", ".avi", ".mkv", ".mp4", ".webm"], 
         'params': {}
         },
     'dnxhr': {
         'class': DnxhrConverter,
         'description': "转换为 DNxHR (MOV)",
         'output_ext': "_dnxhr.mov",
-        'support_exts': [".mp4", ".avi", ".mkv"], 
+        'support_exts': [".mp4", ".avi", ".mkv", ".mov", ".webm"], 
         'params': {}
         },
     'png': {
         'class': PngConverter,
         'description': "图片转换为 PNG",
         'output_ext': "_processed.png",
-        'support_exts': [".jpg", ".jpeg", ".webp"], 
+        'support_exts': [".jpg", ".bmp", ".png", ".webp", ".tiff"], 
         'params': {}
         },
     'mp3': {
         'class': Mp3Converter,
         'description': "音频转换为 MP3",
         'output_ext': "_processed.mp3",
-        'support_exts': [".wav", ".flac", ".aac"], 
+        'support_exts': ['.mp3', '.wav', '.flac', '.ogg', '.mpeg', '.m4a', '.aiff'], 
         'params': {}
         },
     'wav': {
         'class': WavConverter,
         'description': "音频转换为 WAV",
         'output_ext': "_processed.wav",
-        'support_exts': [".mp3", ".flac", ".aac"], 
+        'support_exts': ['.mp3', '.wav', '.flac', '.ogg', '.mpeg', '.m4a', '.aiff', '.mp4', '.avi', '.mkv', '.mov', '.webm'], 
         'params': {}
         }
     }

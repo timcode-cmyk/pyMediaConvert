@@ -7,8 +7,8 @@ import os
 
 # 导入自定义模块
 try:
-    import worker
-    import config
+    from pyMediaConvert import worker
+    from pyMediaConvert import config
     MODES = config.MODES
 except ImportError as e:
     # 始终在控制台输出错误，但在 GUI 中使用 messagebox 报告
