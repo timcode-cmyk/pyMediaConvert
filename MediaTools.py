@@ -418,7 +418,8 @@ class MediaConverterApp(QMainWindow):
         try:
             # 检查文件数
             # 警告: 这里的实现依赖于 worker.MediaConverter 内部的 find_files 方法
-            temp_worker = mode_config['class'](params=mode_config['params'])
+            # 使用 init_checks=False 跳过耗时的 ffmpeg/ffprobe 检查（仅用于计数）
+            temp_worker = mode_config['class'](params=mode_config['params'], init_checks=False)
             temp_worker.find_files(Path(input_dir))
             files_to_process_count = len(temp_worker.files)
         except Exception as e:

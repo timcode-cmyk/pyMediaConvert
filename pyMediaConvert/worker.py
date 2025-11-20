@@ -24,7 +24,7 @@ class MediaConverter(ABC):
     # 默认扩展名
     DEFAULT_SUPPORT_EXTS = {".mp4", ".mkv", ".mov", ".avi", ".webm"}
 
-    def __init__(self, support_exts=None, output_ext: str = None):
+    def __init__(self, support_exts=None, output_ext: str = None, init_checks: bool = True):
         if support_exts is not None:
             final_exts = support_exts
         else:
@@ -38,8 +38,10 @@ class MediaConverter(ABC):
 
         self.available_encoders = {}
 
-        self._check_ffmpeg_path()
-        self._detect_hardware_encoders()
+        # Only run heavy checks if requested (GUI file-count helper will pass init_checks=False)
+        if init_checks:
+            self._check_ffmpeg_path()
+            self._detect_hardware_encoders()
     
 
     def _check_ffmpeg_path(self):
@@ -203,6 +205,19 @@ class MediaConverter(ABC):
                 # --- 停止检查 ---
                 if GlobalProgressMonitor and GlobalProgressMonitor.check_stop_flag():
                     tqdm.write("ℹ️ 转换被用户中断。终止 FFMPEG 进程...")
+                    try:
+                        if proc.poll() is None:
+                            proc.kill()
+                            stopped_by_user = True
+                            try:
+                                proc.wait(timeout=5)
+                            except subprocess.TimeoutExpired:
+                                proc.kill()
+                            stderr_data = proc.stderr.read()
+                            if stderr_data:
+                                error_output.append(stderr_data)
+                    except Exception as e:
+                        tqdm.write(f"⚠️ 终止 FFMPEG 进程时出错: {e}")
                     break # 跳出循环，进入 finally 块并终止 FFMPEG
                 # 解析 ffmpeg -progress 的 key=value
                 if "=" in line:
@@ -361,7 +376,7 @@ class LogoConverter(MediaConverter):
     """
     添加logo并模糊背景
     """
-    def __init__(self, params: dict, support_exts=None, output_ext: str = None):
+    def __init__(self, params: dict, support_exts=None, output_ext: str = None, init_checks: bool = True):
         self.x = params.get('x', 10)
         self.y = params.get('y', 10)
         self.logo_w = params.get('logo_w', 100)
@@ -370,7 +385,7 @@ class LogoConverter(MediaConverter):
         self.target_h = params.get('target_h', 1920)
         self.logo_path = get_resource_path(params.get('logo_path'))
 
-        super().__init__(support_exts=support_exts, output_ext=output_ext)
+        super().__init__(support_exts=support_exts, output_ext=output_ext, init_checks=init_checks)
 
         if not self.logo_path.exists():
             print(f"错误：Logo 文件未找到: {self.logo_path}", file=sys.stderr)
@@ -421,8 +436,8 @@ class H264Converter(MediaConverter):
     """
     转换为H264
     """
-    def __init__(self, params: dict, support_exts=None, output_ext: str = None):
-        super().__init__(support_exts=support_exts, output_ext=output_ext)
+    def __init__(self, params: dict, support_exts=None, output_ext: str = None, init_checks: bool = True):
+        super().__init__(support_exts=support_exts, output_ext=output_ext, init_checks=init_checks)
 
     def process_file(self, input_path: Path, output_path: Path, duration: float, file_pbar: tqdm):
         output_file_name = f"{output_path}{self.output_ext}"
@@ -448,8 +463,8 @@ class DnxhrConverter(MediaConverter):
     """
     转换为DNxHR
     """
-    def __init__(self, params: dict, support_exts=None, output_ext: str = None):
-        super().__init__(support_exts, output_ext)
+    def __init__(self, params: dict, support_exts=None, output_ext: str = None, init_checks: bool = True):
+        super().__init__(support_exts, output_ext, init_checks=init_checks)
 
     def process_file(self, input_path: Path, output_path: Path, duration: float, file_pbar: tqdm):
         output_file_name = f"{output_path}{self.output_ext}"
@@ -466,8 +481,8 @@ class PngConverter(MediaConverter):
     转换为PNG
     """
 
-    def __init__(self, params: dict, support_exts=None, output_ext: str = None):
-        super().__init__(support_exts, output_ext)
+    def __init__(self, params: dict, support_exts=None, output_ext: str = None, init_checks: bool = True):
+        super().__init__(support_exts, output_ext, nit_checks=init_checks)
 
     def process_file(self, input_path: Path, output_path: Path, duration: float, file_pbar: tqdm):
         output_file_name = f"{output_path}{self.output_ext}"
@@ -484,8 +499,8 @@ class Mp3Converter(MediaConverter):
     转换为MP3
     """
 
-    def __init__(self, params: dict, support_exts=None, output_ext: str = None):
-        super().__init__(support_exts, output_ext)
+    def __init__(self, params: dict, support_exts=None, output_ext: str = None, init_checks: bool = True):
+        super().__init__(support_exts, output_ext, init_checks=init_checks)
         
     def process_file(self, input_path: Path, output_path: Path, duration: float, file_pbar: tqdm):
         output_file_name = f"{output_path}{self.output_ext}"
@@ -501,8 +516,8 @@ class WavConverter(MediaConverter):
     转换为Wav
     """
 
-    def __init__(self, params: dict, support_exts=None, output_ext: str = None):
-        super().__init__(support_exts, output_ext)
+    def __init__(self, params: dict, support_exts=None, output_ext: str = None, init_checks: bool = True):
+        super().__init__(support_exts, output_ext, init_checks=init_checks)
 
     def process_file(self, input_path: Path, output_path: Path, duration: float, file_pbar: tqdm):
         output_file_name = f"{output_path}{self.output_ext}"
