@@ -210,6 +210,20 @@ class MediaConverter(ABC):
                 # --- 停止检查 ---
                 if GlobalProgressMonitor and GlobalProgressMonitor.check_stop_flag():
                     tqdm.write("ℹ️ 转换被用户中断。终止 FFMPEG 进程...")
+                    # 立即强制终止 ffmpeg，并尽量收集 stderr 输出
+                    try:
+                        if proc.poll() is None:
+                            proc.kill()
+                            stopped_by_user = True
+                            try:
+                                proc.wait(timeout=5)
+                            except subprocess.TimeoutExpired:
+                                proc.kill()
+                            stderr_data = proc.stderr.read()
+                            if stderr_data:
+                                error_output.append(stderr_data)
+                    except Exception as e:
+                        tqdm.write(f"⚠️ 终止 FFMPEG 进程时出错: {e}")
                     break # 跳出循环，进入 finally 块并终止 FFMPEG
                 # 解析 ffmpeg -progress 的 key=value
                 if "=" in line:
