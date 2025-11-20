@@ -24,7 +24,7 @@ class MediaConverter(ABC):
     # 默认扩展名
     DEFAULT_SUPPORT_EXTS = {".mp4", ".mkv", ".mov", ".avi", ".webm"}
 
-    def __init__(self, support_exts=None, output_ext: str = None):
+    def __init__(self, support_exts=None, output_ext: str = None, init_checks: bool = True):
         if support_exts is not None:
             final_exts = support_exts
         else:
@@ -38,8 +38,9 @@ class MediaConverter(ABC):
 
         self.available_encoders = {}
 
-        self._check_ffmpeg_path()
-        self._detect_hardware_encoders()
+        if init_checks:
+            self._check_ffmpeg_path()
+            self._detect_hardware_encoders()
     
 
     def _check_ffmpeg_path(self):
@@ -177,18 +178,24 @@ class MediaConverter(ABC):
         # stderr=subprocess.PIPE 将捕获错误
         cmd[0] = get_ffmpeg_exe()
 
+        creation_flags = 0
+        if sys.platform.startswith('win'):
+            creation_flags = subprocess.CREATE_NO_WINDOW
+
         proc = subprocess.Popen(
             cmd, 
             stdout=subprocess.PIPE, 
             stderr=subprocess.PIPE,  # 单独捕获 stderr
             text=True, 
             bufsize=1,
-            encoding='utf-8' # 确保文本模式
+            encoding='utf-8', # 确保文本模式
+            creationflags=creation_flags
         )
 
         # file_pct = 0.0
         # overall_pct = 0.0
         last_seconds = 0.0
+        MIN_UPDATE_THRESHOLD = 0.01 
         
         # 用于在失败时报告错误
         error_output = []
@@ -207,20 +214,24 @@ class MediaConverter(ABC):
                 # 解析 ffmpeg -progress 的 key=value
                 if "=" in line:
                     k, v = line.split("=", 1)
-                    if k in ("out_time_ms", "out_time_us"):
+                    if k == "out_time_us": # 优先使用微秒，精度最高
                         try:
                             us = int(v)
                             seconds = us / 1_000_000.0
                         except Exception:
                             seconds = 0.0
-                        # file_pct = min(100.0, (seconds / duration) * 100.0)
+                    elif k == "out_time_ms": # 其次使用毫秒
+                        try:
+                            # 修正：毫秒值应除以 1000
+                            ms = int(v)
+                            seconds = ms / 1_000.0
+                        except Exception:
+                            seconds = 0.0
                     elif k == "out_time":
                         try:
-                            # if '.' in ss:
-                                # ss, _ = ss.split('.', 1)
+                            # 格式 h:mm:ss.ms
                             hh, mm, ss = v.split(":")
                             seconds = int(hh) * 3600 + int(mm) * 60 + float(ss)
-                                # file_pct = min(100.0, (seconds / duration) * 100.0)
                         except Exception:
                             pass
                     elif k == "progress" and v == "end":
@@ -235,13 +246,13 @@ class MediaConverter(ABC):
                     if seconds > last_seconds and seconds <= duration:
                         delta_seconds = seconds - last_seconds
                         
-                        file_pbar.update(delta_seconds)
-                        
-                        last_seconds = seconds
+                        if delta_seconds >= MIN_UPDATE_THRESHOLD:
+                            file_pbar.update(delta_seconds)
+                            last_seconds = seconds
 
-                        if GlobalProgressMonitor:
-                            name = file_pbar.desc.strip('🎬 ')
-                            GlobalProgressMonitor.update_file_progress(seconds, duration, name.strip())
+                            if GlobalProgressMonitor:
+                                name = file_pbar.desc.strip('🎬 ')
+                                GlobalProgressMonitor.update_file_progress(last_seconds, duration, name.strip())
                         
                     if k == "progress" and v == "end":
                         break
@@ -361,7 +372,7 @@ class LogoConverter(MediaConverter):
     """
     添加logo并模糊背景
     """
-    def __init__(self, params: dict, support_exts=None, output_ext: str = None):
+    def __init__(self, params: dict, support_exts=None, output_ext: str = None, init_checks: bool = True):
         self.x = params.get('x', 10)
         self.y = params.get('y', 10)
         self.logo_w = params.get('logo_w', 100)
@@ -370,7 +381,7 @@ class LogoConverter(MediaConverter):
         self.target_h = params.get('target_h', 1920)
         self.logo_path = get_resource_path(params.get('logo_path'))
 
-        super().__init__(support_exts=support_exts, output_ext=output_ext)
+        super().__init__(support_exts=support_exts, output_ext=output_ext, init_checks=init_checks)
 
         if not self.logo_path.exists():
             print(f"错误：Logo 文件未找到: {self.logo_path}", file=sys.stderr)
@@ -421,8 +432,8 @@ class H264Converter(MediaConverter):
     """
     转换为H264
     """
-    def __init__(self, params: dict, support_exts=None, output_ext: str = None):
-        super().__init__(support_exts=support_exts, output_ext=output_ext)
+    def __init__(self, params: dict, support_exts=None, output_ext: str = None, init_checks: bool = True):
+        super().__init__(support_exts=support_exts, output_ext=output_ext, init_checks=init_checks)
 
     def process_file(self, input_path: Path, output_path: Path, duration: float, file_pbar: tqdm):
         output_file_name = f"{output_path}{self.output_ext}"
@@ -448,8 +459,8 @@ class DnxhrConverter(MediaConverter):
     """
     转换为DNxHR
     """
-    def __init__(self, params: dict, support_exts=None, output_ext: str = None):
-        super().__init__(support_exts, output_ext)
+    def __init__(self, params: dict, support_exts=None, output_ext: str = None, init_checks: bool = True):
+        super().__init__(support_exts, output_ext, init_checks=init_checks)
 
     def process_file(self, input_path: Path, output_path: Path, duration: float, file_pbar: tqdm):
         output_file_name = f"{output_path}{self.output_ext}"
@@ -466,8 +477,8 @@ class PngConverter(MediaConverter):
     转换为PNG
     """
 
-    def __init__(self, params: dict, support_exts=None, output_ext: str = None):
-        super().__init__(support_exts, output_ext)
+    def __init__(self, params: dict, support_exts=None, output_ext: str = None, init_checks: bool = True):
+        super().__init__(support_exts, output_ext, init_checks=init_checks)
 
     def process_file(self, input_path: Path, output_path: Path, duration: float, file_pbar: tqdm):
         output_file_name = f"{output_path}{self.output_ext}"
@@ -484,8 +495,8 @@ class Mp3Converter(MediaConverter):
     转换为MP3
     """
 
-    def __init__(self, params: dict, support_exts=None, output_ext: str = None):
-        super().__init__(support_exts, output_ext)
+    def __init__(self, params: dict, support_exts=None, output_ext: str = None, init_checks: bool = True):
+        super().__init__(support_exts, output_ext, init_checks=init_checks)
         
     def process_file(self, input_path: Path, output_path: Path, duration: float, file_pbar: tqdm):
         output_file_name = f"{output_path}{self.output_ext}"
@@ -501,8 +512,8 @@ class WavConverter(MediaConverter):
     转换为Wav
     """
 
-    def __init__(self, params: dict, support_exts=None, output_ext: str = None):
-        super().__init__(support_exts, output_ext)
+    def __init__(self, params: dict, support_exts=None, output_ext: str = None, init_checks: bool = True):
+        super().__init__(support_exts, output_ext, init_checks=init_checks)
 
     def process_file(self, input_path: Path, output_path: Path, duration: float, file_pbar: tqdm):
         output_file_name = f"{output_path}{self.output_ext}"

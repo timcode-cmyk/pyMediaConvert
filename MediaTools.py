@@ -11,6 +11,11 @@ from PySide6.QtCore import ( # <-- 更改为 PySide6
 )
 from PySide6.QtGui import QPalette, QColor, QFont, QGuiApplication # <-- 更改为 PySide6
 
+# 在创建 QApplication 之前设置少量 macOS 相关环境变量（非必须，但有时能降低 IMK 报错出现率）
+if sys.platform == "darwin":
+    # Request compositing layer for Qt on macOS - 可帮助解决部分 Cocoa/Qt 兼容问题
+    os.environ.setdefault("QT_MAC_WANTS_LAYER", "1")
+
 # --- 1. Import Config and Worker Classes ---
 try:
     # 假设这些文件已存在且适用于 PySide6 环境
@@ -151,8 +156,14 @@ class MediaConverterApp(QMainWindow):
         """
         应用结构和通用的 QSS 样式。
         """
-        # 强制更新调色板以确保获取到当前系统主题的颜色
-        QApplication.setPalette(QGuiApplication.palette())
+        # 使用已存在的 QApplication 实例获取 palette（避免直接调用 QGuiApplication.palette() 触发 IMK 交互）
+        app_instance = QApplication.instance()
+        if app_instance is not None:
+            QApplication.setPalette(app_instance.palette())
+        else:
+            # 如果还没有实例（非常罕见），保持默认行为（不抛错）
+            pass
+
         # QPalette.ColorRole.Highlight 在 PySide6 中同样兼容
         progress_bar_chunk_color = QApplication.palette().color(QPalette.ColorRole.Highlight).name()
 
@@ -418,7 +429,7 @@ class MediaConverterApp(QMainWindow):
         try:
             # 检查文件数
             # 警告: 这里的实现依赖于 worker.MediaConverter 内部的 find_files 方法
-            temp_worker = mode_config['class'](params=mode_config['params'])
+            temp_worker = mode_config['class'](params=mode_config['params'], init_checks=False)
             temp_worker.find_files(Path(input_dir))
             files_to_process_count = len(temp_worker.files)
         except Exception as e:
