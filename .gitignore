@@ -6,6 +6,7 @@
 venv/
 .venv/
 env/
+.env
 
 # 排除 src/bin 目录（编译/生成的文件）
 bin/

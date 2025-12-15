@@ -62,7 +62,7 @@ chmod +x bin/ffmpeg bin/ffprobe
 2. 确保 bin/ 中有 ffmpeg/ffprobe（或系统 PATH 可用）。
 3. 在项目根目录运行 GUI：
 ```bash
-python MediaTools.py
+python app.py  # 启动整合后的带选项卡工具箱（媒体转换 + ElevenLabs）
 ```
 
 ---
@@ -139,6 +139,13 @@ nuitka3 --standalone --macos-create-app-bundle --plugin-enable=pyside6 --include
 - “IMKCFRunLoopWakeUpReliable” 日志：macOS 输入法/Qt 层非致命消息，通常可忽略；可尝试升级 PySide6 或设置 QT_MAC_WANTS_LAYER 环境变量。
 - 首次点击卡顿：已修复（避免在主线程进行耗时 ffmpeg/ffprobe 探测）。
 - ffmpeg 未找到：请把 ffmpeg/ffprobe 放到项目根目录的 bin/，或确保系统 PATH 可用。
+
+打包为单文件 App 后进度条不更新的常见原因：
+- 资源路径问题：打包器（PyInstaller/Nuitka）在 onefile 模式下会把数据解包到运行时临时目录（sys._MEIPASS），因此代码中需使用该路径查找嵌入的 `bin/`。已在 `pyMediaConvert.utils.get_base_dir()` 中增加对 `sys._MEIPASS` 的支持。
+- 可执行权限：嵌入的 `ffmpeg/ffprobe` 可能缺少执行权限，打包时/运行时需确保给二进制文件添加执行位（`chmod +x`）。工具现在会尽力确保可执行位（POSIX）。
+- 进度读取方式：原来使用临时文件轮询读取 `-progress <file>` 的做法在某些打包或沙箱环境下不稳定（文件 IO 权限或路径问题）。推荐使用 `-progress pipe:1`（FFmpeg 输出到 stdout 并实时读取），已在代码中优先采用此方式，回退到临时文件作为兼容性备用。
+
+如果你在打包后遇到进度不可用的问题，请检查 `bin/ffmpeg` 是否被包含、是否可执行，并在 App 启动日志中查找启动时的 stderr/错误输出。
 
 ---
 
