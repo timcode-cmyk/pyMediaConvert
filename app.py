@@ -12,7 +12,7 @@ setup_logging()
 class ToolBoxMainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Media Toolbox")
+        self.setWindowTitle("MediaTools")
         self.resize(900, 700)
         tabs = QTabWidget()
         tabs.addTab(MediaConverterWidget(), "媒体转换")
