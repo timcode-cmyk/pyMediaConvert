@@ -10,19 +10,21 @@ from pathlib import Path
 import subprocess
 from ..utils import get_ffmpeg_exe, get_ffprobe_exe, get_resource_path
 from ..logging_config import get_logger
-import sys
-from tqdm import tqdm
+# import sys
+# from tqdm import tqdm
+from PySide6.QtCore import QProcess, QEventLoop, QCoreApplication, Qt
 from abc import ABC, abstractmethod
 import re
-import tempfile
-import os
+# import tempfile
+# import os
 import time
+_GLOBAL_ENCODER_CACHE = None
 
 logger = get_logger(__name__)
 
 
 # 用于存储 app.py 传递进来的 ProgressMonitor 实例
-GlobalProgressMonitor = None
+# GlobalProgressMonitor = None
 
 class MediaConverter(ABC):
     """
@@ -50,7 +52,14 @@ class MediaConverter(ABC):
         # Only run heavy checks if requested (GUI file-count helper will pass init_checks=False)
         if init_checks:
             self._check_ffmpeg_path()
-            self._detect_hardware_encoders()
+            global _GLOBAL_ENCODER_CACHE
+            if _GLOBAL_ENCODER_CACHE is None:
+                # 第一次运行：执行探测
+                self._detect_hardware_encoders()
+                _GLOBAL_ENCODER_CACHE = self.available_encoders
+            else:
+                # 之后直接用缓存，不再运行 ffmpeg -encoders
+                self.available_encoders = _GLOBAL_ENCODER_CACHE
     
 
     def _check_ffmpeg_path(self):
@@ -189,184 +198,170 @@ class MediaConverter(ABC):
         unique_sorted = sorted({str(p): p for p in candidates}.items(), key=lambda x: x[0])
         self.files = [p for _, p in unique_sorted]
     
-    def get_duration(self, path: Path) -> float:
-        """
-        使用ffmpore获取时长
-        """
-        cmd = ["ffprobe", "-v", "error", "-show_entries", "format=duration",
-               "-of", "default=noprint_wrappers=1:nokey=1", str(path)]
+    def get_duration(self, file_path: Path) -> float:
+        """使用 QProcess 安全地获取视频时长，防止打包环境下的死锁"""
+        ffprobe_exe = get_ffprobe_exe()
+        
+        args = [
+            "-v", "error",
+            "-show_entries", "format=duration",
+            "-of", "default=noprint_wrappers=1:nokey=1",
+            str(file_path)
+        ]
+
+        process = QProcess()
+        # 强制不使用缓冲
+        env = process.processEnvironment()
+        env.insert("PYTHONUNBUFFERED", "1")
+        process.setProcessEnvironment(env)
+
+        process.start(ffprobe_exe, args)
+        
+        # 给予一定的超时时间，同时保持 UI 刷新
+        # 这能解决双击运行时，系统因校验二进制文件导致的瞬间卡顿
+        if not process.waitForStarted(5000):
+            logger.error("ffprobe 启动失败")
+            return 0.0
+
+        # 循环等待结束，同时允许 UI 处理事件
+        while process.state() == QProcess.ProcessState.Running:
+            QCoreApplication.processEvents()
+            if process.waitForFinished(100):
+                break
+
+        output = str(process.readAllStandardOutput(), encoding='utf-8').strip()
+        
         try:
-            out = subprocess.check_output(cmd, stderr=subprocess.DEVNULL, text=True).strip()
-            return round(float(out), 2) if out else 1.0
-        except Exception:
-            return 1.0
-          
-    def process_ffmpeg(self, cmd: list, duration: float, file_pbar: tqdm, input_file_name: str):
-        """
-        执行 FFMPEG 命令并解析 -progress 输出。
-        修复了 Nuitka 打包后因管道缓冲导致进度条不刷新的问题。
-        """
-        cmd[0] = get_ffmpeg_exe()
+            return float(output) if output else 0.0
+        except ValueError:
+            logger.error(f"无法解析时长输出: {output}")
+            return 0.0
+    
+    def _parse_ffmpeg_output(self):
+        """实时解析 FFmpeg 的 -progress pipe:1 输出"""
+        
+        if not self.process:
+            return
+        
+        raw_stdout = self.process.readAllStandardOutput().data()
+        raw_stderr = self.process.readAllStandardError().data()
+        # 读取所有输出行 (pipe:1 到 stdout)
+        raw_output = raw_stdout + raw_stderr
+        lines = raw_output.decode('utf-8', errors='ignore').splitlines()
 
-        last_seconds = 0.0
-        error_output = []
-        stopped_by_user = False
+        current_seconds = self.last_seconds
+        
+        # 正则表达式用于匹配 time=HH:MM:SS.ms，用于非 pipe:1 的进度解析，但保留 pipe:1 的逻辑
+        time_regex = re.compile(r"time=(\d{2}):(\d{2}):(\d{2})\.(\d{2})") 
 
-        # 构造命令：使用 stdout (pipe:1) 输出进度
-        # 移除原命令可能存在的 -progress 或 pipe:1，防止重复
-        final_cmd = [c for c in cmd if c != "-progress" and c != "pipe:1"]
-        final_cmd.extend(["-progress", "pipe:1"])
+        for line in lines:
+            if "=" in line:
+                try:
+                    k, v = line.split("=", 1)
+                    k = k.strip()
+                    v = v.strip()
 
-        proc = None
-        try:
-            # 关键修改 1: 移除 text=True, bufsize=1, encoding='utf-8'
-            # 关键修改 2: 添加 stdin=subprocess.DEVNULL (防止 ffmpeg 在后台等待输入导致卡死)
-            # 使用二进制模式启动进程
-            proc = subprocess.Popen(
-                final_cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                stdin=subprocess.DEVNULL, 
-            )
+                    # 解析 time
+                    if k == "out_time_us":
+                        current_seconds = int(v) / 1_000_000.0
+                    elif k == "out_time_ms":
+                        current_seconds = int(v) / 1_000.0
+                    elif k == "out_time":
+                        # 格式如 00:00:05.123
+                        parts = v.split(":")
+                        if len(parts) == 3:
+                            hh, mm, ss = parts
+                            current_seconds = int(hh) * 3600 + int(mm) * 60 + float(ss)
+                    elif k == "progress" and v == "end":
+                        current_seconds = self.total_duration
+                        
+                    current_seconds = round(current_seconds, 2)
+                    
+                    # 只有当进度确实前进时才更新
+                    if current_seconds > self.last_seconds and current_seconds <= self.total_duration:
+                        self.last_seconds = current_seconds
+                        # 更新 GUI
+                        if self.monitor:
+                            self.monitor.update_file_progress(self.last_seconds, self.total_duration, self.current_file_name)
 
-            # 关键修改 3: 使用二进制 readline() 循环
-            while True:
-                # readline 在二进制模式下读取直到 \n，通常不受全缓冲影响（只要发送方发送了 \n）
-                raw_line = proc.stdout.readline()
-                
-                # 如果读到空字节且进程已结束，则跳出
-                if not raw_line:
-                    if proc.poll() is not None:
+                    if k == "progress" and v == "end":
+                        # 进程即将退出，退出解析循环
                         break
+                except Exception:
+                    # 忽略解析单行错误
                     continue
 
-                # 手动解码，忽略解码错误以保证稳定性
-                line = raw_line.decode('utf-8', errors='ignore').strip()
-                
-                if not line:
-                    continue
+        # 保持最新的进度
+        self.last_seconds = current_seconds
 
-                # --- 停止检查 ---
-                if GlobalProgressMonitor and GlobalProgressMonitor.check_stop_flag():
-                    logger.info("用户请求停止，终止 FFMPEG 进程")
-                    try:
-                        if proc.poll() is None:
-                            proc.kill()
-                            stopped_by_user = True
-                            # 稍微等待一下确保进程退出
-                            try:
-                                proc.wait(timeout=2)
-                            except subprocess.TimeoutExpired:
-                                pass
-                    except Exception as e:
-                        logger.exception(f"终止 FFMPEG 进程时出错: {e}")
-                    break
-
-                # --- 解析逻辑 (与之前相同) ---
-                seconds = 0.0
-                if "=" in line:
-                    try:
-                        k, v = line.split("=", 1)
-                        # 清理可能的空白字符
-                        k = k.strip()
-                        v = v.strip()
-
-                        if k == "out_time_us":
-                            seconds = int(v) / 1_000_000.0
-                        elif k == "out_time_ms":
-                            seconds = int(v) / 1_000.0
-                        elif k == "out_time":
-                            # 格式如 00:00:05.123
-                            parts = v.split(":")
-                            if len(parts) == 3:
-                                hh, mm, ss = parts
-                                seconds = int(hh) * 3600 + int(mm) * 60 + float(ss)
-                        elif k == "progress" and v == "end":
-                            seconds = duration
-                        
-                        seconds = round(seconds, 2)
-                        
-                        # 只有当进度确实前进时才更新，减少信号发射频率
-                        if seconds > last_seconds and seconds <= duration:
-                            delta_seconds = seconds - last_seconds
-                            
-                            # 只有增量大于 0 才更新
-                            if delta_seconds > 0:
-                                if file_pbar:
-                                    file_pbar.update(delta_seconds)
-                                last_seconds = seconds
-                                
-                                # 更新 GUI
-                                if GlobalProgressMonitor:
-                                    name = (getattr(file_pbar, 'desc', '') or '').strip('🎬 ')
-                                    # 此时 input_file_name 是可用的，优先使用
-                                    display_name = input_file_name if input_file_name else name
-                                    GlobalProgressMonitor.update_file_progress(last_seconds, duration, display_name.strip())
-
-                        if k == "progress" and v == "end":
-                            break
-                    except ValueError:
-                        continue
-                    except Exception:
-                        # 防止解析单行出错导致整个循环崩溃
-                        continue
-
-            # 等待进程完全结束
-            proc.wait()
+    def _capture_ffmpeg_error(self):
+        """捕获 FFmpeg 过程中的警告和错误信息"""
+        if not self.process:
+            return
             
-            # 读取错误输出 (如果有)
-            stderr_data = proc.stderr.read()
-            if stderr_data:
-                # 二进制转文本
-                decoded_err = stderr_data.decode('utf-8', errors='ignore')
-                if decoded_err.strip():
-                    error_output.append(decoded_err)
+        # 捕获 stderr 输出并记录日志，FFmpeg 的非进度信息通常在这里
+        error_data = str(self.process.readAllStandardError(), encoding='utf-8', errors='ignore')
+        if error_data.strip():
+            logger.warning(f"FFMPEG 错误/警告: {error_data.strip()}")
+          
+    def process_ffmpeg(self, cmd: list, duration: float, monitor, input_file_name: str):
+        cmd[0] = get_ffmpeg_exe()
+        self.monitor = monitor
+        self.current_file_name = input_file_name
+        self.total_duration = duration
+        self.last_seconds = 0.0
+
+        # 修改 1: 确保命令使用 -progress - 且尽可能精简输出
+        final_cmd = [c for c in cmd if c not in ["-progress", "pipe:1", "-nostats"]]
+        final_cmd.extend(["-progress", "-", "-nostats"])
+
+        self.process = QProcess()
+        
+        # 修改 2: 强制设置环境变量，确保在 GUI 启动时也生效
+        env = self.process.processEnvironment()
+        env.insert("PYTHONUNBUFFERED", "1")
+        env.insert("FFREPORT", "file=ffmpeg_log.txt:level=32") # 可选：输出日志到文件辅助调试
+        self.process.setProcessEnvironment(env)
+
+        # 混合输出模式，方便解析
+        self.process.setProcessChannelMode(QProcess.MergedChannels)
+        self.process.readyRead.connect(self._parse_ffmpeg_output)
+
+        try:
+            self.process.start(final_cmd[0], final_cmd[1:])
+
+            if not self.process.waitForStarted():
+                raise Exception("FFmpeg 进程启动失败。")
+            
+            # 修改 3: 这里的循环是解决“双击卡住”的关键
+            while self.process.state() == QProcess.ProcessState.Running:
+                if self.monitor and self.monitor.check_stop_flag():
+                    self.process.terminate()
+                    break
+                
+                # 【核心】：使用 waitForReadyRead 强制让系统内核把管道里的数据“吐”出来
+                # 即使 FFmpeg 在缓冲，这个操作也会增加拉取的频率
+                if self.process.waitForReadyRead(50):
+                    self._parse_ffmpeg_output()
+                
+                # 保持 UI 响应
+                QCoreApplication.processEvents(QEventLoop.AllEvents, 50)
+                time.sleep(0.01)
+
+            # 进程结束后再跑一次，确保最后 1% 的数据被读到
+            self._parse_ffmpeg_output()
 
         except Exception as e:
-            logger.exception(f"处理 FFMPEG 进程失败: {e}")
-            if proc and proc.poll() is None:
-                try:
-                    proc.kill()
-                except Exception:
-                    pass
+            logger.exception(f"FFMPEG 进程异常: {e}")
+            self.process.kill()
             raise e
 
-        finally:
-            # 确保清理
-            if proc and proc.poll() is None and not stopped_by_user:
-                try:
-                    proc.kill()
-                    stderr_data = proc.stderr.read()
-                    if stderr_data:
-                        error_output.append(stderr_data.decode('utf-8', errors='ignore'))
-                except Exception:
-                    pass
-
-        # 确保进度条走完
-        if file_pbar:
-            remain = duration - file_pbar.n
-            if remain > 0:
-                file_pbar.update(remain)
-        
-        if GlobalProgressMonitor:
-            GlobalProgressMonitor.update_file_progress(duration, duration, input_file_name)
-
-        # 检查返回值
-        if proc.returncode != 0 and not stopped_by_user:
-            full_error = "\n".join(error_output).strip()
-            raise subprocess.CalledProcessError(
-                proc.returncode,
-                cmd,
-                output=None,
-                stderr=full_error
-            )
-
     @abstractmethod
-    def process_file(self, input_path: Path, output_path: Path, duration: float, file_pbar: tqdm):
+    def process_file(self, input_path: Path, output_path: Path, duration: float, file_pbar=None):
         """抽象方法：子类必须实现具体的处理逻辑"""
         pass
 
-    def run(self, input_dir: Path, out_dir: Path):
+    def run(self, input_dir: Path, out_dir: Path, monitor):
         """
         执行批处理
         
@@ -393,50 +388,35 @@ class MediaConverter(ABC):
             except Exception:
                 overall_pbar = None
 
-        if GlobalProgressMonitor:
-            GlobalProgressMonitor.update_overall_progress(0, total, f"准备就绪 ({total} 文件)")
+        if monitor:
+            monitor.update_overall_progress(0, total, f"准备就绪 ({total} 文件)")
 
         for idx, file_path in enumerate(self.files, start=1):
 
-            if GlobalProgressMonitor and GlobalProgressMonitor.check_stop_flag():
+            if monitor and monitor.check_stop_flag():
                 logger.info("收到停止请求，退出批处理循环。")
                 break
 
             name = file_path.name
             output_path = out_dir / file_path.stem 
 
-            # 打印当前文件信息，并刷新总进度条
-            if overall_pbar:
-                try:
-                    overall_pbar.set_description(f"总进度 ({idx}/{total})")
-                except Exception:
-                    logger.debug("无法设置 overall_pbar 描述。可能是终端不可用。")
-            else:
-                # 在 GUI 模式下记录信息，GUI 将通过 monitor 接收更新
-                logger.debug(f"总进度 ({idx}/{total})")
+            logger.debug(f"总进度 ({idx}/{total})")
 
-            if GlobalProgressMonitor:
+            if monitor:
                  # 使用 idx-1 作为当前已完成数
-                 GlobalProgressMonitor.update_overall_progress(idx - 1, total, f"总进度 ({idx-1}/{total})")
+                 monitor.update_overall_progress(idx - 1, total, f"总进度 ({idx-1}/{total})")
 
             # 获取时长
             duration = self.get_duration(file_path)
             
             # 创建当前文件进度条（仅在 CLI 模式下）
-            file_pbar = None
-            if self.use_cli:
-                try:
-                    from tqdm import tqdm as _tqdm
-                    file_pbar = _tqdm(total=duration, desc=f"🎬 {name[:30]:<30}", unit="s", leave=False, dynamic_ncols=True)
-                except Exception:
-                    file_pbar = None
-
             try:
+                # 传递 monitor 实例
                 self.process_file(
                     input_path=file_path, 
                     output_path=output_path, 
                     duration=duration, 
-                    file_pbar=file_pbar
+                    monitor=monitor # 新增 monitor 传递
                 ) 
             except subprocess.CalledProcessError as e:
                 # FFMPEG 失败，但我们不中断批处理
@@ -444,20 +424,16 @@ class MediaConverter(ABC):
             except Exception as e:
                 logger.exception(f"处理 {name} 时发生严重错误: {e}")
             finally:
-                if file_pbar:
-                    file_pbar.close() # 确保文件进度条被关闭
-                if overall_pbar:
-                    overall_pbar.update(1) # 更新总进度条 (即使失败也算处理完成)
                 # 更新 GUI 总进度
-                if GlobalProgressMonitor:
-                    GlobalProgressMonitor.update_overall_progress(idx, total, f"总进度 ({idx}/{total})")
+                if monitor:
+                    monitor.update_overall_progress(idx, total, f"总进度 ({idx}/{total})")
 
-        current_completed = overall_pbar.n if overall_pbar else total
+        current_completed = idx if monitor and monitor.check_stop_flag() else total
 
-        if GlobalProgressMonitor and GlobalProgressMonitor.check_stop_flag():
-             GlobalProgressMonitor.update_overall_progress(current_completed, total, "用户已停止转换.")
+        if monitor and monitor.check_stop_flag():
+             monitor.update_overall_progress(current_completed, total, "用户已停止转换.")
         else:
-             GlobalProgressMonitor.update_overall_progress(total, total, "所有文件处理完成！")
+             monitor.update_overall_progress(total, total, "所有文件处理完成！")
 
         # log completion
         logger.info(f"批处理完成: {current_completed}/{total} 文件完成")
@@ -489,7 +465,7 @@ class LogoConverter(MediaConverter):
             logger.critical(f"Logo 文件未找到: {self.logo_path}")
             raise FileNotFoundError(f"Logo not found: {self.logo_path}")
 
-    def process_file(self, input_path: Path, output_path: Path, duration: float, file_pbar: tqdm):
+    def process_file(self, input_path: Path, output_path: Path, duration: float, monitor=None):
         """
         添加logo
         :param input_path: 输入路径
@@ -529,7 +505,7 @@ class LogoConverter(MediaConverter):
         ])
 
         name = input_path.name # 确保获取到文件名
-        self.process_ffmpeg(cmd, duration, file_pbar, name)
+        self.process_ffmpeg(cmd, duration, monitor, name)
 
 class H264Converter(MediaConverter):
     """
@@ -540,7 +516,7 @@ class H264Converter(MediaConverter):
 
         super().__init__(support_exts=support_exts, output_ext=output_ext, init_checks=init_checks)
 
-    def process_file(self, input_path: Path, output_path: Path, duration: float, file_pbar: tqdm):
+    def process_file(self, input_path: Path, output_path: Path, duration: float, monitor=None):
         output_file_name = f"{output_path}{self.output_ext}"
         video_codec, preset_key, preset_value = self._get_video_codec_params(self.force_codec)
         cmd = [
@@ -559,7 +535,7 @@ class H264Converter(MediaConverter):
             output_file_name
         ])
         name = input_path.name # 确保获取到文件名
-        self.process_ffmpeg(cmd, duration, file_pbar, name)
+        self.process_ffmpeg(cmd, duration, monitor, name)
 
 class DnxhrConverter(MediaConverter):
     """
@@ -570,7 +546,7 @@ class DnxhrConverter(MediaConverter):
 
         super().__init__(support_exts, output_ext, init_checks=init_checks)
 
-    def process_file(self, input_path: Path, output_path: Path, duration: float, file_pbar: tqdm):
+    def process_file(self, input_path: Path, output_path: Path, duration: float, monitor=None):
         output_file_name = f"{output_path}{self.output_ext}"
         cmd = [
             "ffmpeg", "-y", "-hide_banner", "-nostats", "-loglevel", "error",
@@ -579,7 +555,7 @@ class DnxhrConverter(MediaConverter):
             output_file_name
         ]
         name = input_path.name # 确保获取到文件名
-        self.process_ffmpeg(cmd, duration, file_pbar, name)
+        self.process_ffmpeg(cmd, duration, monitor, name)
 
 class PngConverter(MediaConverter):
     """
@@ -589,7 +565,7 @@ class PngConverter(MediaConverter):
     def __init__(self, params: dict, support_exts=None, output_ext: str = None, init_checks: bool = True):
         super().__init__(support_exts, output_ext, init_checks=init_checks)
 
-    def process_file(self, input_path: Path, output_path: Path, duration: float, file_pbar: tqdm):
+    def process_file(self, input_path: Path, output_path: Path, duration: float, monitor=None):
         output_file_name = f"{output_path}{self.output_ext}"
         cmd = [
             "ffmpeg", "-y", "-hide_banner", "-nostats", "-loglevel", "error",
@@ -598,7 +574,7 @@ class PngConverter(MediaConverter):
             output_file_name
         ]
         name = input_path.name # 确保获取到文件名
-        self.process_ffmpeg(cmd, duration, file_pbar, name)
+        self.process_ffmpeg(cmd, duration, monitor, name)
 
 class Mp3Converter(MediaConverter):
     """
@@ -608,7 +584,7 @@ class Mp3Converter(MediaConverter):
     def __init__(self, params: dict, support_exts=None, output_ext: str = None, init_checks: bool = True):
         super().__init__(support_exts, output_ext, init_checks=init_checks)
         
-    def process_file(self, input_path: Path, output_path: Path, duration: float, file_pbar: tqdm):
+    def process_file(self, input_path: Path, output_path: Path, duration: float, monitor=None):
         output_file_name = f"{output_path}{self.output_ext}"
         cmd = [
             "ffmpeg", "-y", "-hide_banner", "-nostats", "-loglevel", "error",
@@ -616,7 +592,7 @@ class Mp3Converter(MediaConverter):
             output_file_name
         ]
         name = input_path.name # 确保获取到文件名
-        self.process_ffmpeg(cmd, duration, file_pbar, name)
+        self.process_ffmpeg(cmd, duration, monitor, name)
 
 class WavConverter(MediaConverter):
     """
@@ -626,7 +602,7 @@ class WavConverter(MediaConverter):
     def __init__(self, params: dict, support_exts=None, output_ext: str = None, init_checks: bool = True):
         super().__init__(support_exts, output_ext, init_checks=init_checks)
 
-    def process_file(self, input_path: Path, output_path: Path, duration: float, file_pbar: tqdm):
+    def process_file(self, input_path: Path, output_path: Path, duration: float, monitor):
         output_file_name = f"{output_path}{self.output_ext}"
         cmd = [
             "ffmpeg", "-y", "-hide_banner", "-nostats", "-loglevel", "error",
@@ -634,6 +610,6 @@ class WavConverter(MediaConverter):
             output_file_name
         ]
         name = input_path.name # 确保获取到文件名
-        self.process_ffmpeg(cmd, duration, file_pbar, name)
+        self.process_ffmpeg(cmd, duration, monitor, name)
 
 

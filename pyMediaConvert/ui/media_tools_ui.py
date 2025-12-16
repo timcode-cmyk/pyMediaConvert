@@ -78,20 +78,20 @@ class ConversionWorker(QObject):
     def run(self):
         is_successful = False
         try:
-            pm_worker.GlobalProgressMonitor = self.monitor
+            # pm_worker.GlobalProgressMonitor = self.monitor
             ConverterClass = self.mode_config['class']
             converter = ConverterClass(
                 params=self.mode_config.get('params', {}),
                 support_exts=self.mode_config.get('support_exts'),
                 output_ext=self.mode_config.get('output_ext')
             )
-            converter.run(Path(self.input_dir), Path(self.output_dir))
+            converter.run(Path(self.input_dir), Path(self.output_dir), self.monitor)
             is_successful = not self.monitor.check_stop_flag()
         except Exception as e:
             logger.exception(f"Worker 线程中发生未捕获的异常: {e}")
             is_successful = False
         finally:
-            pm_worker.GlobalProgressMonitor = None
+            # pm_worker.GlobalProgressMonitor = None
             self.finished.emit(is_successful)
 
 

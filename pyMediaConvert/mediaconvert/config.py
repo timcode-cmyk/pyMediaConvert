@@ -64,6 +64,18 @@ MODES = {
             'logo_path': "assets/Veo.png"
             }
         },
+    'heygen': {
+        'class': LogoConverter,
+        'description': "添加 Dream+HegGen Logo (竖屏)",
+        'output_ext': "_veo.mp4",
+        'support_exts': [".mp4"],
+        'params': {
+            'x': 700, 'y': 1810,
+            'logo_w': 360, 'logo_h': 90,
+            'target_w': 1080, 'target_h': 1920,
+            'logo_path': "assets/HeyGen.png"
+            }
+        },
     'dream': {
         'class': LogoConverter,
         'description': "添加 Dreamina Logo (竖屏)",
