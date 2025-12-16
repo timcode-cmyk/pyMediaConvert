@@ -52,7 +52,7 @@ pip install -r requirements.txt || pip install pyside6 tqdm
 ```bash
 chmod +x bin/ffmpeg bin/ffprobe
 ```
-运行时，程序会优先使用项目 bin/ 中的二进制，否则回退到系统 PATH 中的可执行文件。
+运行时，程序会优先使用项目 bin/ 中的二进制（在 Windows 中为 `ffmpeg.exe`/`ffprobe.exe`），若不存在则回退到系统 PATH 中的可执行文件。打包 Windows 发行版时请确保将 `ffmpeg.exe` 和 `ffprobe.exe` 包含到 `bin/` 或通过打包器的 `--include-data-files`/`--include-data-dir` 选项捆绑进程序，否则在没有 PATH 中 ffmpeg 的机器上会出现 “ffmpeg 未找到” 的错误。
 
 ---
 

@@ -45,7 +45,7 @@ class TTSWorker(QThread):
         self.output_format = "mp3_44100_128"
 
     def run(self):
-        url = f"https://api.elevenlabs.io/v1/text-to-speech/{self.voice_id}/with-timestamps"
+        url = f"https://api.elevenlabs.io/v1/text-to-speech/{self.voice_id}"
         headers = {
             "Content-Type": "application/json",
             "xi-api-key": self.api_key
@@ -65,7 +65,6 @@ class TTSWorker(QThread):
 
             content_type = response.headers.get("Content-Type", "")
             audio_bytes = None
-            alignment = None
 
             if "application/json" in content_type or response.text.strip().startswith("{"):
                 try:
@@ -82,18 +81,14 @@ class TTSWorker(QThread):
                         self.error.emit("无法解码返回的音频 base64 数据。")
                         return
 
-                alignment = resp_json.get("alignment") or resp_json.get("timestamps") or resp_json.get("words") or resp_json.get("segments")
-
             elif "audio/" in content_type or "application/octet-stream" in content_type:
                 audio_bytes = response.content
-                alignment = None
             else:
                 try:
                     resp_json = response.json()
                     audio_b64 = resp_json.get("audio") or resp_json.get("audio_base64")
                     if audio_b64:
                         audio_bytes = base64.b64decode(audio_b64)
-                        alignment = resp_json.get("alignment") or resp_json.get("timestamps")
                 except Exception:
                     audio_bytes = response.content
 
@@ -109,150 +104,14 @@ class TTSWorker(QThread):
                 self.error.emit(f"保存音频失败: {str(e)}")
                 return
 
-            if alignment:
-                srt_path = os.path.splitext(self.save_path)[0] + ".srt"
-                try:
-                    self._write_srt(alignment, srt_path)
-                except Exception as e:
-                    # SRT 失败不阻止成功返回，但报告错误
-                    self.error.emit(f"SRT 生成失败: {str(e)}")
-                    self.finished.emit(self.save_path)
-                    return
-
-            self.finished.emit(self.save_path)
+            # SRT 生成功能已移除；仅保存音频并返回成功路径
+            self.finished.emit(self.save_path) 
 
         except Exception as e:
             self.error.emit(str(e))
 
-    def _format_timestamp(self, seconds_val):
-        try:
-            if isinstance(seconds_val, str):
-                if ":" in seconds_val:
-                    parts = seconds_val.split(":")
-                    parts = [float(p) for p in parts]
-                    if len(parts) == 3:
-                        h, m, s = parts
-                    elif len(parts) == 2:
-                        h = 0
-                        m, s = parts
-                    else:
-                        h = m = 0
-                        s = parts[0]
-                    total = h * 3600 + m * 60 + s
-                else:
-                    total = float(seconds_val)
-            else:
-                total = float(seconds_val)
-        except Exception:
-            total = 0.0
-
-        ms = int(round(total * 1000))
-        hh = ms // 3600000
-        mm = (ms % 3600000) // 60000
-        ss = (ms % 60000) // 1000
-        mmm = ms % 1000
-        return f"{hh:02d}:{mm:02d}:{ss:02d},{mmm:03d}"
-
-    def _write_srt(self, alignment, srt_path):
-        import unicodedata
-
-        def to_float(v, default=None):
-            try:
-                return float(v)
-            except Exception:
-                return default
-
-        def is_combining_mark(ch):
-            cat = unicodedata.category(ch)
-            return cat.startswith("M")
-
-        def grapheme_clusters(chars_list):
-            clusters = []
-            i = 0
-            while i < len(chars_list):
-                cluster_text = chars_list[i]["char"]
-                cluster_start = chars_list[i]["start"]
-                cluster_end = chars_list[i]["end"]
-                j = i + 1
-                while j < len(chars_list) and is_combining_mark(chars_list[j]["char"]):
-                    cluster_text += chars_list[j]["char"]
-                    cluster_end = chars_list[j]["end"]
-                    j += 1
-                clusters.append({"text": cluster_text, "start": cluster_start, "end": cluster_end})
-                i = j
-            return clusters
-
-        norm = alignment.get("normalized_alignment") if isinstance(alignment, dict) else alignment
-        entries = []
-        idx = 1
-
-        if isinstance(norm, dict) and "characters" in norm:
-            chars = norm.get("characters", [])
-            starts = norm.get("character_start_times_seconds", norm.get("character_start_times", []))
-            ends = norm.get("character_end_times_seconds", norm.get("character_end_times", []))
-            char_items = []
-            for i, ch in enumerate(chars):
-                st = to_float(starts[i]) if i < len(starts) else None
-                ed = to_float(ends[i]) if i < len(ends) else None
-                char_items.append({"char": ch, "start": st, "end": ed})
-
-            clusters = grapheme_clusters(char_items)
-            text = alignment.get("text", "") if isinstance(alignment, dict) else ""
-            lines = text.split("\n") if text else [text]
-            cluster_idx = 0
-            for line in lines:
-                if not line.strip():
-                    continue
-                line_text = []
-                line_start = None
-                line_end = None
-                for ch in line:
-                    if is_combining_mark(ch):
-                        continue
-                    if ch.isspace() or (ch in "，。！？,!?.;；、\"'()（）"):
-                        line_text.append(ch)
-                        continue
-                    if cluster_idx < len(clusters):
-                        cluster = clusters[cluster_idx]
-                        line_text.append(cluster["text"])
-                        if line_start is None:
-                            line_start = cluster["start"]
-                        line_end = cluster["end"]
-                        cluster_idx += 1
-                    else:
-                        line_text.append(ch)
-                        if line_start is None:
-                            line_start = 0.0
-                        line_end = (line_start or 0.0) + 0.05
-                text_line = "".join(line_text).strip()
-                if not text_line:
-                    continue
-                if line_start is None:
-                    line_start = 0.0
-                if line_end is None:
-                    line_end = line_start + 0.8
-                start_ts = self._format_timestamp(line_start)
-                end_ts = self._format_timestamp(line_end)
-                entries.append((idx, start_ts, end_ts, text_line))
-                idx += 1
-        else:
-            text = alignment.get("text", "") if isinstance(alignment, dict) else (alignment or "")
-            lines = text.split("\n") if text else [text]
-            for line in lines:
-                text_line = line.strip()
-                if not text_line:
-                    continue
-                start_ts = self._format_timestamp(0.0)
-                end_ts = self._format_timestamp(5.0)
-                entries.append((idx, start_ts, end_ts, text_line))
-                idx += 1
-
-        if not entries:
-            entries = [(1, "00:00:00,000", "00:00:05,000", (alignment or "")[:200])]
-
-        with open(srt_path, "w", encoding="utf-8") as fh:
-            for i, start_ts, end_ts, text_str in entries:
-                fh.write(f"{i}\n{start_ts} --> {end_ts}\n{text_str}\n\n")
+    # SRT 生成功能已移除 — 保持此位置为空以便未来扩展（例如：外部字幕服务）
+    # pass
 
 
 class SFXWorker(QThread):
@@ -268,12 +127,23 @@ class SFXWorker(QThread):
         self.output_format = "mp3_44100_128"
 
     def run(self):
-        url = "https://api.elevenlabs.io/v1/audio-generation"
-        headers = {"Accept": "audio/wav", "Content-Type": "application/json", "xi-api-key": self.api_key}
-        data = {"prompt": self.prompt, "duration_seconds": self.duration, "model_id": "eleven_turbo_v2", "output_format": self.output_format}
+        url = "https://api.elevenlabs.io/v1/sound-generation"
+        # 使用更宽松的 Accept，并将 output_format 作为 query 参数（符合文档）
+        headers = {"Accept": "audio/*", "Content-Type": "application/json", "xi-api-key": self.api_key}
+        # 根据 API 文档，必须提供 `text` 字段；为兼容性同时保留 `prompt`。支持可选字段：loop, prompt_influence, duration_seconds, model_id
+        data = {
+            "text": self.prompt,
+            "prompt": self.prompt,
+            "duration_seconds": self.duration,
+            "loop": False,
+            "prompt_influence": 0.3,
+            "model_id": "eleven_text_to_sound_v2",
+        }
+        params = {"output_format": self.output_format}
         try:
-            response = requests.post(url, json=data, headers=headers, timeout=120)
-            if response.status_code == 200:
+            response = requests.post(url, json=data, headers=headers, params=params, timeout=120)
+            # 接受所有 2xx 状态为成功
+            if 200 <= response.status_code < 300:
                 os.makedirs(os.path.dirname(self.save_path) or ".", exist_ok=True)
                 with open(self.save_path, 'wb') as f:
                     for chunk in response.iter_content(chunk_size=1024):
@@ -281,7 +151,23 @@ class SFXWorker(QThread):
                             f.write(chunk)
                 self.finished.emit(self.save_path)
             else:
-                self.error.emit(f"SFX 生成失败 ({response.status_code}): {response.text}")
+                # 尝试解析响应为 JSON 以得到更友好的错误信息
+                try:
+                    resp_text = response.json()
+                except Exception:
+                    resp_text = response.text
+
+                if response.status_code == 404:
+                    self.error.emit(
+                        f"SFX 生成失败 (404 Not Found)。可能原因：API 路径已更改或当前 API Key 无音效生成权限。响应: {resp_text}"
+                    )
+                elif response.status_code == 422:
+                    # 验证错误，通常表示请求体缺少或格式错误的必需字段
+                    self.error.emit(
+                        f"SFX 生成失败 (422 Unprocessable Entity)。请检查请求体（需要字段 'text'，并确保其它字段合法）。响应: {resp_text}"
+                    )
+                else:
+                    self.error.emit(f"SFX 生成失败 ({response.status_code}): {resp_text}")
         except Exception as e:
             self.error.emit(str(e))
 

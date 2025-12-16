@@ -339,7 +339,7 @@ class TTSWorker(QThread):
             for i, start_ts, end_ts, text_str in entries:
                 fh.write(f"{i}\n{start_ts} --> {end_ts}\n{text_str}\n\n")
 class SFXWorker(QThread):
-    """用于生成音效（Sound Effects）的线程"""
+    """用于生成音效（Sound Effects）的线程（兼容旧模块）"""
     finished = Signal(str) # 返回保存的文件路径
     error = Signal(str)
 
@@ -352,33 +352,50 @@ class SFXWorker(QThread):
         self.output_format = "mp3_44100_128"
 
     def run(self):
-        # 注意：音效 API 地址不同
-        url = "https://api.elevenlabs.io/v1/audio-generation" 
-        
+        # 使用与新版后端一致的 API 路径和字段
+        url = "https://api.elevenlabs.io/v1/sound-generation"
+
         headers = {
-            "Accept": "audio/wav",
+            "Accept": "audio/*",
             "Content-Type": "application/json",
             "xi-api-key": self.api_key
         }
-        
+
         data = {
+            "text": self.prompt,
             "prompt": self.prompt,
             "duration_seconds": self.duration,
-            "model_id": "eleven_turbo_v2",
-            "output_format": self.output_format # SFX 专有模型
+            "loop": False,
+            "prompt_influence": 0.3,
+            "model_id": "eleven_text_to_sound_v2",
         }
+        params = {"output_format": self.output_format}
 
         try:
-            response = requests.post(url, json=data, headers=headers)
-            
-            if response.status_code == 200:
+            response = requests.post(url, json=data, headers=headers, params=params)
+            # 接受所有 2xx 状态为成功
+            if 200 <= response.status_code < 300:
                 with open(self.save_path, 'wb') as f:
                     for chunk in response.iter_content(chunk_size=1024):
                         if chunk:
                             f.write(chunk)
                 self.finished.emit(self.save_path)
             else:
-                self.error.emit(f"SFX 生成失败 ({response.status_code}): {response.text}")
+                try:
+                    resp_text = response.json()
+                except Exception:
+                    resp_text = response.text
+
+                if response.status_code == 404:
+                    self.error.emit(
+                        f"SFX 生成失败 (404 Not Found)。可能原因：API 路径已更改或当前 API Key 无音效生成权限。响应: {resp_text}"
+                    )
+                elif response.status_code == 422:
+                    self.error.emit(
+                        f"SFX 生成失败 (422 Unprocessable Entity)。请检查请求体（需要字段 'text'，并确保其它字段合法）。响应: {resp_text}"
+                    )
+                else:
+                    self.error.emit(f"SFX 生成失败 ({response.status_code}): {resp_text}")
         except Exception as e:
             self.error.emit(str(e))
 class VoiceListWorker(QThread):

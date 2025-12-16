@@ -65,7 +65,8 @@ class ProgressMonitor(QObject):
 
 
 class ConversionWorker(QObject):
-    finished = Signal(bool)
+    # Emit (success: bool, error_msg: str)
+    finished = Signal(bool, str)
 
     def __init__(self, input_dir, output_dir, mode_config, monitor, parent=None):
         super().__init__(parent)
@@ -77,6 +78,7 @@ class ConversionWorker(QObject):
     @Slot()
     def run(self):
         is_successful = False
+        error_msg = ""
         try:
             # pm_worker.GlobalProgressMonitor = self.monitor
             ConverterClass = self.mode_config['class']
@@ -88,11 +90,14 @@ class ConversionWorker(QObject):
             converter.run(Path(self.input_dir), Path(self.output_dir), self.monitor)
             is_successful = not self.monitor.check_stop_flag()
         except Exception as e:
+            import traceback
+            error_msg = traceback.format_exc()
             logger.exception(f"Worker 线程中发生未捕获的异常: {e}")
             is_successful = False
         finally:
             # pm_worker.GlobalProgressMonitor = None
-            self.finished.emit(is_successful)
+            # Emit error message (empty string if none)
+            self.finished.emit(is_successful, error_msg)
 
 
 class MediaConverterWidget(QWidget):
@@ -509,8 +514,8 @@ class MediaConverterWidget(QWidget):
         if not self.is_converting: 
              self.status_label.setText(status)
 
-    @Slot(bool)
-    def conversionFinished(self, is_successful):
+    @Slot(bool, str)
+    def conversionFinished(self, is_successful, error_msg: str = ""):
         self.is_converting = False
         self.start_stop_button.setEnabled(True)
         self.start_stop_button.setText("🚀 开始转换")
@@ -528,4 +533,14 @@ class MediaConverterWidget(QWidget):
             QMessageBox.information(self, "已中断", "转换操作已停止。")
         else:
             self.status_label.setText("转换过程中遇到错误。")
-            QMessageBox.critical(self, "错误", "转换失败，请查看日志获取详情。")
+            # 显示更详细的错误信息到用户，方便诊断（如果有长堆栈则只显示首行摘要并记录完整堆栈到日志）
+            if error_msg:
+                # 取首条异常消息作为摘要
+                first_line = error_msg.strip().splitlines()[0]
+                # 如果是资源缺失（如字体），给出更友好的提示
+                if "not found" in first_line.lower() or "未找到" in first_line:
+                    QMessageBox.critical(self, "错误", f"资源未找到：{first_line}\n请检查 assets/ 目录并确保字体/资源存在。")
+                else:
+                    QMessageBox.critical(self, "错误", f"转换失败: {first_line}\n详情请查看日志。")
+            else:
+                QMessageBox.critical(self, "错误", "转换失败，请查看日志获取详情。")
