@@ -5,6 +5,7 @@
 
 from .worker import (
     LogoConverter,
+    AddCustomLogo,
     H264Converter,
     DnxhrConverter,
     PngConverter,
@@ -88,6 +89,20 @@ MODES = {
             'logo_path': "assets/Dream.png"
             }
         },
+    'image': {
+        'class': AddCustomLogo,
+        'description': "添加 ImageFromAI",
+        'output_ext': "_ai.mp4",
+        'support_exts': [".mp4"],
+        'params': {
+            'x': "W-tw-10", 'y': 40,
+            'font_path': "assets/Roboto-Bold.ttf",
+            'font_size': "24",
+            'font_color': "white",
+            'text': "AI Created",
+            
+            }
+        },
 
     'h264': {
         'class': H264Converter,
@@ -99,7 +114,7 @@ MODES = {
     'x264': {
         'class': H264Converter,
         'description': "转换为 H.264 (压缩)",
-        'output_ext': "_h264.mp4",
+        'output_ext': "_x264.mp4",
         'support_exts': [".mov", ".avi", ".mkv", ".mp4", ".webm"], 
         'params': {
             'video_codec': 'libx264',
