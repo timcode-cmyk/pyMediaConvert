@@ -14,8 +14,8 @@ from PySide6.QtGui import QPalette, QColor, QFont, QGuiApplication # <-- 更改�
 # --- 1. Import Config and Worker Classes ---
 try:
     # 假设这些文件已存在且适用于 PySide6 环境
-    from pyMediaConvert.config import MODES
-    from pyMediaConvert import worker
+    from pyMediaConvert.mediaconvert.config import MODES
+    from pyMediaConvert.mediaconvert import worker
     from pyMediaConvert.utils import get_ffmpeg_exe, get_ffprobe_exe
 except ImportError as e:
     MODES = {}

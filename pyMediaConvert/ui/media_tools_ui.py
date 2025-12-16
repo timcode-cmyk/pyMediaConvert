@@ -1,12 +1,17 @@
 import os
+import platform
 from pathlib import Path
-from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel, QLineEdit, QPushButton, QComboBox, QProgressBar, QMessageBox, QFileDialog, QSizePolicy, QGroupBox)
-from PySide6.QtCore import QObject, QThread, Signal, Slot
-from PySide6.QtGui import QFont
+from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel, 
+                               QLineEdit, QPushButton, QComboBox, QProgressBar, QMessageBox, 
+                               QFileDialog, QSizePolicy, QGroupBox, QApplication)
+from PySide6.QtCore import QObject, QThread, Signal, Slot, Qt
+from PySide6.QtGui import QFont, QPalette, QColor
 
-from pyMediaConvert.config import MODES
-from pyMediaConvert import worker as pm_worker
-from pyMediaConvert.utils import get_ffmpeg_exe, get_ffprobe_exe
+from ..mediaconvert.config import MODES
+from ..mediaconvert import worker as pm_worker
+from pyMediaConvert.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 class DropLineEdit(QLineEdit):
@@ -16,6 +21,8 @@ class DropLineEdit(QLineEdit):
         super().__init__(parent)
         self.setDragEnabled(True)
         self.setAcceptDrops(True)
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.setReadOnly(True)  # 防止手动乱输，鼓励拖拽或点击按钮
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasUrls():
@@ -81,7 +88,7 @@ class ConversionWorker(QObject):
             converter.run(Path(self.input_dir), Path(self.output_dir))
             is_successful = not self.monitor.check_stop_flag()
         except Exception as e:
-            print(f"致命错误: Worker 线程中发生未捕获的异常: {e}")
+            logger.exception(f"Worker 线程中发生未捕获的异常: {e}")
             is_successful = False
         finally:
             pm_worker.GlobalProgressMonitor = None
@@ -97,66 +104,260 @@ class MediaConverterWidget(QWidget):
         self.last_total_files = 0
         self.last_stop_requested = False
         self.init_ui()
+        self.apply_styles()
+
+    def apply_styles(self):
+        """
+        统一的现代化样式表，自适应系统深色/浅色模式。
+        """
+        app = QApplication.instance()
+        palette = app.palette()
+        
+        # 获取系统强调色 (如果获取不到则使用默认蓝色)
+        accent_color = palette.color(QPalette.Highlight).name()
+        text_color = palette.color(QPalette.WindowText).name()
+        
+        # 判断是否为深色模式
+        bg_color = palette.color(QPalette.Window)
+        is_dark = bg_color.lightness() < 128
+        
+        # 定义颜色变量
+        input_bg = "rgba(255, 255, 255, 0.05)" if is_dark else "rgba(0, 0, 0, 0.03)"
+        border_color = "rgba(255, 255, 255, 0.15)" if is_dark else "rgba(0, 0, 0, 0.15)"
+        group_bg = "rgba(255, 255, 255, 0.03)" if is_dark else "rgba(255, 255, 255, 0.6)"
+        
+        # 字体设置
+        sys_name = platform.system()
+        if sys_name == 'Darwin':
+            base_font = "SF Pro Text, Helvetica Neue, Helvetica, Arial, sans-serif"
+        elif sys_name == 'Windows':
+            base_font = "Segoe UI, Microsoft YaHei, sans-serif"
+        else:
+            base_font = "Roboto, Noto Sans, Arial, sans-serif"
+
+        style = f"""
+            QWidget {{
+                font-family: "{base_font}";
+                font-size: 14px;
+                color: palette(text);
+            }}
+            
+            /* GroupBox 卡片化设计 */
+            QGroupBox {{
+                background-color: {group_bg};
+                border: 1px solid {border_color};
+                border-radius: 8px;
+                margin-top: 1.5em; /* 为标题留出空间 */
+                padding-top: 15px; 
+            }}
+            QGroupBox::title {{
+                subcontrol-origin: margin;
+                subcontrol-position: top left;
+                padding: 0 5px;
+                margin-left: 10px;
+                font-weight: bold;
+                color: {accent_color};
+            }}
+
+            /* 输入框和下拉框 */
+            QLineEdit, QComboBox {{
+                background-color: {input_bg};
+                border: 1px solid {border_color};
+                border-radius: 6px;
+                padding: 8px;
+                selection-background-color: {accent_color};
+            }}
+            QLineEdit:focus, QComboBox:focus {{
+                border: 1px solid {accent_color};
+            }}
+            
+            /* 拖拽区域特殊样式 */
+            DropLineEdit {{
+                border: 2px dashed {border_color};
+                background-color: rgba(0,0,0,0.02);
+                color: palette(mid);
+                font-weight: bold;
+            }}
+            DropLineEdit:hover {{
+                border-color: {accent_color};
+                background-color: rgba(100, 100, 255, 0.05);
+            }}
+
+            /* 按钮通用样式 */
+            QPushButton {{
+                background-color: {input_bg};
+                border: 1px solid {border_color};
+                border-radius: 6px;
+                padding: 8px 16px;
+                font-weight: 600;
+            }}
+            QPushButton:hover {{
+                background-color: {accent_color};
+                color: white;
+                border: 1px solid {accent_color};
+            }}
+            QPushButton:pressed {{
+                background-color: palette(dark);
+            }}
+
+            /* 开始/停止按钮特殊样式 */
+            QPushButton#StartStopButton {{
+                font-size: 15px;
+                padding: 10px;
+                border: none;
+                color: white;
+            }}
+            QPushButton#StartStopButton[converting="false"] {{
+                background-color: {accent_color}; 
+            }}
+            QPushButton#StartStopButton[converting="false"]:hover {{
+                background-color: palette(link-visited); 
+            }}
+            QPushButton#StartStopButton[converting="true"] {{
+                background-color: #ef4444; /* Red for Stop */
+            }}
+            QPushButton#StartStopButton[converting="true"]:hover {{
+                background-color: #dc2626;
+            }}
+
+            /* 进度条 */
+            QProgressBar {{
+                border: 1px solid {border_color};
+                border-radius: 6px;
+                text-align: center;
+                background-color: {input_bg};
+                height: 20px;
+                color: palette(text);
+                font-size: 12px;
+            }}
+            QProgressBar::chunk {{
+                background-color: {accent_color};
+                border-radius: 5px;
+            }}
+            
+            QLabel {{
+                color: palette(text);
+            }}
+            QLabel#StatusLabel {{
+                font-weight: bold;
+                color: palette(text);
+            }}
+        """
+        self.setStyleSheet(style)
 
     def init_ui(self):
         main_layout = QVBoxLayout(self)
-        title = QLabel("<h1>媒体转换器</h1>")
-        title.setFont(QFont("Arial", 18))
+        main_layout.setContentsMargins(20, 20, 20, 20) # 增加边距
+        main_layout.setSpacing(15)
+
+        # 标题区域
+        title = QLabel("媒体转换工具")
+        title.setFont(QFont("Segoe UI", 20, QFont.Bold))
+        title.setAlignment(Qt.AlignmentFlag.AlignLeft)
         main_layout.addWidget(title)
 
-        mode_group = QGroupBox("转换模式设置")
-        mode_layout = QFormLayout(mode_group)
+        # 1. 模式选择区
+        mode_group = QGroupBox("STEP 1: 选择转换模式")
+        mode_layout = QVBoxLayout(mode_group)
+        
         self.mode_combo = QComboBox()
+        self.mode_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.mode_combo.currentIndexChanged.connect(self.updateModeDescription)
-        self.desc_label = QLabel("模式说明: 请选择一个转换模式。")
+        
+        self.desc_label = QLabel("请选择一个转换模式以查看详情。")
         self.desc_label.setWordWrap(True)
-        mode_layout.addRow("选择模式:", self.mode_combo)
-        mode_layout.addRow("模式说明:", self.desc_label)
+        self.desc_label.setStyleSheet("color: palette(mid); margin-top: 5px;")
+        
+        mode_layout.addWidget(self.mode_combo)
+        mode_layout.addWidget(self.desc_label)
         main_layout.addWidget(mode_group)
 
-        path_group = QGroupBox("路径设置")
-        path_layout = QFormLayout(path_group)
+        # 2. 路径设置区
+        path_group = QGroupBox("STEP 2: 文件路径")
+        path_layout = QVBoxLayout(path_group)
+        path_layout.setSpacing(10)
+
+        # 输入
+        input_label = QLabel("输入源 (拖拽文件夹到下方框中):")
         self.input_path_edit = DropLineEdit()
-        self.input_path_edit.setPlaceholderText("拖放文件夹或文件到此处，或点击按钮选择...")
+        self.input_path_edit.setPlaceholderText("📂 拖放文件夹/文件到此处，或点击右侧按钮")
+        self.input_path_edit.setMinimumHeight(50) # 增加高度方便拖拽
         self.input_path_edit.pathDropped.connect(self.updateOutputPath)
         self.input_path_edit.textChanged.connect(self.updateOutputPath)
-        input_btn = QPushButton("选择输入路径")
+        
+        input_btn = QPushButton("浏览...")
+        input_btn.setCursor(Qt.PointingHandCursor)
         input_btn.clicked.connect(self.selectInputPath)
-        input_h_layout = QHBoxLayout()
-        input_h_layout.addWidget(self.input_path_edit)
-        input_h_layout.addWidget(input_btn)
-        path_layout.addRow("输入路径:", input_h_layout)
+        
+        input_box = QHBoxLayout()
+        input_box.addWidget(self.input_path_edit)
+        input_box.addWidget(input_btn)
+        
+        path_layout.addWidget(input_label)
+        path_layout.addLayout(input_box)
+
+        # 输出
+        output_label = QLabel("输出目录:")
         self.output_path_edit = QLineEdit()
-        output_btn = QPushButton("选择输出目录")
+        self.output_path_edit.setPlaceholderText("转换后的文件将保存在这里")
+        
+        output_btn = QPushButton("浏览...")
+        output_btn.setCursor(Qt.PointingHandCursor)
         output_btn.clicked.connect(self.selectOutputDirectory)
-        output_h_layout = QHBoxLayout()
-        output_h_layout.addWidget(self.output_path_edit)
-        output_h_layout.addWidget(output_btn)
-        path_layout.addRow("输出目录:", output_h_layout)
+        
+        output_box = QHBoxLayout()
+        output_box.addWidget(self.output_path_edit)
+        output_box.addWidget(output_btn)
+        
+        path_layout.addWidget(output_label)
+        path_layout.addLayout(output_box)
+        
         main_layout.addWidget(path_group)
 
-        self.start_stop_button = QPushButton("🚀 开始转换")
-        self.start_stop_button.clicked.connect(self.toggleConversion)
-        main_layout.addWidget(self.start_stop_button)
-
-        progress_group = QGroupBox("转换状态和进度")
+        # 3. 进度与操作区
+        progress_group = QGroupBox("STEP 3: 状态与控制")
         progress_layout = QVBoxLayout(progress_group)
-        self.status_label = QLabel("等待配置...")
+        progress_layout.setSpacing(8)
+
+        self.status_label = QLabel("等待开始...")
+        self.status_label.setObjectName("StatusLabel")
         self.status_label.setWordWrap(True)
-        progress_layout.addWidget(self.status_label)
+        
+        # 进度条
         progress_layout.addWidget(QLabel("总进度:"))
-        self.overall_progress_text = QLabel("0/0 文件 (0.0%)")
-        progress_layout.addWidget(self.overall_progress_text)
         self.overall_progress_bar = QProgressBar()
         self.overall_progress_bar.setRange(0, 100)
-        progress_layout.addWidget(self.overall_progress_bar)
-        progress_layout.addWidget(QLabel("当前文件进度:"))
-        self.file_progress_text = QLabel("正在等待...")
+        self.overall_progress_text = QLabel("0/0 (0%)")
+        self.overall_progress_text.setAlignment(Qt.AlignmentFlag.AlignRight)
+        
+        overall_layout = QHBoxLayout()
+        overall_layout.addWidget(self.overall_progress_bar)
+        overall_layout.addWidget(self.overall_progress_text)
+        progress_layout.addLayout(overall_layout)
+
+        progress_layout.addWidget(QLabel("当前文件:"))
         self.file_progress_bar = QProgressBar()
         self.file_progress_bar.setRange(0, 100)
-        progress_layout.addWidget(self.file_progress_bar)
-        progress_layout.addWidget(self.file_progress_text)
+        self.file_progress_text = QLabel("无")
+        self.file_progress_text.setAlignment(Qt.AlignmentFlag.AlignRight)
+        
+        file_p_layout = QHBoxLayout()
+        file_p_layout.addWidget(self.file_progress_bar)
+        file_p_layout.addWidget(self.file_progress_text)
+        progress_layout.addLayout(file_p_layout)
+        
+        progress_layout.addWidget(self.status_label)
         main_layout.addWidget(progress_group)
+
+        # 启动按钮
+        self.start_stop_button = QPushButton("🚀 开始转换")
+        self.start_stop_button.setObjectName('StartStopButton')
+        self.start_stop_button.setCursor(Qt.PointingHandCursor)
+        self.start_stop_button.clicked.connect(self.toggleConversion)
+        self.start_stop_button.setProperty('converting', 'false')
+        self.start_stop_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.start_stop_button.setMinimumHeight(45)
+        main_layout.addWidget(self.start_stop_button)
 
         self.loadModes()
 
@@ -165,7 +366,7 @@ class MediaConverterWidget(QWidget):
             self.mode_combo.addItem("ERROR: Config file not loaded.", None)
             return
         for key, config in MODES.items():
-            display_text = f"[{key}] - {config['description']}"
+            display_text = f"{config['description']} [{key}]"
             self.mode_combo.addItem(display_text, key)
         self.updateModeDescription()
 
@@ -174,15 +375,17 @@ class MediaConverterWidget(QWidget):
         if mode_key and mode_key in MODES:
             desc = MODES[mode_key]['description']
             support_exts = MODES[mode_key].get('support_exts')
-            exts = ", ".join(support_exts) if support_exts else "由 Worker 默认"
-            self.desc_label.setText(f"模式说明: {desc}\n支持的扩展名: {exts}")
+            exts = ", ".join(support_exts) if support_exts else "自动检测"
+            self.desc_label.setText(f"说明: {desc}\n支持格式: {exts}")
         else:
             self.desc_label.setText("模式说明: 未知模式或配置未加载。")
 
     def selectInputPath(self):
         path, _ = QFileDialog.getOpenFileName(self, "选择输入文件 (将使用其目录) 或选择目录", "", "All Files (*);;Videos (*.mp4 *.mkv *.mov)")
         if not path:
+            # 尝试作为目录打开 (Qt 没有原生的既选文件又选目录的对话框，通常分步处理)
             path = QFileDialog.getExistingDirectory(self, "选择输入目录")
+        
         if path:
             if os.path.isfile(path):
                 directory = os.path.dirname(path)
@@ -217,35 +420,51 @@ class MediaConverterWidget(QWidget):
         output_dir = self.output_path_edit.text().strip()
         mode_key = self.mode_combo.currentData()
         mode_config = MODES.get(mode_key)
+        
         if not os.path.isdir(input_dir) or not mode_config:
-            QMessageBox.critical(self, "错误", "请设置有效的输入目录和转换模式。")
+            QMessageBox.critical(self, "配置错误", "请输入有效的文件夹路径并选择转换模式。")
             return
+            
         if not os.path.exists(output_dir):
             try:
                 os.makedirs(output_dir)
             except OSError as e:
-                QMessageBox.critical(self, "错误", f"无法创建输出目录: {e}")
+                QMessageBox.critical(self, "系统错误", f"无法创建输出目录: {e}")
                 return
+
+        # 检查文件
         try:
-            temp_worker = mode_config['class'](params=mode_config['params'], init_checks=False)
+            self.status_label.setText("正在扫描文件...")
+            QApplication.processEvents() # 刷新界面
+            temp_worker = mode_config['class'](params=mode_config.get('params', {}), support_exts=mode_config.get('support_exts'), init_checks=False)
             temp_worker.find_files(Path(input_dir))
             files_to_process_count = len(temp_worker.files)
         except Exception as e:
-            QMessageBox.critical(self, "错误", f"文件检查失败: {e}")
+            logger.exception(f"文件扫描失败: {e}")
+            QMessageBox.critical(self, "错误", f"文件扫描失败: {e}")
             return
+
         if files_to_process_count == 0:
-            QMessageBox.critical(self, "错误", f"在目录 {input_dir} 中未找到支持的文件。")
+            QMessageBox.warning(self, "无文件", f"在目录中未找到支持的文件类型。\n支持类型: {mode_config.get('support_exts')}")
             return
+
+        # UI 状态更新
         self.last_total_files = files_to_process_count
         self.last_stop_requested = False
         self.is_converting = True
-        self.start_stop_button.setText(f"🛑 停止转换 (处理中: {files_to_process_count} 文件)")
-        self.start_stop_button.setEnabled(True)
+        
+        self.start_stop_button.setText(f"🛑 停止转换")
+        self.start_stop_button.setProperty('converting', 'true')
+        self.start_stop_button.style().unpolish(self.start_stop_button)
+        self.start_stop_button.style().polish(self.start_stop_button)
+        
         self.overall_progress_bar.setValue(0)
         self.file_progress_bar.setValue(0)
-        self.overall_progress_text.setText(f"0/{self.last_total_files} 文件 (0.0%)")
-        self.file_progress_text.setText(f"当前文件: 准备开始...")
-        self.status_label.setText(f"开始处理 {self.last_total_files} 个文件...")
+        self.overall_progress_text.setText(f"0/{self.last_total_files}")
+        self.file_progress_text.setText("准备中...")
+        self.status_label.setText(f"正在初始化 Worker，共 {self.last_total_files} 个文件...")
+
+        # 线程启动
         self.worker_thread = QThread()
         self.conversion_monitor = ProgressMonitor()
         self.worker = ConversionWorker(input_dir, output_dir, mode_config, self.conversion_monitor)
@@ -263,7 +482,7 @@ class MediaConverterWidget(QWidget):
         if self.worker_thread and self.worker_thread.isRunning() and self.conversion_monitor:
             self.last_stop_requested = True
             self.conversion_monitor.request_stop()
-            self.status_label.setText("正在发送停止请求... FFMPEG 进程正在终止，请稍候。")
+            self.status_label.setText("正在请求停止... FFMPEG 进程可能需要几秒钟才能释放。")
             self.start_stop_button.setEnabled(False)
 
     @Slot(float, float, str)
@@ -271,38 +490,42 @@ class MediaConverterWidget(QWidget):
         if duration > 0:
             file_progress = min(100.0, (seconds / duration) * 100.0)
             self.file_progress_bar.setValue(int(file_progress))
-            self.file_progress_text.setText(f"🎬 {file_name}: 正在处理 ({file_progress:.1f}%)")
+            self.file_progress_text.setText(f"{file_progress:.1f}%")
         else:
             self.file_progress_bar.setValue(0)
-            self.file_progress_text.setText(f"🎬 {file_name}: 无法获取时长，进度未知...")
+            self.file_progress_text.setText("计算中...")
+        
+        # 在状态栏显示当前文件名，截断过长的名字
+        display_name = (file_name[:40] + '..') if len(file_name) > 40 else file_name
+        self.status_label.setText(f"正在处理: {display_name}")
 
     @Slot(int, int, str)
     def updateOverallProgress(self, current: int, total: int, status: str):
         if total > 0:
             overall_progress = (current / total) * 100.0
             self.overall_progress_bar.setValue(int(overall_progress))
-            self.overall_progress_text.setText(f"{current}/{total} 文件 ({overall_progress:.1f}%)")
-        else:
-            self.overall_progress_bar.setValue(0)
-            self.overall_progress_text.setText("0/0 文件 (0.0%)")
-        self.status_label.setText(status)
-        if self.is_converting:
-            self.start_stop_button.setText(f"🛑 停止转换 (已完成: {current}/{total})")
+            self.overall_progress_text.setText(f"{current}/{total}")
+        
+        if not self.is_converting: 
+             self.status_label.setText(status)
 
     @Slot(bool)
     def conversionFinished(self, is_successful):
         self.is_converting = False
         self.start_stop_button.setEnabled(True)
         self.start_stop_button.setText("🚀 开始转换")
+        self.start_stop_button.setProperty('converting', 'false')
+        self.start_stop_button.style().unpolish(self.start_stop_button)
+        self.start_stop_button.style().polish(self.start_stop_button)
+
         if is_successful:
             self.overall_progress_bar.setValue(100)
             self.file_progress_bar.setValue(100)
-            self.overall_progress_text.setText(f"{self.last_total_files}/{self.last_total_files} 文件 (100.0%)")
-            self.file_progress_text.setText("当前文件: 已完成")
-            QMessageBox.information(self, "转换完成", "所有文件转换成功完成!")
+            self.status_label.setText("所有任务已完成。")
+            QMessageBox.information(self, "完成", "所有文件转换成功完成!")
         elif self.last_stop_requested:
-            self.status_label.setText("已停止。请点击 '开始转换' 重新开始。")
-            QMessageBox.information(self, "已中断", "转换已被用户停止。")
+            self.status_label.setText("任务已由用户手动停止。")
+            QMessageBox.information(self, "已中断", "转换操作已停止。")
         else:
-            self.status_label.setText("转换失败，请检查控制台输出。")
-            QMessageBox.critical(self, "错误", "转换过程中发生错误。详情请查看控制台。")
+            self.status_label.setText("转换过程中遇到错误。")
+            QMessageBox.critical(self, "错误", "转换失败，请查看日志获取详情。")

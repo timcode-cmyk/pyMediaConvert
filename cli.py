@@ -8,7 +8,10 @@
 """
 from pathlib import Path
 import argparse
-import pyMediaConvert.config as config
+import pyMediaConvert.mediaconvert.config as config
+from pyMediaConvert.logging_config import setup_logging
+
+setup_logging()
 
 
 def main():
@@ -42,7 +45,8 @@ def main():
         converter = ConverterClass(
             params=params,
             support_exts=support_exts,
-            output_ext=output_ext
+            output_ext=output_ext,
+            use_cli=True
         )
     except SystemExit:
         print(f"初始化模式 '{args.mode}' 失败，请检查配置。")
