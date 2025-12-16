@@ -124,20 +124,35 @@ MODES['my_mode'] = {
 
 ---
 
-## 打包为独立 macOS 应用（使用 Nuitka）
+## 打包为独立应用（使用 Nuitka）
 （保持原 README 中的 Nuitka 说明；确保在打包前把 bin/ 中的 ffmpeg/ffprobe 包含进 bundle，或在打包命令中通过 --include-data-dir 指定）
 
 示例打包命令（参考）：
+###  macOS 
 ```bash
-nuitka3 --standalone --macos-create-app-bundle --plugin-enable=pyside6 --include-package=pyMediaConvert --include-data-dir=bin=bin MediaTools.py
+nuitka --standalone \
+       --macos-app-icon=Icon.icns \
+       --macos-create-app-bundle \
+       --output-dir=dist-nuitka \
+       --plugin-enable=pyside6 \
+       --include-qt-plugins=multimedia,platforms,styles,imageformats \
+       --include-package=pyMediaConvert \
+       --include-data-dir=bin=bin \
+       --include-data-dir=assets=assets \
+       --nofollow-import-to=pytest,tkinter \
+       app.py
+```
+
+### Windows
+```bash
+nuitka --standalone --onefile --windows-disable-console --windows-icon-from-ico=MediaTools.ico --include-package=pyMediaConvert --plugin-enable=pyside6 --include-qt-plugins=multimedia,platforms,styles,imageformats --include-data-files=bin\ffmpeg.exe=bin\ffmpeg.exe  --include-data-files=bin\ffprobe.exe=bin\ffprobe.exe --include-data-dir=assets=assets app.py
+
 ```
 
 ---
 
 ## 常见问题与调试提示
 
-- “IMKCFRunLoopWakeUpReliable” 日志：macOS 输入法/Qt 层非致命消息，通常可忽略；可尝试升级 PySide6 或设置 QT_MAC_WANTS_LAYER 环境变量。
-- 首次点击卡顿：已修复（避免在主线程进行耗时 ffmpeg/ffprobe 探测）。
 - ffmpeg 未找到：请把 ffmpeg/ffprobe 放到项目根目录的 bin/，或确保系统 PATH 可用。
 
 打包为单文件 App 后进度条不更新的常见原因：
