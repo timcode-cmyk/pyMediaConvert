@@ -92,8 +92,8 @@ MODES = {
     'image': {
         'class': AddCustomLogo,
         'description': "添加 ImageFromAI",
-        'output_ext': "_ai.mp4",
-        'support_exts': [".mp4"],
+        'output_ext': None,
+        'support_exts': [".mp4", ".png", ".jpg", ".jpeg"],
         'params': {
             'x': "W-tw-10", 'y': 40,
             'font_path': "assets/Roboto-Bold.ttf",

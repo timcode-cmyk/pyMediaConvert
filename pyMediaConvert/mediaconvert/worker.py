@@ -44,7 +44,12 @@ class MediaConverter(ABC):
         self.files = []
         # normalize supported extensions to lowercase for reliable matching
         self.support_exts = {ext.lower() for ext in final_exts}
-        self.output_ext = output_ext if output_ext else ".mp4"
+        self.output_ext = output_ext
+        
+        # if output_ext:
+        #     self.output_ext = output_ext
+        # else:
+        #     self.output_ext = ".mp4"
 
         self.available_encoders = {}
         self.use_cli = bool(use_cli)
@@ -532,6 +537,10 @@ class AddCustomLogo(MediaConverter):
         :param output_path: 输出基本路径 (不含后缀)
         :param duration: 当前文件的总时长 (用于计算百分比)
         """
+        inpput_ext = input_path.suffix.lower()
+        if self.output_ext is None:
+            self.output_ext = f"_ai{inpput_ext}"
+
         output_file_name = f"{output_path}{self.output_ext}" 
 
         # 构造 filter_complex：scale cover -> crop -> 模糊区域 -> overlay logo
