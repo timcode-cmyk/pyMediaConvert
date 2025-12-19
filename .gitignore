@@ -37,3 +37,6 @@ nuitka-crash-report.xml
 
 # PyCharm
 .idea/
+
+*.log
+.pytest_cache

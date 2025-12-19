@@ -9,8 +9,8 @@ from PySide6.QtCore import Qt, QUrl, Slot
 from PySide6.QtGui import QFont, QPalette, QColor
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 
-from pyMediaConvert.elevenlabs.backend import QuotaWorker, TTSWorker, SFXWorker, VoiceListWorker
-from pyMediaConvert.logging_config import get_logger
+from ..core.elevenlabs import QuotaWorker, TTSWorker, SFXWorker, VoiceListWorker
+from ..logging_config import get_logger
 
 logger = get_logger(__name__)
 

@@ -1,9 +1,9 @@
 import sys
 from PySide6.QtWidgets import QApplication, QMainWindow, QTabWidget
 
-from pyMediaConvert.ui.media_tools_ui import MediaConverterWidget
-from pyMediaConvert.ui.elevenlabs_ui import ElevenLabsWidget
-from pyMediaConvert.logging_config import setup_logging
+from pyMediaTools import setup_logging
+from pyMediaTools.ui import MediaConverterWidget, ElevenLabsWidget
+
 
 # initialize logging early
 setup_logging()
@@ -18,6 +18,8 @@ class ToolBoxMainWindow(QMainWindow):
         tabs.addTab(MediaConverterWidget(), "媒体转换")
         tabs.addTab(ElevenLabsWidget(), "ElevenLabs")
         self.setCentralWidget(tabs)
+
+
 
 
 if __name__ == '__main__':

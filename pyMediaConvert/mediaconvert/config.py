@@ -8,7 +8,7 @@ try:
     from .factory import MODES  # type: ignore
 except Exception:
     # 兼容回退（与原来相同），以避免引入破坏性更改
-    from ..core.mediaconvert import (
+    from pyMediaTools.core.mediaconvert import (
         LogoConverter,
         AddCustomLogo,
         H264Converter,
