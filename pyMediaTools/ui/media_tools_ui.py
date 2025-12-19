@@ -7,9 +7,9 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, Q
 from PySide6.QtCore import QObject, QThread, Signal, Slot, Qt
 from PySide6.QtGui import QFont, QPalette, QColor
 
-from ..mediaconvert.config import MODES
-from ..mediaconvert import worker as pm_worker
-from pyMediaConvert.logging_config import get_logger
+from pyMediaTools.core.config import MODES
+# from ..core import mediaconvert as pm_worker
+from ..logging_config import get_logger
 
 logger = get_logger(__name__)
 
