@@ -1,5 +1,5 @@
 from pathlib import Path
-from pyMediaConvert.mediaconvert.config import MODES
+from pyMediaTools.core.config import MODES
 
 mode_key = "h264"                # 或你在 GUI 中选择的模式键
 input_dir = Path("/path/to/your/input")  # 替换成你问题目录

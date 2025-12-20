@@ -9,7 +9,7 @@ from PySide6.QtGui import QFont, QPalette, QColor
 
 from pyMediaTools.core.config import MODES
 # from ..core import mediaconvert as pm_worker
-from ..logging_config import get_logger
+from pyMediaTools import get_logger
 
 logger = get_logger(__name__)
 

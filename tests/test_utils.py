@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-import pyMediaConvert.utils as utils
+import pyMediaTools.utils as utils
 
 
 def test_get_ffmpeg_exe_prefers_bundled(tmp_path, monkeypatch):

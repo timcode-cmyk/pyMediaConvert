@@ -3,15 +3,17 @@ import requests
 import base64
 import json
 from PySide6.QtCore import QThread, Signal
+from ..utils import load_project_config
 
 
 class QuotaWorker(QThread):
     quota_info = Signal(int, int)  # (usage, limit)
     error = Signal(str)
 
-    def __init__(self, api_key):
+    def __init__(self, api_key=None):
         super().__init__()
-        self.api_key = api_key
+        cfg = load_project_config().get('elevenlabs', {})
+        self.api_key = api_key or cfg.get('api_key') or os.getenv("ELEVENLABS_API_KEY", "")
 
     def run(self):
         url = "https://api.elevenlabs.io/v1/user"
@@ -36,13 +38,14 @@ class TTSWorker(QThread):
     finished = Signal(str)  # 返回保存的文件路径
     error = Signal(str)
 
-    def __init__(self, api_key, voice_id, text, save_path):
+    def __init__(self, api_key=None, voice_id=None, text=None, save_path=None, output_format=None):
         super().__init__()
-        self.api_key = api_key
+        cfg = load_project_config().get('elevenlabs', {})
+        self.api_key = api_key or cfg.get('api_key') or os.getenv("ELEVENLABS_API_KEY", "")
         self.voice_id = voice_id
         self.text = text
         self.save_path = save_path
-        self.output_format = "mp3_44100_128"
+        self.output_format = output_format or cfg.get('default_output_format') or "mp3_44100_128"
 
     def run(self):
         url = f"https://api.elevenlabs.io/v1/text-to-speech/{self.voice_id}"
@@ -118,13 +121,14 @@ class SFXWorker(QThread):
     finished = Signal(str)
     error = Signal(str)
 
-    def __init__(self, api_key, prompt, duration, save_path):
+    def __init__(self, api_key=None, prompt=None, duration=None, save_path=None, output_format=None):
         super().__init__()
-        self.api_key = api_key
+        cfg = load_project_config().get('elevenlabs', {})
+        self.api_key = api_key or cfg.get('api_key') or os.getenv("ELEVENLABS_API_KEY", "")
         self.prompt = prompt
         self.duration = duration
         self.save_path = save_path
-        self.output_format = "mp3_44100_128"
+        self.output_format = output_format or cfg.get('default_output_format') or "mp3_44100_128"
 
     def run(self):
         url = "https://api.elevenlabs.io/v1/sound-generation"
@@ -176,9 +180,10 @@ class VoiceListWorker(QThread):
     finished = Signal(list)
     error = Signal(str)
 
-    def __init__(self, api_key):
+    def __init__(self, api_key=None):
         super().__init__()
-        self.api_key = api_key
+        cfg = load_project_config().get('elevenlabs', {})
+        self.api_key = api_key or cfg.get('api_key') or os.getenv("ELEVENLABS_API_KEY", "")
 
     def run(self):
         url = "https://api.elevenlabs.io/v1/voices"

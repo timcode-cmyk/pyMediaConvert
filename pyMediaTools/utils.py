@@ -1,5 +1,17 @@
 import sys
+import os
 from pathlib import Path
+from typing import Optional
+
+# TOML parser: prefer stdlib tomllib (Python 3.11+), fallback to third-party `toml`.
+try:
+    import tomllib as _toml
+except Exception:
+    try:
+        import toml as _toml
+    except Exception:
+        _toml = None
+
 
 def get_base_dir() -> Path:
     """
@@ -23,6 +35,64 @@ def get_base_dir() -> Path:
 BASE_DIR = get_base_dir()
 BIN_DIR = BASE_DIR / "bin"
 ASSET_DIR = BASE_DIR / "assets"
+
+# Project-level configuration cache and helpers
+_PROJECT_CONFIG = None
+
+def find_config_path() -> Optional[Path]:
+    """Search for a project `config.toml`.
+
+    Order of preference:
+      - path from env PYMEDIA_CONFIG_PATH or PYMEDIA_CONFIG
+      - project base `config.toml` (returned by `get_base_dir()`)
+      - current working dir `config.toml`
+      - any parent directories upwards from this file
+    """
+    env_path = os.getenv('PYMEDIA_CONFIG_PATH') or os.getenv('PYMEDIA_CONFIG')
+    candidates = []
+    if env_path:
+        candidates.append(Path(env_path))
+
+    candidates.append(BASE_DIR / 'config.toml')
+    candidates.append(Path.cwd() / 'config.toml')
+
+    for parent in Path(__file__).resolve().parents:
+        candidates.append(parent / 'config.toml')
+
+    for c in candidates:
+        if c and c.exists():
+            return c
+    return None
+
+
+def load_project_config() -> dict:
+    """Load and cache the top-level TOML config as a dict.
+
+    Returns an empty dict if no config found.
+    """
+    global _PROJECT_CONFIG
+    if _PROJECT_CONFIG is not None:
+        return _PROJECT_CONFIG
+    cfg_path = find_config_path()
+    if not cfg_path:
+        _PROJECT_CONFIG = {}
+        return _PROJECT_CONFIG
+
+    if _toml is None:
+        raise RuntimeError("TOML parser not available. Install 'toml' for Python < 3.11")
+
+    data = cfg_path.read_bytes()
+    try:
+        _PROJECT_CONFIG = _toml.loads(data.decode() if isinstance(data, (bytes, bytearray)) else data)
+    except Exception:
+        # toml package expects str on some platforms
+        _PROJECT_CONFIG = _toml.loads(data.decode())
+    return _PROJECT_CONFIG
+
+
+def get_elevenlabs_config() -> dict:
+    return load_project_config().get('elevenlabs', {}) or {}
+
 
 def get_resource_path(*parts) -> Path:
     return BASE_DIR.joinpath(*parts)

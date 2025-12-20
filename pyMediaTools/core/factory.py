@@ -1,9 +1,11 @@
-"""Load modes configuration from TOML and map to actual Converter classes.
-
-This exposes a MODES dict compatible with the previous `config.py` format.
+"""
+从 TOML 文件加载模式配置，并将其映射到实际的转换器类。
+这将公开一个与之前的 `config.py` 格式兼容的 MODES 字典
 """
 from pathlib import Path
-import sys
+import logging
+# import sys
+from ..utils import load_project_config, find_config_path
 
 # TOML parser: prefer stdlib tomllib (Python 3.11+), fallback to third-party `toml`.
 try:
@@ -77,52 +79,54 @@ def _build_modes(toml_data: dict):
 
 
 # Public API
-import os
-import logging
+# import os
 
 
-def _find_config_path() -> Path | None:
-    """Search for config.toml in sensible locations.
 
-    Order of preference:
-      - path from env PYMEDIA_CONFIG_PATH or PYMEDIA_CONFIG
-      - same directory as this file
-      - package root (parent)
-      - repository/project root (cwd)
-      - any parent directories upwards from this file
-    """
-    env_path = os.getenv('PYMEDIA_CONFIG_PATH') or os.getenv('PYMEDIA_CONFIG')
-    candidates = []
-    if env_path:
-        candidates.append(Path(env_path))
+# def _find_config_path() -> Path | None:
+#     """Search for config.toml in sensible locations.
 
-    base = Path(__file__).parent
-    candidates.append(base / 'config.toml')
-    candidates.append(base.parent / 'config.toml')
-    candidates.append(Path.cwd() / 'config.toml')
+#     Order of preference:
+#       - path from env PYMEDIA_CONFIG_PATH or PYMEDIA_CONFIG
+#       - same directory as this file
+#       - package root (parent)
+#       - repository/project root (cwd)
+#       - any parent directories upwards from this file
+#     """
+#     env_path = os.getenv('PYMEDIA_CONFIG_PATH') or os.getenv('PYMEDIA_CONFIG')
+#     candidates = []
+#     if env_path:
+#         candidates.append(Path(env_path))
 
-    # walk parents of this file
-    for parent in Path(__file__).resolve().parents:
-        candidates.append(parent / 'config.toml')
+#     base = Path(__file__).parent
+#     candidates.append(base / 'config.toml')
+#     candidates.append(base.parent / 'config.toml')
+#     candidates.append(Path.cwd() / 'config.toml')
 
-    for c in candidates:
-        if c and c.exists():
-            return c
-    return None
+#     # walk parents of this file
+#     for parent in Path(__file__).resolve().parents:
+#         candidates.append(parent / 'config.toml')
+
+#     for c in candidates:
+#         if c and c.exists():
+#             return c
+#     return None
 
 
-_CONFIG_PATH = _find_config_path()
+
+
+_CONFIG_PATH = find_config_path()
 if _CONFIG_PATH is None:
     logging.getLogger(__name__).warning(
-        "config.toml not found; searched multiple locations (set PYMEDIA_CONFIG_PATH to override)."
+        "未找到 config.toml；已搜索多个位置（设置 PYMEDIA_CONFIG_PATH 以覆盖）。."
     )
     MODES = {}
 else:
-    logging.getLogger(__name__).info(f"Loading config from: {_CONFIG_PATH}")
-    _TOML = _load_toml(_CONFIG_PATH)
+    logging.getLogger(__name__).info(f"从以下位置加载配置： {_CONFIG_PATH}")
+    _TOML = load_project_config()
     MODES = _build_modes(_TOML)
 
 
 def get_modes():
-    """Return MODES dict (copy to avoid accidental mutation)."""
+    """返回 MODES 字典（复制以避免意外修改）。"""
     return {k: v.copy() for k, v in MODES.items()}

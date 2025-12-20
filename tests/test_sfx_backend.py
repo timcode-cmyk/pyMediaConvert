@@ -3,8 +3,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from pyMediaConvert.elevenlabs import backend as backend_mod
-from Elevenlabs import SFXWorker as LegacySFXWorker
+from pyMediaTools.core import elevenlabs as backend_mod
+from pyMediaTools.core.elevenlabs import SFXWorker as LegacySFXWorker
 
 
 class DummyResp:

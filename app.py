@@ -1,3 +1,16 @@
+"""
+项目名称: pyMediaTools
+创建日期: 2025-12-20
+作者: TimCode
+版本: v1.11.0
+许可证: GPL License
+"""
+
+__version__ = "1.11.0"
+__author__ = "TimCode"
+__description__ = "A professional media conversion tool based on FFmpeg"
+__license__ = "GPL License"
+
 import sys
 from PySide6.QtWidgets import QApplication, QMainWindow, QTabWidget
 

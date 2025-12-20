@@ -1,8 +1,8 @@
-# modes 配置
+# MediaConvertMODES 配置
 
 [modes.hailuo]
 class = "LogoConverter"
-description = "添加 Dream+Hailuo Logo (竖屏)"
+description = "1111111添加 Dream+Hailuo Logo (竖屏)"
 output_ext = "_hailuo.mp4"
 support_exts = [".mp4"]
 
@@ -149,3 +149,8 @@ output_ext = "_processed.wav"
 support_exts = [".mp3", ".wav", ".flac", ".ogg", ".mpeg", ".m4a", ".aiff", ".mp4", ".avi", ".mkv", ".mov", ".webm"]
 
 [modes.wav.params]
+
+[elevenlabs]
+api_key = "11bada86cbc685bcbae88aafaa2405e8c9505edfe80bc07da4f88d3d4a2af548"
+default_output_format = "mp3_44100_128"
+supported_output_formats = ["mp3_44100_128", "mp3_48000_128", "wav_44100_16", "wav_48000_16"]

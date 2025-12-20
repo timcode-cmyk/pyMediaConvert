@@ -10,6 +10,7 @@ from PySide6.QtGui import QFont, QPalette, QColor
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 
 from ..core.elevenlabs import QuotaWorker, TTSWorker, SFXWorker, VoiceListWorker
+from ..utils import load_project_config
 from ..logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -294,9 +295,10 @@ class ElevenLabsWidget(QWidget):
             line_edit.setText(fname)
 
     def load_voices(self):
-        api_key = self.key_input.text().strip()
+        cfg = load_project_config().get('elevenlabs', {})
+        api_key = self.key_input.text().strip() or cfg.get('api_key') or os.getenv("ELEVENLABS_API_KEY", "")
         if not api_key:
-            QMessageBox.warning(self, "缺少 Key", "请输入 API Key")
+            QMessageBox.warning(self, "缺少 Key", "请输入 API Key (或在 config.toml / 环境变量中配置)")
             return
         self.set_ui_busy(True, "正在连接 ElevenLabs...")
         self.voice_worker = VoiceListWorker(api_key)
@@ -333,10 +335,12 @@ class ElevenLabsWidget(QWidget):
             self.quota_bar.setStyleSheet("")
 
     def generate_tts_audio(self):
+        cfg = load_project_config().get('elevenlabs', {})
         text = self.tts_text_input.toPlainText().strip()
         save_path = self.tts_save_input.text().strip()
         voice_id = self.combo_voices.itemData(self.combo_voices.currentIndex())
-        api_key = self.key_input.text().strip()
+        api_key = self.key_input.text().strip() or cfg.get('api_key') or os.getenv("ELEVENLABS_API_KEY", "")
+        output_format = cfg.get('default_output_format')
         
         if not voice_id:
              QMessageBox.warning(self, "提示", "请先加载并选择一个声音模型。")
@@ -346,23 +350,25 @@ class ElevenLabsWidget(QWidget):
             return
 
         self.set_ui_busy(True, "正在生成语音...")
-        self.tts_worker = TTSWorker(api_key, voice_id, text, save_path)
+        self.tts_worker = TTSWorker(api_key=api_key, voice_id=voice_id, text=text, save_path=save_path, output_format=output_format)
         self.tts_worker.finished.connect(self.on_generation_success)
         self.tts_worker.error.connect(self.on_error)
         self.tts_worker.start()
 
     def generate_sfx_audio(self):
+        cfg = load_project_config().get('elevenlabs', {})
         prompt = self.sfx_prompt_input.toPlainText().strip()
         duration = self.sfx_duration_input.value()
         save_path = self.sfx_save_input.text().strip()
-        api_key = self.key_input.text().strip()
+        api_key = self.key_input.text().strip() or cfg.get('api_key') or os.getenv("ELEVENLABS_API_KEY", "")
+        output_format = cfg.get('default_output_format')
         
         if not prompt:
             QMessageBox.warning(self, "提示", "请输入音效描述。")
             return
 
         self.set_ui_busy(True, "正在生成音效...")
-        self.sfx_worker = SFXWorker(api_key, prompt, duration, save_path)
+        self.sfx_worker = SFXWorker(api_key=api_key, prompt=prompt, duration=duration, save_path=save_path, output_format=output_format)
         self.sfx_worker.finished.connect(self.on_generation_success)
         self.sfx_worker.error.connect(self.on_error)
         self.sfx_worker.start()

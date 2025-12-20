@@ -1,3 +1,6 @@
+"""
+日志配置模块
+"""
 import logging
 from logging.handlers import RotatingFileHandler
 from .utils import get_base_dir
