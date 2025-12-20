@@ -1,3 +1,6 @@
+"""
+aria2下载管理器
+"""
 import subprocess
 import json
 import urllib.request

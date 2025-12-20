@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineE
 from PySide6.QtCore import Qt, QUrl, Slot
 from PySide6.QtGui import QFont, QPalette, QColor, QCursor
 
-from ..core.downloader import YtDlpInfoWorker, YtDlpDownloadWorker
+from ..core.videodownloader import YtDlpInfoWorker, YtDlpDownloadWorker
 
 class VideoDownloaWidget(QWidget):
     def __init__(self):
