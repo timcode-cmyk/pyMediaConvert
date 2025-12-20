@@ -121,3 +121,50 @@ def get_ffprobe_exe() -> str:
     path = BIN_DIR / exe_name
     _ensure_executable(path)
     return str(path)
+
+
+def get_aria2c_exe() -> str:
+    """Return aria2c executable path (bundled in BIN_DIR or system PATH).
+
+    Prefers bundled `bin/aria2c`, falls back to PATH if not found.
+    """
+    exe_name = "aria2c.exe" if sys.platform == "win32" else "aria2c"
+    path = BIN_DIR / exe_name
+    if path.exists():
+        _ensure_executable(path)
+        return str(path)
+
+    # fallback to system path (which may be e.g. /usr/local/bin/aria2c)
+    from shutil import which
+    found = which(exe_name)
+    if found:
+        return found
+
+    # return bundled path even if missing so callers can surface a better error
+    return str(path)
+
+
+def get_aria2_rpc_port() -> int:
+    """返回 aria2 RPC 端口号（从配置或默认值）"""
+    config = load_project_config()
+    return config.get('download', {}).get('rpc_port', 6800)
+
+
+def get_aria2_rpc_secret() -> str:
+    """返回 aria2 RPC secret（从配置或默认值）"""
+    config = load_project_config()
+    return config.get('download', {}).get('rpc_secret', '')
+
+
+def get_default_download_dir() -> Path:
+    """返回默认下载目录"""
+    config = load_project_config()
+    download_dir = config.get('download', {}).get('default_dir')
+    if download_dir:
+        return Path(download_dir).expanduser()
+    
+    # 默认使用用户下载目录
+    if sys.platform == "win32":
+        return Path.home() / "Downloads"
+    else:
+        return Path.home() / "Downloads"

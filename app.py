@@ -15,7 +15,7 @@ import sys
 from PySide6.QtWidgets import QApplication, QMainWindow, QTabWidget
 
 from pyMediaTools import setup_logging
-from pyMediaTools.ui import MediaConverterWidget, ElevenLabsWidget, DownloaderWidget, VideoDownloaWidget
+from pyMediaTools.ui import MediaConverterWidget, ElevenLabsWidget, DownloadManagerWidget, VideoDownloaWidget
 
 
 
@@ -31,7 +31,7 @@ class ToolBoxMainWindow(QMainWindow):
         tabs = QTabWidget()
         tabs.addTab(MediaConverterWidget(), "媒体转换")
         tabs.addTab(ElevenLabsWidget(), "ElevenLabs")
-        tabs.addTab(DownloaderWidget(), "下载管理")
+        tabs.addTab(DownloadManagerWidget(), "下载管理")
         tabs.addTab(VideoDownloaWidget(), "视频下载")
         self.setCentralWidget(tabs)
 
