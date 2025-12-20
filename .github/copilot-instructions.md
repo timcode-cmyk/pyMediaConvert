@@ -1,54 +1,59 @@
 # Copilot / Agent instructions for pyMediaConvert
 
-Purpose: give an AI code agent the concise, actionable project knowledge needed to be productive immediately.
+Purpose: concise, actionable knowledge to get an AI coding agent productive quickly.
 
-- 🚀 Quick entrypoints
-  - GUI: `python app.py` (launches PySide6 UI; see `app.py` and `pyMediaTools/ui/`)
-  - CLI: `python cli.py -m <mode> -d <input_dir> -o <out_dir>` (modes are keys in `MODES`)
-  - Tests: run `pytest -q` from project root (tests live in `tests/`)
+## 🚀 Quick entrypoints
+- GUI: `python app.py` (starts PySide6 app; widgets live under `pyMediaTools/ui/` — see `MediaConverterWidget`, `DownloaderWidget`, `VideoDownloaWidget`, `ElevenLabsWidget`).
+- CLI: `python cli.py -m <mode> -d <input_dir> -o <out_dir>` (modes come from `config.MODES`).
+- Tests: `pytest -q` from project root (unit tests in `tests/`; many integration-style tests are commented out due to binary deps).
 
-- 🔑 Key files & what they mean
-  - `config.toml` — primary modes configuration loaded by `pyMediaTools/core/factory.py` (env override: `PYMEDIA_CONFIG_PATH` / `PYMEDIA_CONFIG`).
-  - `pyMediaTools/core/factory.py` — maps TOML `modes.*` → converter classes (via `CLASS_MAP`); validate `class` names here.
-  - `pyMediaTools/core/config.py` — compatibility fallback with inline defaults if TOML missing.
-  - `pyMediaTools/core/mediaconvert.py` — core abstractions:
-    - `MediaConverter` base class: file discovery (`find_files`), `process_ffmpeg` (QProcess + `-progress -` parsing), encoder detection (`-encoders`).
-    - Concrete converters: `LogoConverter`, `H264Converter`, `Mp3Converter`, etc. Implement `process_file` to add new converters.
-  - `pyMediaTools/utils.py` — resource resolution helpers (`get_base_dir`, `BIN_DIR`, `ASSET_DIR`, `get_resource_path`), and binary helpers (`get_ffmpeg_exe`, `get_ffprobe_exe`, `_ensure_executable`).
-  - `pyMediaTools/logging_config.py` — RotatingFileHandler, logs are written under `get_base_dir()` (useful for debugging packaged apps).
+## 🏗 Big-picture architecture
+- Core responsibility: discover input files, run FFmpeg-based conversions, report progress to a Monitor (GUI or CLI).
+- Main layers:
+  - UI layer: `pyMediaTools/ui/` (PySide6 widgets, progress/stop UI)
+  - Orchestration: `pyMediaTools/core/mediaconvert.py` (MediaConverter + concrete converters)
+  - Config: `pyMediaTools/core/factory.py` (loads `config.toml` into `MODES`); `pyMediaTools/core/config.py` provides fallback defaults
+  - Utilities: `pyMediaTools/utils.py` (path resolution, BIN/ASSET dirs, ffmpeg/ffprobe helpers)
+- Why this structure: decouple UI from converter logic so converters can run in CLI, GUI, or tests with the same Monitor API.
 
-- 🧩 Important conventions & gotchas (do not change lightly)
-  - Modes shape: `{ 'class': <ClassNameStr>, 'params': {...}, 'support_exts': [...], 'output_ext': '_x.mp4' }`. `factory.py` converts the `class` string into an actual class using `CLASS_MAP`.
-  - `find_files` only scans the top-level of the input directory (no recursive traversal) and filters out files that already end with configured `output_ext` to avoid reprocessing outputs.
-  - Progress parsing: uses FFmpeg `-progress -` (pipe) and QProcess `readyRead` callbacks; prefer emitting `out_time*` and `progress=end` semantics when changing ffmpeg invocation.
-  - Monitor API expected by converters (passed as `monitor`):
-    - `monitor.update_file_progress(current_seconds, total_seconds, file_name)`
-    - `monitor.update_overall_progress(completed, total, message)`
-    - `monitor.check_stop_flag()` → boolean to abort
-  - Hardware encoder detection: `MediaConverter._detect_hardware_encoders()` runs `ffmpeg -encoders` and looks for names like `nvenc`, `qsv`, `videotoolbox`.
+## 🔑 Key files (read first)
+- `pyMediaTools/core/mediaconvert.py` — implement/modify converters here. Key behaviors to respect:
+  - `find_files()` only scans top-level of an input dir (not recursive) and skips files already matching `output_ext`.
+  - `process_ffmpeg(cmd, duration, monitor, name)` uses `QProcess`, merges channels, enforces `-progress -` and parses `out_time*` + `progress=end` lines; uses `waitForReadyRead()` + `processEvents()` to avoid deadlocks in packaged apps.
+  - `_detect_hardware_encoders()` calls `ffmpeg -encoders` and caches results in `_GLOBAL_ENCODER_CACHE` (clear in tests if needed).
+- `pyMediaTools/core/factory.py` — maps TOML `class` strings to actual classes via `CLASS_MAP`. Validate any new `class` names here.
+- `pyMediaTools/utils.py` — `get_base_dir()` supports dev, PyInstaller (`sys._MEIPASS`), and frozen executables; `BIN_DIR` / `ASSET_DIR` conventions; `get_ffmpeg_exe()` always returns bundled path (and tries to ensure exec bit).
+- `pyMediaTools/logging_config.py` — RotatingFileHandler; logs go to `get_base_dir()/pyMediaConvert.log`.
 
-- 🧪 Tests & development workflow
-  - Unit tests use `pytest`. Focus on `tests/test_utils.py` for resource resolution and `ffmpeg` retrieval semantics.
-  - For integration/debugging run local ffmpeg in `bin/` (project prefers bundled `bin/ffmpeg` and `bin/ffprobe`) — tests may monkeypatch `BIN_DIR`.
+## ✅ Important conventions & gotchas
+- Config discovery order: env `PYMEDIA_CONFIG_PATH`/`PYMEDIA_CONFIG` → project `config.toml` (via `get_base_dir`) → cwd `config.toml` → parent directories. `load_project_config()` caches result—tests may need to reset `_PROJECT_CONFIG`.
+- Monitor API (use exactly):
+  - `monitor.update_file_progress(current_seconds, total_seconds, file_name)`
+  - `monitor.update_overall_progress(completed, total, message)`
+  - `monitor.check_stop_flag()` → boolean (should be polled to stop processing)
+- FFmpeg integration:
+  - Prefer `-progress -` and parse `out_time`, `out_time_ms`, `out_time_us` and `progress=end` lines. Avoid relying only on stderr time= parsing.
+  - `process_ffmpeg` enforces `-nostats` and `-progress -` and uses `QProcess.waitForReadyRead()` for stable progress reading in packaged apps.
+- Packaging notes: always include `bin/` and `assets/` in bundled builds (`--include-data-dir=bin=bin`, `--include-data-dir=assets=assets` for Nuitka); ensure executability on POSIX (`chmod +x`).
 
-- 📦 Packaging / distribution notes
-  - Project is packaged with Nuitka in `README.md` examples. Important: include `bin` and `assets` into the bundle (`--include-data-dir=bin=bin`).
-  - Runtime path resolution supports PyInstaller onefile (`sys._MEIPASS`) and frozen executables (`sys.executable`). Use `get_base_dir()` to find assets.
-  - Ensure embedded ffmpeg/ffprobe are executable on POSIX (`_ensure_executable` attempts to add exec bit).
+## 🧪 Testing and development tips
+- Unit tests: run `pytest -q`. Many tests are integration-like and may be commented out because they require `ffmpeg` in `BIN_DIR`.
+- Monkeypatching advice:
+  - To fake bundled binaries, monkeypatch `pyMediaTools.utils.BIN_DIR` to point at a tmpdir and create `ffmpeg`/`ffprobe` stubs.
+  - To reload config during tests, reset `pyMediaTools.utils._PROJECT_CONFIG = None` or monkeypatch `find_config_path()`.
+  - Clear `_GLOBAL_ENCODER_CACHE` between tests when testing encoder detection logic.
+- CI-friendly tests: prefer mocking subprocess calls (e.g., mocking `subprocess.run` for `-encoders`) instead of invoking real ffmpeg.
 
-- 🔍 Debugging tips
-  - Logs: check `pyMediaConvert.log` at `get_base_dir()` (rotating handler). Add more logging in `mediaconvert.py` around `process_ffmpeg` and `_parse_ffmpeg_output` when investigating progress issues.
-  - FFmpeg errors often surface on stderr; `process_ffmpeg` captures and logs these messages.
-  - Packaging gotchas: progress may fail if ffmpeg binary missing or lacks exec permission, or if the app isn't including `bin/`.
+## 🔧 How to add a mode (quick)
+1. Implement converter in `pyMediaTools/core/mediaconvert.py` by adding a subclass and implementing `process_file(self, input_path, output_path, duration, monitor)`.
+2. Add a `[modes.my_mode]` section to `config.toml` or add to `MODES` fallback in `pyMediaTools/core/config.py` for tests/workflow.
+3. If using TOML `class` names, add mapping to `CLASS_MAP` in `pyMediaTools/core/factory.py`.
 
-- ➕ How to add a new mode (example)
-  1. Implement converter subclass in `pyMediaTools/core/mediaconvert.py` with `process_file(self, input_path, output_path, duration, monitor)`.
-  2. Add a `[modes.my_mode]` section in `config.toml` (or add to `MODES` fallback in `core/config.py`).
-  3. Map the class name in `factory.py` `CLASS_MAP` if you use TOML strings.
-
-- ✅ Keep PRs focused and executable: include a small test if behaviour changes (e.g., `tests/test_*.py`), and describe packaging impact (assets or bin changes).
-
-If anything above is unclear or you want a different focus (more on tests, packaging, or refactor suggestions), tell me which area to expand.  
+## 💡 Implementation notes for contributors
+- Prefer `get_resource_path()` for asset lookups so packaging works (it uses `get_base_dir()`).
+- Respect `monitor.check_stop_flag()` so UI stop is responsive.
+- Keep CLI-mode differences in mind (`use_cli=True` enables tqdm-based overall progress bars).
 
 ---
-*(Generated from repository scan: `app.py`, `cli.py`, `config.toml`, `pyMediaTools/core/*`, `pyMediaTools/utils.py`, `README.md`, `tests/`.)*
+If anything is missing or you want more detail (examples, tests to add, or packaging specifics), tell me which section to expand and I’ll iterate. ✨
+*

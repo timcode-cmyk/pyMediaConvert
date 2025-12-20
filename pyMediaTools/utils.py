@@ -36,17 +36,17 @@ BASE_DIR = get_base_dir()
 BIN_DIR = BASE_DIR / "bin"
 ASSET_DIR = BASE_DIR / "assets"
 
-# Project-level configuration cache and helpers
+# 项目级配置缓存和帮助程序
 _PROJECT_CONFIG = None
 
 def find_config_path() -> Optional[Path]:
-    """Search for a project `config.toml`.
+    """搜索项目“config.toml”。
 
-    Order of preference:
-      - path from env PYMEDIA_CONFIG_PATH or PYMEDIA_CONFIG
-      - project base `config.toml` (returned by `get_base_dir()`)
-      - current working dir `config.toml`
-      - any parent directories upwards from this file
+    优先顺序：
+      -来自 env PYMEDIA_CONFIG_PATH 或 PYMEDIA_CONFIG 的路径
+      -项目基础 `config.toml` （由 `get_base_dir()` 返回）
+      -当前工作目录`config.toml`
+      -从该文件向上的任何父目录
     """
     env_path = os.getenv('PYMEDIA_CONFIG_PATH') or os.getenv('PYMEDIA_CONFIG')
     candidates = []
@@ -66,9 +66,9 @@ def find_config_path() -> Optional[Path]:
 
 
 def load_project_config() -> dict:
-    """Load and cache the top-level TOML config as a dict.
+    """将顶级 TOML 配置加载并缓存为字典。
 
-    Returns an empty dict if no config found.
+    如果未找到配置，则返回一个空字典。
     """
     global _PROJECT_CONFIG
     if _PROJECT_CONFIG is not None:
@@ -79,7 +79,7 @@ def load_project_config() -> dict:
         return _PROJECT_CONFIG
 
     if _toml is None:
-        raise RuntimeError("TOML parser not available. Install 'toml' for Python < 3.11")
+        raise RuntimeError("TOML 解析器不可用。为 Python < 3.11 安装“toml”")
 
     data = cfg_path.read_bytes()
     try:

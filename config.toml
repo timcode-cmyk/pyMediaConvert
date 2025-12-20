@@ -151,6 +151,6 @@ support_exts = [".mp3", ".wav", ".flac", ".ogg", ".mpeg", ".m4a", ".aiff", ".mp4
 [modes.wav.params]
 
 [elevenlabs]
-api_key = "11bada86cbc685bcbae88aafaa2405e8c9505edfe80bc07da4f88d3d4a2af548"
+api_key = "sk_faa835e10f52055038aaec1b79102df20bb8b8fd6de0604d"
 default_output_format = "mp3_44100_128"
-supported_output_formats = ["mp3_44100_128", "mp3_48000_128", "wav_44100_16", "wav_48000_16"]
+supported_output_formats = ["mp3_44100_128", "mp3_44100_192", "pcm_44100", "pcm_48000"]

@@ -11,3 +11,9 @@ class DownloaderWidget(QWidget):
         super().__init__()
 
         self.initUI()
+
+    def initUI(self):
+        layout = QVBoxLayout(self)
+        label = QLabel("下载管理功能暂未实现")
+        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(label)
