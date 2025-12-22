@@ -10,8 +10,10 @@ from PySide6.QtGui import QAction
 
 from ..core.downloadmanager import DownloadManager
 from ..utils import get_default_download_dir
+from .styles import apply_common_style
 from pyMediaTools import get_logger
 
+# 日志
 logger = get_logger(__name__)
 
 class DownloadManagerWidget(QWidget):
@@ -20,6 +22,9 @@ class DownloadManagerWidget(QWidget):
         self.manager = DownloadManager()
         self.download_path = str(get_default_download_dir())
         self.init_ui()
+
+        # 应用统一样式
+        apply_common_style(self)
         
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.refresh_ui)

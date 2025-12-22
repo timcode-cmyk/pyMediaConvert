@@ -7,6 +7,7 @@ from PySide6.QtCore import Qt, QUrl, Slot
 from PySide6.QtGui import QFont, QPalette, QColor, QCursor
 
 from ..core.videodownloader import YtDlpInfoWorker, YtDlpDownloadWorker
+from .styles import apply_common_style
 
 class VideoDownloaWidget(QWidget):
     def __init__(self):
@@ -20,30 +21,8 @@ class VideoDownloaWidget(QWidget):
         self.apply_styles()
 
     def apply_styles(self):
-        app = QApplication.instance()
-        palette = app.palette()
-        accent_color = palette.color(QPalette.Highlight).name()
-        bg_color = palette.color(QPalette.Window)
-        is_dark = bg_color.lightness() < 128
-        
-        input_bg = "rgba(255, 255, 255, 0.05)" if is_dark else "rgba(0, 0, 0, 0.03)"
-        border_color = "rgba(255, 255, 255, 0.15)" if is_dark else "rgba(0, 0, 0, 0.15)"
-        group_bg = "rgba(255, 255, 255, 0.03)" if is_dark else "rgba(255, 255, 255, 0.6)"
-        
-        sys_name = platform.system()
-        base_font = "Segoe UI" if sys_name == 'Windows' else "SF Pro Text"
-
-        self.setStyleSheet(f"""
-            QWidget {{ font-family: "{base_font}"; font-size: 14px; }}
-            QGroupBox {{ background-color: {group_bg}; border: 1px solid {border_color}; border-radius: 8px; margin-top: 1.2em; padding: 15px; }}
-            QGroupBox::title {{ subcontrol-origin: margin; left: 10px; font-weight: bold; color: {accent_color}; }}
-            QLineEdit, QComboBox, QTableWidget {{ background-color: {input_bg}; border: 1px solid {border_color}; border-radius: 6px; padding: 5px; }}
-            QPushButton {{ background-color: {input_bg}; border: 1px solid {border_color}; border-radius: 6px; padding: 6px 12px; }}
-            QPushButton:hover {{ background-color: {accent_color}; color: white; border: 1px solid {accent_color}; }}
-            QProgressBar {{ border: none; background-color: {input_bg}; border-radius: 4px; height: 14px; text-align: center; color: transparent; }}
-            QProgressBar::chunk {{ background-color: {accent_color}; border-radius: 4px; }}
-            #StatusLabel {{ font-weight: bold; color: {accent_color}; }}
-        """)
+        # 使用统一样式表并保持局部可扩展性
+        apply_common_style(self)
 
     def initUI(self):
         layout = QVBoxLayout(self)

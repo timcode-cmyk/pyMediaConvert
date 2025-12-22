@@ -11,6 +11,7 @@ from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 
 from ..core.elevenlabs import QuotaWorker, TTSWorker, SFXWorker, VoiceListWorker
 from ..utils import load_project_config
+from .styles import apply_common_style
 from ..logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -27,100 +28,7 @@ class ElevenLabsWidget(QWidget):
         self.apply_styles()
 
     def apply_styles(self):
-        """
-        统一的现代化样式表，与 ConverterWidget 风格保持一致
-        """
-        app = QApplication.instance()
-        palette = app.palette()
-        
-        accent_color = palette.color(QPalette.Highlight).name()
-        
-        bg_color = palette.color(QPalette.Window)
-        is_dark = bg_color.lightness() < 128
-        
-        input_bg = "rgba(255, 255, 255, 0.05)" if is_dark else "rgba(0, 0, 0, 0.03)"
-        border_color = "rgba(255, 255, 255, 0.15)" if is_dark else "rgba(0, 0, 0, 0.15)"
-        group_bg = "rgba(255, 255, 255, 0.03)" if is_dark else "rgba(255, 255, 255, 0.6)"
-        
-        sys_name = platform.system()
-        base_font = "Segoe UI" if sys_name == 'Windows' else "SF Pro Text" if sys_name == 'Darwin' else "Roboto"
-
-        style = f"""
-            QWidget {{
-                font-family: "{base_font}", sans-serif;
-                font-size: 14px;
-                color: palette(text);
-            }}
-            
-            QGroupBox {{
-                background-color: {group_bg};
-                border: 1px solid {border_color};
-                border-radius: 8px;
-                margin-top: 1.2em;
-                padding: 15px;
-            }}
-            QGroupBox::title {{
-                subcontrol-origin: margin;
-                padding: 0 5px;
-                left: 10px;
-                font-weight: bold;
-                color: {accent_color};
-            }}
-
-            QLineEdit, QComboBox, QSpinBox, QTextEdit {{
-                background-color: {input_bg};
-                border: 1px solid {border_color};
-                border-radius: 6px;
-                padding: 8px;
-                selection-background-color: {accent_color};
-            }}
-            QLineEdit:focus, QTextEdit:focus {{
-                border: 1px solid {accent_color};
-            }}
-            
-            QPushButton {{
-                background-color: {input_bg};
-                border: 1px solid {border_color};
-                border-radius: 6px;
-                padding: 8px 16px;
-                font-weight: 600;
-            }}
-            QPushButton:hover {{
-                background-color: {accent_color};
-                color: white;
-                border: 1px solid {accent_color};
-            }}
-            QPushButton#PrimaryButton {{
-                background-color: {accent_color};
-                color: white;
-                border: none;
-                padding: 10px;
-                font-size: 15px;
-            }}
-            QPushButton#PrimaryButton:hover {{
-                background-color: palette(link-visited);
-            }}
-
-            QProgressBar {{
-                border: none;
-                background-color: {input_bg};
-                border-radius: 4px;
-                height: 8px;
-                text-align: center;
-            }}
-            QProgressBar::chunk {{
-                background-color: {accent_color};
-                border-radius: 4px;
-            }}
-            
-            /* 状态栏区域 */
-            #BottomPanel {{
-                background-color: {group_bg};
-                border-radius: 8px;
-                padding: 10px;
-            }}
-        """
-        self.setStyleSheet(style)
+        apply_common_style(self)
 
     def setup_ui(self):
         main_layout = QVBoxLayout(self)
