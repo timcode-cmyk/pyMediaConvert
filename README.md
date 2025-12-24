@@ -1,7 +1,10 @@
-# pyMediaConvert
+# pyMediaTools
 
-轻量级的跨平台媒体批处理工具（基于 FFmpeg + PySide6 GUI）。  
-功能概览：批量转换视频/音频、添加 logo、导出为图片序列、支持多种编码（H.264、DNxHR、PNG、MP3、WAV 等）。
+轻量级的跨平台媒体批处理与 AI 语音生成工具（基于 FFmpeg + ElevenLabs API + PySide6 GUI）。
+
+功能概览：
+- **媒体处理**：批量转换视频/音频、添加 Logo 水印、导出图片序列、支持多种编码（H.264、DNxHR、PNG、MP3、WAV 等）。
+- **ElevenLabs 工具箱**：集成文本转语音 (TTS) 与音效生成 (SFX)，支持字幕自动生成 (SRT) 与配额查询。
 
 注意：本项目使用 FFmpeg/ffprobe，遵循其 LGPL/GPL 许可（见项目 LICENSE / README）。
 
@@ -11,7 +14,7 @@
 - 快速开始（从源码运行）
 - GUI 使用说明
 - CLI 使用说明
-- config 配置说明
+- 配置文件说明 (config.toml)
 - 打包为独立 macOS 应用（使用 Nuitka）
 - 常见问题与调试提示
 - 贡献与许可
@@ -19,10 +22,14 @@
 ---
 
 ## 简介
-pyMediaConvert 负责：
+pyMediaTools 包含两个核心模块：
+1. **MediaConvert**：
 - 遍历输入目录并识别支持的媒体文件；
 - 使用 ffmpeg 执行转码、加 logo、裁剪与滤镜等处理；
 - 用 PySide6 提供简单易用的桌面 GUI，带转换进度与停止功能。
+2. **ElevenLabs**：
+- 调用 ElevenLabs API 生成高质量语音与音效；
+- 自动生成对齐的 SRT 字幕文件。
 
 ---
 
@@ -34,6 +41,7 @@ pyMediaConvert 负责：
 - Python 包：
   - pyside6
   - tqdm
+  - requests
   - nuitka（仅在打包时需要）
   - 其它依赖见 `pyproject.toml` / `requirements.txt`（如果项目包含）
 
@@ -42,7 +50,7 @@ pyMediaConvert 负责：
 python -m venv .venv
 source .venv/bin/activate
 pip install -U pip
-pip install -r requirements.txt || pip install pyside6 tqdm
+pip install -r requirements.txt || pip install pyside6 tqdm requests
 ```
 
 准备 ffmpeg/ffprobe（推荐：手动放到 bin/）：

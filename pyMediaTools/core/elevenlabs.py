@@ -117,10 +117,13 @@ class TTSWorker(QThread):
         if not chars or not starts or not ends:
             return
 
+        cfg = load_project_config().get('elevenlabs', {})
+
         # 标点符号集合
-        DELIMITERS = [" ", "।", "？", "?", "!", "！", ",", "，", '"', "“", "”"]
-        SENTENCE_ENDERS = ["।", "？", "?", "!", "！"]
-        MAX_CHARS_PER_LINE = 35
+        DELIMITERS = cfg.get('srt_delimiters', [" ", "।", "？", "?", "!", "！", ",", "，", '"', "“", "”"])
+        SENTENCE_ENDERS = cfg.get('srt_sentence_enders', ["।", "？", "?", "!", "！"])
+        MAX_CHARS_PER_LINE = cfg.get('srt_max_chars', 35)
+        PAUSE_THRESHOLD = cfg.get('srt_pause_threshold', 0.3)
 
         sentences = []
         current_line_text = ""
@@ -128,16 +131,26 @@ class TTSWorker(QThread):
         current_word_text = ""
         current_word_start = None
 
+        count = len(chars)
+
         for i, char in enumerate(chars):
             if current_word_start is None:
                 current_word_start = starts[i]
             
             current_word_text += char
 
-            is_delimiter = char in DELIMITERS
-            is_last_char = (i == len(chars) - 1)
+            # 检测停顿 (当前字符结束到下一字符开始的时间差)
+            is_pause = False
+            if i < count - 1:
+                silence = starts[i+1] - ends[i]
+                if silence >= PAUSE_THRESHOLD:
+                    is_pause = True
 
-            if is_delimiter or is_last_char:
+            is_delimiter = char in DELIMITERS
+            is_last_char = (i == count - 1)
+
+            # 如果遇到分隔符、最后一个字符、或者检测到明显停顿，都视为单词/片段结束
+            if is_delimiter or is_last_char or is_pause:
                 if current_line_start is None:
                     current_line_start = current_word_start
                 
@@ -147,7 +160,8 @@ class TTSWorker(QThread):
                 is_sentence_end = char in SENTENCE_ENDERS
                 is_too_long = len(current_line_text) >= MAX_CHARS_PER_LINE
 
-                if is_sentence_end or is_too_long or is_last_char:
+                # 换行条件：句末标点、行太长、最后字符、或者有停顿
+                if is_sentence_end or is_too_long or is_last_char or is_pause:
                     clean_text = current_line_text.strip()
                     if clean_text:
                         sentences.append({
