@@ -2,7 +2,7 @@
 
 [modes.hailuo]
 class = "LogoConverter"
-description = "1111111添加 Dream+Hailuo Logo (竖屏)"
+description = "1. 添加 Dream+Hailuo Logo (竖屏)"
 output_ext = "_hailuo.mp4"
 support_exts = [".mp4"]
 
@@ -17,7 +17,7 @@ logo_path = "assets/hailuo.png"
 
 [modes.vidu]
 class = "LogoConverter"
-description = "添加 Dream+Vidu Logo (竖屏)"
+description = "2. 添加 Dream+Vidu Logo (竖屏)"
 output_ext = "_vidu.mp4"
 support_exts = [".mp4"]
 
@@ -32,7 +32,7 @@ logo_path = "assets/vidu.png"
 
 [modes.veo]
 class = "LogoConverter"
-description = "添加 Dream+Veo Logo (竖屏)"
+description = "3. 添加 Dream+Veo Logo (竖屏)"
 output_ext = "_veo.mp4"
 support_exts = [".mp4"]
 
@@ -47,7 +47,7 @@ logo_path = "assets/Veo.png"
 
 [modes.heygen]
 class = "LogoConverter"
-description = "添加 Dream+HegGen Logo (竖屏)"
+description = "4. 添加 Dream+HegGen Logo (竖屏)"
 output_ext = "_veo.mp4"
 support_exts = [".mp4"]
 
@@ -62,7 +62,7 @@ logo_path = "assets/HeyGen.png"
 
 [modes.dream]
 class = "LogoConverter"
-description = "添加 Dreamina Logo (竖屏)"
+description = "5. 添加 Dreamina Logo (竖屏)"
 output_ext = "_veo.mp4"
 support_exts = [".mp4"]
 
@@ -77,7 +77,7 @@ logo_path = "assets/Dream.png"
 
 [modes.image]
 class = "AddCustomLogo"
-description = "添加 ImageFromAI"
+description = "6. 添加 ImageFromAI"
 output_ext = ""
 support_exts = [".mp4", ".png", ".jpg", ".jpeg"]
 
@@ -91,7 +91,7 @@ text = "AI Created"
 
 [modes.h264]
 class = "H264Converter"
-description = "转换为 H.264 (MP4)"
+description = "7. 转换为 H.264 (MP4)"
 output_ext = "_h264.mp4"
 support_exts = [".mov", ".avi", ".mkv", ".mp4", ".webm"]
 
@@ -99,7 +99,7 @@ support_exts = [".mov", ".avi", ".mkv", ".mp4", ".webm"]
 
 [modes.x264]
 class = "H264Converter"
-description = "转换为 H.264 (压缩)"
+description = "8. 转换为 H.264 (压缩)"
 output_ext = "_x264.mp4"
 support_exts = [".mov", ".avi", ".mkv", ".mp4", ".webm"]
 
@@ -110,7 +110,7 @@ preset_value = "20"
 
 [modes.dnxhr]
 class = "DnxhrConverter"
-description = "转换为 DNxHR (MOV)"
+description = "9. 转换为 DNxHR (MOV)"
 output_ext = "_dnxhr.mov"
 support_exts = [".mp4", ".avi", ".mkv", ".mov", ".webm"]
 
@@ -119,7 +119,7 @@ video_codec = "dnxhr_hq"
 
 [modes.dnxhr_hqx]
 class = "DnxhrConverter"
-description = "转换为 DNxHR (10bit MOV)"
+description = "10. 转换为 DNxHR (10bit MOV)"
 output_ext = "_dnxhr.mov"
 support_exts = [".mp4", ".avi", ".mkv", ".mov", ".webm"]
 
@@ -128,7 +128,7 @@ video_codec = "dnxhr_hqx"
 
 [modes.png]
 class = "PngConverter"
-description = "图片转换为 PNG"
+description = "11. 图片转换为 PNG"
 output_ext = "_processed.png"
 support_exts = [".jpg", ".bmp", ".png", ".webp", ".tiff"]
 
@@ -136,7 +136,7 @@ support_exts = [".jpg", ".bmp", ".png", ".webp", ".tiff"]
 
 [modes.mp3]
 class = "Mp3Converter"
-description = "音频转换为 MP3"
+description = "12. 音频转换为 MP3"
 output_ext = "_processed.mp3"
 support_exts = [".mp3", ".wav", ".flac", ".ogg", ".mpeg", ".m4a", ".aiff"]
 
@@ -144,7 +144,7 @@ support_exts = [".mp3", ".wav", ".flac", ".ogg", ".mpeg", ".m4a", ".aiff"]
 
 [modes.wav]
 class = "WavConverter"
-description = "音频转换为 WAV"
+description = "13. 音频转换为 WAV"
 output_ext = "_processed.wav"
 support_exts = [".mp3", ".wav", ".flac", ".ogg", ".mpeg", ".m4a", ".aiff", ".mp4", ".avi", ".mkv", ".mov", ".webm"]
 
@@ -153,7 +153,7 @@ support_exts = [".mp3", ".wav", ".flac", ".ogg", ".mpeg", ".m4a", ".aiff", ".mp4
 # ElevenLabs 配置
 
 [elevenlabs]
-api_key = "sk_faa835e10f52055038aaec1b79102df20bb8b8fd6de0604d"
+api_key = ""
 default_output_format = "mp3_44100_128"
 supported_output_formats = ["mp3_44100_128", "mp3_44100_192", "pcm_44100", "pcm_48000"]
 srt_max_chars = 35

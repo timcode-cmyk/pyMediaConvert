@@ -10,7 +10,7 @@ from pathlib import Path
 import subprocess
 from ..utils import get_ffmpeg_exe, get_ffprobe_exe, get_resource_path
 from ..logging_config import get_logger
-# import sys
+import sys
 # from tqdm import tqdm
 from PySide6.QtCore import QProcess, QEventLoop, QCoreApplication, Qt
 from abc import ABC, abstractmethod
@@ -89,13 +89,19 @@ class MediaConverter(ABC):
         V..... h264_nvenc            NVIDIA NVENC H.264 Encoder (codec h264)
         """
         cmd = [get_ffmpeg_exe(), "-encoders"]
+
+        creationflags = 0
+        if sys.platform == "win32":
+            creationflags = subprocess.CREATE_NO_WINDOW
+
         try:
             result = subprocess.run(cmd, 
                                     capture_output=True, 
                                     text=True, 
                                     check=True, 
                                     encoding='utf-8', 
-                                    errors='ignore')
+                                    errors='ignore',
+                                    creationflags=creationflags)
             
             # 正则表达式用于匹配编码器行：
             # 1. 匹配起始标志：六个字符的旗帜 (如 VFS---)
@@ -521,12 +527,12 @@ class AddCustomLogo(MediaConverter):
         self.text = params.get('text')
         self.font_color = params.get('font_color')
         self.font_size = params.get('font_size')
-        self.font_path = get_resource_path(params.get('font_path'))
+        self.font_path = params.get('font_path')
 
 
         super().__init__(support_exts=support_exts, output_ext=output_ext, init_checks=init_checks)
 
-        if not self.font_path.exists():
+        if not get_resource_path(self.font_path).exists():
             logger.critical(f"字体未找到: {self.font_path}")
             raise FileNotFoundError(f"Logo not found: {self.font_path}")
 
@@ -543,10 +549,10 @@ class AddCustomLogo(MediaConverter):
 
         output_file_name = f"{output_path}{self.output_ext}" 
 
-        # 构造 filter_complex：scale cover -> crop -> 模糊区域 -> overlay logo
+        # 构造 filter_complex：
         filter_complex = (
-            f"drawtext=fontfile={self.font_path}:"
-            f"text={self.text}:"
+            f"drawtext=fontfile='{self.font_path}':"
+            f"text='{self.text}':"
             f"fontcolor={self.font_color}:"
             f"fontsize={self.font_size}:"
             "box=1:boxcolor=black@0.5:boxborderw=10:"
@@ -557,18 +563,8 @@ class AddCustomLogo(MediaConverter):
             "ffmpeg", "-y", "-hide_banner", "-nostats", "-loglevel", "error",
             "-i", str(input_path),
             "-vf", filter_complex,
-        ]
-        # if preset_key == "-crf":
-        #      # 软件编码器参数
-        #      cmd.extend([preset_key, preset_value])
-        # elif preset_key:
-        #      # 硬件编码器参数 (如 -preset, -q:v)
-        #      cmd.extend([preset_key, preset_value])
-            
-        cmd.extend([
-            # "-c:a", "copy", "-movflags", "+faststart",
             output_file_name
-        ])
+        ]
 
         name = input_path.name # 确保获取到文件名
         self.process_ffmpeg(cmd, duration, monitor, name)
@@ -677,5 +673,3 @@ class WavConverter(MediaConverter):
         ]
         name = input_path.name # 确保获取到文件名
         self.process_ffmpeg(cmd, duration, monitor, name)
-
-

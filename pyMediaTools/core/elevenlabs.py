@@ -276,8 +276,9 @@ class VoiceListWorker(QThread):
                 for v in raw:
                     vid = v.get("voice_id") or v.get("id") or v.get("uuid")
                     name = v.get("name") or v.get("label") or vid
+                    preview_url = v.get("preview_url")
                     if vid and name:
-                        voices_list.append((name, vid))
+                        voices_list.append((name, vid, preview_url))
 
                 self.finished.emit(voices_list)
             else:

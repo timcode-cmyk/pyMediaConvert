@@ -95,8 +95,8 @@ class ConversionWorker(QObject):
             logger.exception(f"Worker 线程中发生未捕获的异常: {e}")
             is_successful = False
         finally:
-            # pm_worker.GlobalProgressMonitor = None
-            # Emit error message (empty string if none)
+            # pm_worker.GlobalProgressMonitor = 无
+            # 发出错误消息（如果没有则为空字符串）
             self.finished.emit(is_successful, error_msg)
 
 

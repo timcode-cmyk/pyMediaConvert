@@ -5,11 +5,11 @@ UI package
 from .elevenlabs_ui import ElevenLabsWidget
 from .media_tools_ui import MediaConverterWidget
 from .download_manager_ui import DownloadManagerWidget
-from .video_downloader_ui import VideoDownloaWidget
+from .video_downloader_ui import VideoDownloadWidget
 
 __all__ = [
     "ElevenLabsWidget",
     "MediaConverterWidget",
     "DownloadManagerWidget",
-    "VideoDownloaWidget",
+    "VideoDownloadWidget",
 ]

@@ -32,7 +32,7 @@ class DownloadManagerWidget(QWidget):
 
     def init_ui(self):
         self.setWindowTitle("pyMedia 下载管理器")
-        self.resize(1000, 700)
+        self.resize(900, 700)
         main_layout = QVBoxLayout(self)
 
         # --- 顶部设置面板 ---

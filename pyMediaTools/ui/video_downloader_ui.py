@@ -9,7 +9,7 @@ from PySide6.QtGui import QFont, QPalette, QColor, QCursor
 from ..core.videodownloader import YtDlpInfoWorker, YtDlpDownloadWorker
 from .styles import apply_common_style
 
-class VideoDownloaWidget(QWidget):
+class VideoDownloadWidget(QWidget):
     def __init__(self):
         super().__init__()
         self.info_worker = None

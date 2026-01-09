@@ -3,8 +3,10 @@ aria2下载管理器
 """
 import subprocess
 import json
+import sys
 import urllib.request
 import time
+import atexit
 from typing import Dict, List, Optional
 from ..utils import get_aria2c_exe, get_aria2_rpc_port, get_aria2_rpc_secret, get_default_download_dir
 from pyMediaTools import get_logger
@@ -17,6 +19,7 @@ class DownloadManager:
         self.secret = get_aria2_rpc_secret()
         self.process = None
         self._start_aria2c()
+        atexit.register(self.stop_server)
 
     def _start_aria2c(self):
         """启动 aria2c 并配置初始参数"""
@@ -32,11 +35,17 @@ class DownloadManager:
             "--split=16",                   # 单文件分块数
             "--daemon=false"
         ]
+
+        creationflags = 0
+        if sys.platform == "win32":
+            creationflags = subprocess.CREATE_NO_WINDOW
+
         try:
             self.process = subprocess.Popen(
                 [c for c in cmd if c],
                 stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL
+                stderr=subprocess.DEVNULL,
+                creationflags=creationflags
             )
             logger.info(f"aria2c 核心已启动，端口: {self.port}")
         except Exception as e:
@@ -105,5 +114,11 @@ class DownloadManager:
 
     def stop_server(self):
         if self.process:
-            self.process.terminate()
-            logger.info("aria2c 核心已关闭")
+            try:
+                self.process.terminate()
+                self.process.wait(timeout=1)
+            except Exception:
+                pass
+            finally:
+                self.process = None
+                logger.info("aria2c 核心已关闭")
