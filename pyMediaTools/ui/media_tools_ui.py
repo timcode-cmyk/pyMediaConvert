@@ -7,9 +7,9 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, Q
 from PySide6.QtCore import QObject, QThread, Signal, Slot, Qt
 from PySide6.QtGui import QFont, QPalette, QColor
 
-from ..mediaconvert.config import MODES
-from ..mediaconvert import worker as pm_worker
-from pyMediaConvert.logging_config import get_logger
+from pyMediaTools.core.config import MODES
+from .styles import apply_common_style
+from pyMediaTools import get_logger
 
 logger = get_logger(__name__)
 
@@ -95,8 +95,8 @@ class ConversionWorker(QObject):
             logger.exception(f"Worker 线程中发生未捕获的异常: {e}")
             is_successful = False
         finally:
-            # pm_worker.GlobalProgressMonitor = None
-            # Emit error message (empty string if none)
+            # pm_worker.GlobalProgressMonitor = 无
+            # 发出错误消息（如果没有则为空字符串）
             self.finished.emit(is_successful, error_msg)
 
 
@@ -112,143 +112,8 @@ class MediaConverterWidget(QWidget):
         self.apply_styles()
 
     def apply_styles(self):
-        """
-        统一的现代化样式表，自适应系统深色/浅色模式。
-        """
-        app = QApplication.instance()
-        palette = app.palette()
-        
-        # 获取系统强调色 (如果获取不到则使用默认蓝色)
-        accent_color = palette.color(QPalette.Highlight).name()
-        text_color = palette.color(QPalette.WindowText).name()
-        
-        # 判断是否为深色模式
-        bg_color = palette.color(QPalette.Window)
-        is_dark = bg_color.lightness() < 128
-        
-        # 定义颜色变量
-        input_bg = "rgba(255, 255, 255, 0.05)" if is_dark else "rgba(0, 0, 0, 0.03)"
-        border_color = "rgba(255, 255, 255, 0.15)" if is_dark else "rgba(0, 0, 0, 0.15)"
-        group_bg = "rgba(255, 255, 255, 0.03)" if is_dark else "rgba(255, 255, 255, 0.6)"
-        
-        # 字体设置
-        sys_name = platform.system()
-        if sys_name == 'Darwin':
-            base_font = "SF Pro Text, Helvetica Neue, Helvetica, Arial, sans-serif"
-        elif sys_name == 'Windows':
-            base_font = "Segoe UI, Microsoft YaHei, sans-serif"
-        else:
-            base_font = "Roboto, Noto Sans, Arial, sans-serif"
-
-        style = f"""
-            QWidget {{
-                font-family: "{base_font}";
-                font-size: 14px;
-                color: palette(text);
-            }}
-            
-            /* GroupBox 卡片化设计 */
-            QGroupBox {{
-                background-color: {group_bg};
-                border: 1px solid {border_color};
-                border-radius: 8px;
-                margin-top: 1.5em; /* 为标题留出空间 */
-                padding-top: 15px; 
-            }}
-            QGroupBox::title {{
-                subcontrol-origin: margin;
-                subcontrol-position: top left;
-                padding: 0 5px;
-                margin-left: 10px;
-                font-weight: bold;
-                color: {accent_color};
-            }}
-
-            /* 输入框和下拉框 */
-            QLineEdit, QComboBox {{
-                background-color: {input_bg};
-                border: 1px solid {border_color};
-                border-radius: 6px;
-                padding: 8px;
-                selection-background-color: {accent_color};
-            }}
-            QLineEdit:focus, QComboBox:focus {{
-                border: 1px solid {accent_color};
-            }}
-            
-            /* 拖拽区域特殊样式 */
-            DropLineEdit {{
-                border: 2px dashed {border_color};
-                background-color: rgba(0,0,0,0.02);
-                color: palette(mid);
-                font-weight: bold;
-            }}
-            DropLineEdit:hover {{
-                border-color: {accent_color};
-                background-color: rgba(100, 100, 255, 0.05);
-            }}
-
-            /* 按钮通用样式 */
-            QPushButton {{
-                background-color: {input_bg};
-                border: 1px solid {border_color};
-                border-radius: 6px;
-                padding: 8px 16px;
-                font-weight: 600;
-            }}
-            QPushButton:hover {{
-                background-color: {accent_color};
-                color: white;
-                border: 1px solid {accent_color};
-            }}
-            QPushButton:pressed {{
-                background-color: palette(dark);
-            }}
-
-            /* 开始/停止按钮特殊样式 */
-            QPushButton#StartStopButton {{
-                font-size: 15px;
-                padding: 10px;
-                border: none;
-                color: white;
-            }}
-            QPushButton#StartStopButton[converting="false"] {{
-                background-color: {accent_color}; 
-            }}
-            QPushButton#StartStopButton[converting="false"]:hover {{
-                background-color: palette(link-visited); 
-            }}
-            QPushButton#StartStopButton[converting="true"] {{
-                background-color: #ef4444; /* Red for Stop */
-            }}
-            QPushButton#StartStopButton[converting="true"]:hover {{
-                background-color: #dc2626;
-            }}
-
-            /* 进度条 */
-            QProgressBar {{
-                border: 1px solid {border_color};
-                border-radius: 6px;
-                text-align: center;
-                background-color: {input_bg};
-                height: 20px;
-                color: palette(text);
-                font-size: 12px;
-            }}
-            QProgressBar::chunk {{
-                background-color: {accent_color};
-                border-radius: 5px;
-            }}
-            
-            QLabel {{
-                color: palette(text);
-            }}
-            QLabel#StatusLabel {{
-                font-weight: bold;
-                color: palette(text);
-            }}
-        """
-        self.setStyleSheet(style)
+        # 使用统一的样式并保留向后扩展的能力
+        apply_common_style(self)
 
     def init_ui(self):
         main_layout = QVBoxLayout(self)

@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+body { width: 200px; padding: 10px; font-family: sans-serif; }
+.status { margin-bottom: 10px; font-weight: bold; }
+button { width: 100%; cursor: pointer; padding: 5px; }
+.hint { font-size: 11px; color: #666; margin-top: 10px; }
+</style>
+</head>
+<body>
+<div class="status">接管状态: <span id="statusTxt">加载中...</span></div>
+<button id="toggleBtn">检查状态</button>
+<div class="hint">确保本地 Python 下载管理器已启动</div>
+
+<!-- 引用外部脚本以符合 CSP 安全策略 -->
+<script src="popup.js"></script>
+
+
+</body>
+</html>

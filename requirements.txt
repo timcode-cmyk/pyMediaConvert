@@ -1,4 +1,6 @@
-pyside6
-requests
+aria2p
+Requests
+yt_dlp
+PySide6
 tqdm
-python-dotenv
+toml

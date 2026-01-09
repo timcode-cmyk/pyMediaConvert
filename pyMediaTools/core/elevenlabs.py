@@ -1,17 +1,22 @@
+"""
+ElevenLabs API
+"""
 import os
 import requests
 import base64
 import json
 from PySide6.QtCore import QThread, Signal
+from ..utils import load_project_config
 
 
 class QuotaWorker(QThread):
     quota_info = Signal(int, int)  # (usage, limit)
     error = Signal(str)
 
-    def __init__(self, api_key):
+    def __init__(self, api_key=None):
         super().__init__()
-        self.api_key = api_key
+        cfg = load_project_config().get('elevenlabs', {})
+        self.api_key = api_key or cfg.get('api_key') or os.getenv("ELEVENLABS_API_KEY", "")
 
     def run(self):
         url = "https://api.elevenlabs.io/v1/user"
@@ -36,16 +41,17 @@ class TTSWorker(QThread):
     finished = Signal(str)  # 返回保存的文件路径
     error = Signal(str)
 
-    def __init__(self, api_key, voice_id, text, save_path):
+    def __init__(self, api_key=None, voice_id=None, text=None, save_path=None, output_format=None):
         super().__init__()
-        self.api_key = api_key
+        cfg = load_project_config().get('elevenlabs', {})
+        self.api_key = api_key or cfg.get('api_key') or os.getenv("ELEVENLABS_API_KEY", "")
         self.voice_id = voice_id
         self.text = text
         self.save_path = save_path
-        self.output_format = "mp3_44100_128"
+        self.output_format = output_format or cfg.get('default_output_format') or "mp3_44100_128"
 
     def run(self):
-        url = f"https://api.elevenlabs.io/v1/text-to-speech/{self.voice_id}"
+        url = f"https://api.elevenlabs.io/v1/text-to-speech/{self.voice_id}/with-timestamps"
         headers = {
             "Content-Type": "application/json",
             "xi-api-key": self.api_key
@@ -53,7 +59,7 @@ class TTSWorker(QThread):
         data = {
             "text": self.text,
             "model_id": "eleven_multilingual_v2",
-            "voice_settings": {"stability": 0.5, "similarity_boost": 0.5},
+            "voice_settings": {"stability": 0.5, "similarity_boost": 0.75},
             "output_format": self.output_format
         }
 
@@ -63,37 +69,21 @@ class TTSWorker(QThread):
                 self.error.emit(f"TTS 生成失败 ({response.status_code}): {response.text}")
                 return
 
-            content_type = response.headers.get("Content-Type", "")
-            audio_bytes = None
+            try:
+                resp_json = response.json()
+            except Exception:
+                self.error.emit("无法解析 TTS 返回的 JSON。")
+                return
 
-            if "application/json" in content_type or response.text.strip().startswith("{"):
-                try:
-                    resp_json = response.json()
-                except Exception:
-                    self.error.emit("无法解析 TTS 返回的 JSON。")
-                    return
+            audio_b64 = resp_json.get("audio_base64") or resp_json.get("audio")
+            if not audio_b64:
+                self.error.emit("未能从 TTS 响应中提取音频(audio_base64)。")
+                return
 
-                audio_b64 = resp_json.get("audio") or resp_json.get("audio_base64") or resp_json.get("audioBytes")
-                if isinstance(audio_b64, str) and audio_b64.strip():
-                    try:
-                        audio_bytes = base64.b64decode(audio_b64)
-                    except Exception:
-                        self.error.emit("无法解码返回的音频 base64 数据。")
-                        return
-
-            elif "audio/" in content_type or "application/octet-stream" in content_type:
-                audio_bytes = response.content
-            else:
-                try:
-                    resp_json = response.json()
-                    audio_b64 = resp_json.get("audio") or resp_json.get("audio_base64")
-                    if audio_b64:
-                        audio_bytes = base64.b64decode(audio_b64)
-                except Exception:
-                    audio_bytes = response.content
-
-            if not audio_bytes:
-                self.error.emit("未能从 TTS 响应中提取音频。")
+            try:
+                audio_bytes = base64.b64decode(audio_b64)
+            except Exception:
+                self.error.emit("无法解码返回的音频 base64 数据。")
                 return
 
             try:
@@ -104,27 +94,114 @@ class TTSWorker(QThread):
                 self.error.emit(f"保存音频失败: {str(e)}")
                 return
 
-            # SRT 生成功能已移除；仅保存音频并返回成功路径
-            self.finished.emit(self.save_path) 
+            # 生成字幕
+            alignment = resp_json.get("alignment")
+            if alignment:
+                try:
+                    srt_path = os.path.splitext(self.save_path)[0] + ".srt"
+                    self.create_srt(alignment, srt_path)
+                except Exception as e:
+                    print(f"字幕生成失败: {e}")
+
+            self.finished.emit(self.save_path)
 
         except Exception as e:
             self.error.emit(str(e))
 
-    # SRT 生成功能已移除 — 保持此位置为空以便未来扩展（例如：外部字幕服务）
-    # pass
+    def create_srt(self, alignment, filename):
+        """基于 alignment 数据生成 SRT 字幕"""
+        chars = alignment.get('characters', [])
+        starts = alignment.get('character_start_times_seconds', [])
+        ends = alignment.get('character_end_times_seconds', [])
+        
+        if not chars or not starts or not ends:
+            return
+
+        cfg = load_project_config().get('elevenlabs', {})
+
+        # 标点符号集合
+        DELIMITERS = cfg.get('srt_delimiters', [" ", "।", "？", "?", "!", "！", ",", "，", '"', "“", "”"])
+        SENTENCE_ENDERS = cfg.get('srt_sentence_enders', ["।", "？", "?", "!", "！"])
+        MAX_CHARS_PER_LINE = cfg.get('srt_max_chars', 35)
+        PAUSE_THRESHOLD = cfg.get('srt_pause_threshold', 0.3)
+
+        sentences = []
+        current_line_text = ""
+        current_line_start = None
+        current_word_text = ""
+        current_word_start = None
+
+        count = len(chars)
+
+        for i, char in enumerate(chars):
+            if current_word_start is None:
+                current_word_start = starts[i]
+            
+            current_word_text += char
+
+            # 检测停顿 (当前字符结束到下一字符开始的时间差)
+            is_pause = False
+            if i < count - 1:
+                silence = starts[i+1] - ends[i]
+                if silence >= PAUSE_THRESHOLD:
+                    is_pause = True
+
+            is_delimiter = char in DELIMITERS
+            is_last_char = (i == count - 1)
+
+            # 如果遇到分隔符、最后一个字符、或者检测到明显停顿，都视为单词/片段结束
+            if is_delimiter or is_last_char or is_pause:
+                if current_line_start is None:
+                    current_line_start = current_word_start
+                
+                current_line_text += current_word_text
+                current_line_end = ends[i]
+
+                is_sentence_end = char in SENTENCE_ENDERS
+                is_too_long = len(current_line_text) >= MAX_CHARS_PER_LINE
+
+                # 换行条件：句末标点、行太长、最后字符、或者有停顿
+                if is_sentence_end or is_too_long or is_last_char or is_pause:
+                    clean_text = current_line_text.strip()
+                    if clean_text:
+                        sentences.append({
+                            "text": clean_text,
+                            "start": current_line_start,
+                            "end": current_line_end
+                        })
+                    current_line_text = ""
+                    current_line_start = None
+                
+                current_word_text = ""
+                current_word_start = None
+
+        with open(filename, "w", encoding="utf-8") as f:
+            for idx, s in enumerate(sentences):
+                f.write(f"{idx + 1}\n")
+                f.write(f"{self._format_time(s['start'])} --> {self._format_time(s['end'])}\n")
+                f.write(f"{s['text']}\n\n")
+
+    def _format_time(self, seconds):
+        """将秒数转换为 SRT 时间格式 HH:MM:SS,mmm"""
+        mils = int((seconds % 1) * 1000)
+        secs = int(seconds % 60)
+        mins = int((seconds / 60) % 60)
+        hours = int(seconds / 3600)
+        return f"{hours:02d}:{mins:02d}:{secs:02d},{mils:03d}"
 
 
 class SFXWorker(QThread):
     finished = Signal(str)
     error = Signal(str)
 
-    def __init__(self, api_key, prompt, duration, save_path):
+    def __init__(self, api_key=None, prompt=None, duration=None, save_path=None, output_format=None):
         super().__init__()
-        self.api_key = api_key
+        cfg = load_project_config().get('elevenlabs', {})
+        self.api_key = api_key or cfg.get('api_key') or os.getenv("ELEVENLABS_API_KEY", "")
         self.prompt = prompt
         self.duration = duration
         self.save_path = save_path
-        self.output_format = "mp3_44100_128"
+        self.output_format = output_format or cfg.get('default_output_format') or "mp3_44100_128"
 
     def run(self):
         url = "https://api.elevenlabs.io/v1/sound-generation"
@@ -176,9 +253,10 @@ class VoiceListWorker(QThread):
     finished = Signal(list)
     error = Signal(str)
 
-    def __init__(self, api_key):
+    def __init__(self, api_key=None):
         super().__init__()
-        self.api_key = api_key
+        cfg = load_project_config().get('elevenlabs', {})
+        self.api_key = api_key or cfg.get('api_key') or os.getenv("ELEVENLABS_API_KEY", "")
 
     def run(self):
         url = "https://api.elevenlabs.io/v1/voices"
@@ -198,8 +276,9 @@ class VoiceListWorker(QThread):
                 for v in raw:
                     vid = v.get("voice_id") or v.get("id") or v.get("uuid")
                     name = v.get("name") or v.get("label") or vid
+                    preview_url = v.get("preview_url")
                     if vid and name:
-                        voices_list.append((name, vid))
+                        voices_list.append((name, vid, preview_url))
 
                 self.finished.emit(voices_list)
             else:

@@ -8,8 +8,8 @@
 """
 from pathlib import Path
 import argparse
-import pyMediaConvert.mediaconvert.config as config
-from pyMediaConvert.logging_config import setup_logging
+from pyMediaTools import config
+from pyMediaTools import setup_logging
 
 setup_logging()
 
