@@ -49,8 +49,24 @@ class TTSWorker(QThread):
         self.text = text
         self.save_path = save_path
         self.output_format = output_format or cfg.get('default_output_format') or "mp3_44100_128"
+        self.debug_mode = cfg.get('debug_save_response', False)
 
     def run(self):
+        json_cache_path = os.path.splitext(self.save_path)[0] + ".json"
+
+        # 如果开启调试模式且缓存文件存在，则直接使用
+        if self.debug_mode and os.path.exists(json_cache_path):
+            try:
+                with open(json_cache_path, 'r', encoding='utf-8') as f:
+                    resp_json = json.load(f)
+                print(f"--- [调试模式] 从缓存加载TTS响应: {json_cache_path}")
+                self.process_response(resp_json)
+                return
+            except Exception as e:
+                print(f"--- [调试模式] 加载缓存失败，将重新调用API. 错误: {e}")
+
+
+        # --- 正常API调用 ---
         url = f"https://api.elevenlabs.io/v1/text-to-speech/{self.voice_id}/with-timestamps"
         headers = {
             "Content-Type": "application/json",
@@ -75,6 +91,26 @@ class TTSWorker(QThread):
                 self.error.emit("无法解析 TTS 返回的 JSON。")
                 return
 
+            # 如果开启调试模式，保存响应到文件
+            if self.debug_mode:
+                try:
+                    with open(json_cache_path, 'w', encoding='utf-8') as f:
+                        json.dump(resp_json, f, ensure_ascii=False, indent=2)
+                    print(f"--- [调试模式] 已保存TTS响应到缓存: {json_cache_path}")
+                except Exception as e:
+                    print(f"--- [调试模式] 保存响应到缓存失败. 错误: {e}")
+
+            self.process_response(resp_json)
+
+        except Exception as e:
+            self.error.emit(str(e))
+
+    def process_response(self, resp_json):
+        """
+        处理来自API或缓存的JSON响应。
+        这包括解码音频、保存文件和生成SRT字幕。
+        """
+        try:
             audio_b64 = resp_json.get("audio_base64") or resp_json.get("audio")
             if not audio_b64:
                 self.error.emit("未能从 TTS 响应中提取音频(audio_base64)。")
@@ -104,76 +140,65 @@ class TTSWorker(QThread):
                     print(f"字幕生成失败: {e}")
 
             self.finished.emit(self.save_path)
-
         except Exception as e:
-            self.error.emit(str(e))
+            self.error.emit(f"处理响应时出错: {str(e)}")
 
     def create_srt(self, alignment, filename):
         """基于 alignment 数据生成 SRT 字幕"""
         chars = alignment.get('characters', [])
         starts = alignment.get('character_start_times_seconds', [])
         ends = alignment.get('character_end_times_seconds', [])
-        
+
         if not chars or not starts or not ends:
             return
 
         cfg = load_project_config().get('elevenlabs', {})
 
         # 标点符号集合
-        DELIMITERS = cfg.get('srt_delimiters', [" ", "।", "？", "?", "!", "！", ",", "，", '"', "“", "”"])
-        SENTENCE_ENDERS = cfg.get('srt_sentence_enders', ["।", "？", "?", "!", "！"])
+        DELIMITERS = set(cfg.get('srt_delimiters', [" ", "\n", "।", "？", "?", "!", "！", ",", "，", '"', "“", "”"]))
+        SENTENCE_ENDERS = set(cfg.get('srt_sentence_enders', [".", "\n", "。", "।", "？", "?", "!", "！", "…"]))
         MAX_CHARS_PER_LINE = cfg.get('srt_max_chars', 35)
-        PAUSE_THRESHOLD = cfg.get('srt_pause_threshold', 0.3)
+        PAUSE_THRESHOLD = cfg.get('srt_pause_threshold', 0.2)
 
         sentences = []
         current_line_text = ""
         current_line_start = None
-        current_word_text = ""
-        current_word_start = None
 
-        count = len(chars)
+        if not chars: return
 
         for i, char in enumerate(chars):
-            if current_word_start is None:
-                current_word_start = starts[i]
+            if current_line_start is None:
+                current_line_start = starts[i]
+
+            current_line_text += char
+
+            # --- 在添加字符后，判断是否需要结束当前行 ---
+
+            # 1. 当前字符是句末标点吗？
+            is_sentence_end = char in SENTENCE_ENDERS
             
-            current_word_text += char
+            # 2. 当前字符后面有明显的停顿吗？
+            is_pause_after = (i < len(chars) - 1) and ( ends[i] - starts[i] >= PAUSE_THRESHOLD)
+            
+            # 3. 行是否已超长，并且当前字符是适合换行的标点？
+            is_long_and_at_delimiter = (len(current_line_text) > MAX_CHARS_PER_LINE) and (char in DELIMITERS)
+            
+            # 4. 这是最后一个字符吗？
+            is_last_char = (i == len(chars) - 1)
 
-            # 检测停顿 (当前字符结束到下一字符开始的时间差)
-            is_pause = False
-            if i < count - 1:
-                silence = starts[i+1] - ends[i]
-                if silence >= PAUSE_THRESHOLD:
-                    is_pause = True
-
-            is_delimiter = char in DELIMITERS
-            is_last_char = (i == count - 1)
-
-            # 如果遇到分隔符、最后一个字符、或者检测到明显停顿，都视为单词/片段结束
-            if is_delimiter or is_last_char or is_pause:
-                if current_line_start is None:
-                    current_line_start = current_word_start
+            # 满足任一条件，则结束当前行
+            if is_sentence_end or is_pause_after or is_long_and_at_delimiter or is_last_char:
+                clean_text = current_line_text.strip()
+                if clean_text:
+                    sentences.append({
+                        "text": clean_text,
+                        "start": current_line_start,
+                        "end": ends[i]  # 结束时间是当前字符的结尾
+                    })
                 
-                current_line_text += current_word_text
-                current_line_end = ends[i]
-
-                is_sentence_end = char in SENTENCE_ENDERS
-                is_too_long = len(current_line_text) >= MAX_CHARS_PER_LINE
-
-                # 换行条件：句末标点、行太长、最后字符、或者有停顿
-                if is_sentence_end or is_too_long or is_last_char or is_pause:
-                    clean_text = current_line_text.strip()
-                    if clean_text:
-                        sentences.append({
-                            "text": clean_text,
-                            "start": current_line_start,
-                            "end": current_line_end
-                        })
-                    current_line_text = ""
-                    current_line_start = None
-                
-                current_word_text = ""
-                current_word_start = None
+                # 为下一行重置
+                current_line_text = ""
+                current_line_start = None # 将在下一次循环开始时设置
 
         with open(filename, "w", encoding="utf-8") as f:
             for idx, s in enumerate(sentences):
