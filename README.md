@@ -148,12 +148,12 @@ nuitka --standalone \
        --include-data-dir=bin=bin --include-data-files=config.toml=config.toml \
        --include-data-dir=assets=assets \
        --nofollow-import-to=pytest,tkinter \
-       app.py
+       MediaTools.py
 ```
 
 ### Windows
 ```bash
-nuitka --standalone --windows-console-mode=disable --windows-icon-from-ico=MediaTools.ico --include-package=pyMediaTools --plugin-enable=pyside6 --include-qt-plugins=multimedia,platforms,styles,imageformats --include-data-files=bin\aria2c.exe=bin\aria2c.exe --include-data-files=bin\ffmpeg.exe=bin\ffmpeg.exe --include-data-files=bin\ffprobe.exe=bin\ffprobe.exe --include-data-files=config.toml=config.toml --include-data-dir=assets=assets app.py
+nuitka --standalone --windows-console-mode=disable --windows-icon-from-ico=MediaTools.ico --include-package=pyMediaTools --plugin-enable=pyside6 --include-qt-plugins=multimedia,platforms,styles,imageformats --include-data-files=bin\aria2c.exe=bin\aria2c.exe --include-data-files=bin\ffmpeg.exe=bin\ffmpeg.exe --include-data-files=bin\ffprobe.exe=bin\ffprobe.exe --include-data-files=config.toml=config.toml --include-data-dir=assets=assets MediaTools.py
 
 ```
 
