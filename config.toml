@@ -160,4 +160,12 @@ srt_max_chars = 35
 srt_pause_threshold = 0.2
 srt_delimiters = [" ", "\n", "।", "？", "?", "!", "！", ",", "，", "\"", "“", "”"]
 srt_sentence_enders = [".", "\n", "।", "？", "?", "!", "！"]
-debug_save_response = false
+debug_save_response = true
+
+# Groq 配置
+[groq]
+api_key = " "
+model = "openai/gpt-oss-120b"
+timeout_seconds = 300
+
+    

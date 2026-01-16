@@ -3,7 +3,7 @@ import datetime
 import uuid
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, 
                                QTextEdit, QComboBox, QMessageBox, QProgressBar, QFileDialog, QSlider,
-                               QGroupBox, QSizePolicy, QSpinBox)
+                               QGroupBox, QSizePolicy, QSpinBox, QCheckBox, QTabWidget)
 from PySide6.QtCore import Qt, QUrl, QSettings, QTimer
 from PySide6.QtGui import QFont
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
@@ -90,18 +90,13 @@ class ElevenLabsWidget(QWidget):
         main_layout.addWidget(top_bar)
 
         # 2. 功能区 (TTS 和 SFX)
-        self.tabs_box = QGroupBox("生成功能")
-        tabs_layout = QVBoxLayout(self.tabs_box)
-        tabs_layout.setSpacing(20)
+        tabs_widget = QTabWidget()
 
         # --- TTS 区域 ---
         tts_group = QWidget() # 使用 Widget 做内部容器
         tts_inner_layout = QVBoxLayout(tts_group)
-        tts_inner_layout.setContentsMargins(0,0,0,0)
-        
-        tts_header = QLabel("🗣️ 文本转语音 (TTS)")
-        tts_header.setFont(QFont("Segoe UI", 11, QFont.Bold))
-        tts_inner_layout.addWidget(tts_header)
+        tts_inner_layout.setContentsMargins(10, 15, 10, 10) # 给tab内一些边距
+        tts_inner_layout.setSpacing(10)
 
         # 声音选择
         voice_layout = QHBoxLayout()
@@ -132,6 +127,31 @@ class ElevenLabsWidget(QWidget):
         tts_inner_layout.addWidget(self.tts_text_input)
         # tts_inner_layout.addWidget(self.lbl_char_count)
 
+        # 字幕选项
+        sub_opts_layout = QHBoxLayout()
+        self.chk_translate = QCheckBox("自动翻译 (中)")
+        self.chk_word_level = QCheckBox("逐词字幕")
+        
+        self.lbl_words_per_line = QLabel("每行词数:")
+        self.spin_words_per_line = QSpinBox()
+        self.spin_words_per_line.setRange(1, 5)
+        self.spin_words_per_line.setValue(1)
+        self.spin_words_per_line.setEnabled(False)
+        self.lbl_words_per_line.setEnabled(False)
+
+        self.chk_export_xml = QCheckBox("导出 XML (DaVinci/FCP)")
+
+        self.chk_word_level.toggled.connect(self.spin_words_per_line.setEnabled)
+        self.chk_word_level.toggled.connect(self.lbl_words_per_line.setEnabled)
+
+        sub_opts_layout.addWidget(self.chk_translate)
+        sub_opts_layout.addWidget(self.chk_word_level)
+        sub_opts_layout.addWidget(self.lbl_words_per_line)
+        sub_opts_layout.addWidget(self.spin_words_per_line)
+        sub_opts_layout.addWidget(self.chk_export_xml)
+        sub_opts_layout.addStretch()
+        tts_inner_layout.addLayout(sub_opts_layout)
+
         # 保存与生成
         tts_action_layout = QHBoxLayout()
         self.tts_save_input = QLineEdit(self._generate_filename("tts"))
@@ -148,23 +168,12 @@ class ElevenLabsWidget(QWidget):
         tts_action_layout.addWidget(self.btn_tts_browse)
         tts_action_layout.addWidget(self.btn_tts_generate)
         tts_inner_layout.addLayout(tts_action_layout)
-        
-        tabs_layout.addWidget(tts_group)
-        
-        # 分割线
-        line = QLabel()
-        line.setFixedHeight(1)
-        line.setStyleSheet("background-color: rgba(128,128,128,0.3);")
-        tabs_layout.addWidget(line)
 
         # --- SFX 区域 ---
         sfx_group = QWidget()
         sfx_inner_layout = QVBoxLayout(sfx_group)
-        sfx_inner_layout.setContentsMargins(0,0,0,0)
-        
-        sfx_header = QLabel("🎵 音效生成 (SFX)")
-        sfx_header.setFont(QFont("Segoe UI", 11, QFont.Bold))
-        sfx_inner_layout.addWidget(sfx_header)
+        sfx_inner_layout.setContentsMargins(10, 15, 10, 10)
+        sfx_inner_layout.setSpacing(10)
 
         # 提示词与时长
         sfx_input_layout = QHBoxLayout()
@@ -201,9 +210,12 @@ class ElevenLabsWidget(QWidget):
         sfx_action_layout.addWidget(self.btn_sfx_browse)
         sfx_action_layout.addWidget(self.btn_sfx_generate)
         sfx_inner_layout.addLayout(sfx_action_layout)
+        
+        # 将两个功能区添加到 Tab
+        tabs_widget.addTab(tts_group, "🗣️ 文本转语音 (TTS)")
+        tabs_widget.addTab(sfx_group, "🎵 音效生成 (SFX)")
 
-        tabs_layout.addWidget(sfx_group)
-        main_layout.addWidget(self.tabs_box)
+        main_layout.addWidget(tabs_widget)
 
         # 3. 底部播放控制条
         bottom_panel = QWidget()
@@ -357,6 +369,10 @@ class ElevenLabsWidget(QWidget):
         voice_id = self.combo_voices.itemData(self.combo_voices.currentIndex())
         api_key = self.key_input.text().strip() or cfg.get('api_key') or os.getenv("ELEVENLABS_API_KEY", "")
         output_format = cfg.get('default_output_format')
+        translate = self.chk_translate.isChecked()
+        word_level = self.chk_word_level.isChecked()
+        words_per_line = self.spin_words_per_line.value()
+        export_xml = self.chk_export_xml.isChecked()
         
         if not voice_id:
              QMessageBox.warning(self, "提示", "请先加载并选择一个声音模型。")
@@ -366,7 +382,8 @@ class ElevenLabsWidget(QWidget):
             return
 
         self.set_ui_busy(True, "生成中...")
-        self.tts_worker = TTSWorker(api_key=api_key, voice_id=voice_id, text=text, save_path=save_path, output_format=output_format)
+        self.tts_worker = TTSWorker(api_key=api_key, voice_id=voice_id, text=text, save_path=save_path, 
+                                    output_format=output_format, translate=translate, word_level=word_level, export_xml=export_xml, words_per_line=words_per_line)
         self.tts_worker.finished.connect(self.on_generation_success)
         self.tts_worker.error.connect(self.on_error)
         self.tts_worker.start()
