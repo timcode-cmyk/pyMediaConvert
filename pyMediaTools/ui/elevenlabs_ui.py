@@ -1,12 +1,11 @@
 import os
 import datetime
 import uuid
-import platform
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, 
                                QTextEdit, QComboBox, QMessageBox, QProgressBar, QFileDialog, QSlider,
-                               QGroupBox, QSizePolicy, QSpinBox, QApplication)
-from PySide6.QtCore import Qt, QUrl, Slot, QSettings, QTimer
-from PySide6.QtGui import QFont, QPalette, QColor
+                               QGroupBox, QSizePolicy, QSpinBox)
+from PySide6.QtCore import Qt, QUrl, QSettings, QTimer
+from PySide6.QtGui import QFont
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 
 from ..core.elevenlabs import QuotaWorker, TTSWorker, SFXWorker, VoiceListWorker

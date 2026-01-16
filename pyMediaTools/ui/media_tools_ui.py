@@ -1,13 +1,12 @@
 import os
-import platform
 from pathlib import Path
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel, 
                                QLineEdit, QPushButton, QComboBox, QProgressBar, QMessageBox, 
                                QFileDialog, QSizePolicy, QGroupBox, QApplication)
 from PySide6.QtCore import QObject, QThread, Signal, Slot, Qt
-from PySide6.QtGui import QFont, QPalette, QColor
+from PySide6.QtGui import QFont
 
-from pyMediaTools.core.config import MODES
+from ..core.config import MODES
 from .styles import apply_common_style
 from pyMediaTools import get_logger
 

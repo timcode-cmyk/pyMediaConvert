@@ -2,11 +2,11 @@
 项目名称: pyMediaTools
 创建日期: 2025-12-20
 作者: TimCode
-版本: v1.11.2
+版本: v1.11.3
 许可证: GPL License
 """
 
-__version__ = "1.11.2"
+__version__ = "1.11.3"
 __author__ = "TimCode"
 __description__ = "A professional media conversion tool based on FFmpeg"
 __license__ = "GPL License"
