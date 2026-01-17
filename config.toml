@@ -164,7 +164,7 @@ debug_save_response = true
 
 # Groq 配置
 [groq]
-api_key = " "
+api_key = ""
 model = "openai/gpt-oss-120b"
 timeout_seconds = 300
 
