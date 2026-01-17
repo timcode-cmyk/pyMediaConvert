@@ -11,6 +11,7 @@ from ..utils import load_project_config
 from .subtitle_writer import SubtitleWriter
 from .subtitle_builder import SubtitleSegmentBuilder
 from .translation_manager import TranslationManager
+from .groq_analysis import extract_keywords
 
 
 class QuotaWorker(QThread):
@@ -45,7 +46,7 @@ class TTSWorker(QThread):
     finished = Signal(str)  # 返回保存的文件路径
     error = Signal(str)
 
-    def __init__(self, api_key=None, voice_id=None, text=None, save_path=None, output_format=None, translate=False, word_level=False, export_xml=False, words_per_line=1, groq_api_key=None, groq_model=None, xml_style_settings=None, video_settings=None):
+    def __init__(self, api_key=None, voice_id=None, text=None, save_path=None, output_format=None, translate=False, word_level=False, export_xml=False, words_per_line=1, groq_api_key=None, groq_model=None, xml_style_settings=None, video_settings=None, keyword_highlight=False):
         super().__init__()
         cfg = load_project_config().get('elevenlabs', {})
         self.api_key = api_key or cfg.get('api_key') or os.getenv("ELEVENLABS_API_KEY", "")
@@ -61,7 +62,8 @@ class TTSWorker(QThread):
         self.groq_api_key = groq_api_key
         self.groq_model = groq_model
         self.xml_style_settings = xml_style_settings
-        self.video_settings = video_settings
+        self.video_settings = video_settings if video_settings else {}
+        self.keyword_highlight = keyword_highlight
 
     def run(self):
         json_cache_path = os.path.splitext(self.save_path)[0] + ".json"
@@ -217,6 +219,20 @@ class TTSWorker(QThread):
                                     with open(trans_srt_path, 'r', encoding='utf-8') as f:
                                         trans_contents.append(f.read())
                                 
+                                # Extract keywords if enabled
+                                if self.keyword_highlight:
+                                    # Use configured Groq key, or fall back to env/config
+                                    full_cfg = load_project_config()
+                                    groq_cfg = full_cfg.get('groq', {})
+                                    g_key = self.groq_api_key or groq_cfg.get('api_key') or os.getenv("GROQ_API_KEY")
+                                    if g_key:
+                                        print("正在使用 Groq 分析重点关键词...")
+                                        keywords = extract_keywords(self.text, g_key, model=self.groq_model or "llama3-70b-8192")
+                                        print(f"提取到的关键词: {keywords}")
+                                        self.video_settings['keywords'] = keywords
+                                    else:
+                                        print("未配置 Groq Key，跳过关键词高亮提取。")
+
                                 SrtsToFcpxml(src_content, trans_contents, xml_path, False, xml_style_settings=self.xml_style_settings, video_settings=self.video_settings)
                                 print(f"FCPXML 已导出: {xml_path}")
                             except ImportError:

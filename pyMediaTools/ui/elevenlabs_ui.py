@@ -306,6 +306,10 @@ class ElevenLabsWidget(QWidget):
         self.lbl_words_per_line.setEnabled(False)
 
         self.chk_export_xml = QCheckBox("导出 XML (DaVinci/FCP)")
+        self.chk_keyword_highlight = QCheckBox("智能高亮关键词 (Groq)")
+        # Make highlight dependent on XML export
+        self.chk_keyword_highlight.setEnabled(False)
+        self.chk_export_xml.toggled.connect(self.chk_keyword_highlight.setEnabled)
 
         self.chk_word_level.toggled.connect(self.spin_words_per_line.setEnabled)
         self.chk_word_level.toggled.connect(self.lbl_words_per_line.setEnabled)
@@ -315,6 +319,7 @@ class ElevenLabsWidget(QWidget):
         sub_opts_layout.addWidget(self.lbl_words_per_line)
         sub_opts_layout.addWidget(self.spin_words_per_line)
         sub_opts_layout.addWidget(self.chk_export_xml)
+        sub_opts_layout.addWidget(self.chk_keyword_highlight)
         sub_opts_layout.addStretch()
         tts_inner_layout.addLayout(sub_opts_layout)
 
@@ -601,7 +606,9 @@ class ElevenLabsWidget(QWidget):
         translate = self.chk_translate.isChecked()
         word_level = self.chk_word_level.isChecked()
         words_per_line = self.spin_words_per_line.value()
+
         export_xml = self.chk_export_xml.isChecked()
+        keyword_highlight = self.chk_keyword_highlight.isChecked()
         
         if not voice_id:
              QMessageBox.warning(self, "提示", "请先加载并选择一个声音模型。")
@@ -613,7 +620,7 @@ class ElevenLabsWidget(QWidget):
         self.set_ui_busy(True, "生成中...")
         self.tts_worker = TTSWorker(api_key=api_key, voice_id=voice_id, text=text, save_path=save_path, 
                                     output_format=output_format, translate=translate, word_level=word_level, export_xml=export_xml, words_per_line=words_per_line,
-                                    xml_style_settings=self.xml_styles, video_settings=self.video_settings)
+                                    xml_style_settings=self.xml_styles, video_settings=self.video_settings, keyword_highlight=keyword_highlight)
         self.tts_worker.finished.connect(self.on_generation_success)
         self.tts_worker.error.connect(self.on_error)
         self.tts_worker.start()

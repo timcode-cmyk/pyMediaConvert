@@ -6,6 +6,8 @@ import xml.etree.ElementTree as ET
 from fractions import Fraction
 
 import pysrt
+import re
+
 
 subtitle_setting = {}
 
@@ -22,6 +24,41 @@ def indent(elem, level=0):
     else:
         if level and (not elem.tail or not elem.tail.strip()):
             elem.tail = i
+
+def split_text_by_keywords(text, keywords):
+    """
+    Split text into segments of (content, is_highlight).
+    Keywords are matched case-insensitively.
+    """
+    if not keywords:
+        return [(text, False)]
+    
+    # Sort keywords by length descending to match longest phrases first
+    keywords = sorted(keywords, key=len, reverse=True)
+    
+    # Escape keywords for regex
+    escaped_keywords = [re.escape(k) for k in keywords]
+    pattern = '|'.join(escaped_keywords)
+    
+    if not pattern:
+        return [(text, False)]
+        
+    regex = re.compile(f"({pattern})", re.IGNORECASE)
+    parts = regex.split(text)
+    
+    result = []
+    for part in parts:
+        if not part:
+            continue
+        # Check if this part matches a keyword
+        is_hl = False
+        for k in keywords:
+            if part.lower() == k.lower():
+                is_hl = True
+                break
+        result.append((part, is_hl))
+    return result
+
             
 def get_project_name(path):
     file_name = os.path.basename(path)
@@ -138,6 +175,10 @@ def SrtsToFcpxml(source_srt, trans_srts, save_path, seamless_fcpxml, xml_style_s
     if os.path.exists("subtitle_pref.json"):
         with open("subtitle_pref.json", "r") as f:
             subtitle_setting = json.load(f)
+            
+    # Load keywords if provided
+    keywords_list = video_settings.get('keywords', []) if video_settings else []
+
     
     fps = video_settings.get('fps', 30) if video_settings else 30
     width = video_settings.get('width', 1920) if video_settings else 1920
@@ -215,17 +256,39 @@ def SrtsToFcpxml(source_srt, trans_srts, save_path, seamless_fcpxml, xml_style_s
         title = ET.SubElement(spine, 'title', attrib=title_attrs)
         
         text = ET.SubElement(title, 'text', attrib={"roll-up-height":"0"})
-        text_style = ET.SubElement(text, 'text-style', ref=f"ts{total_index}")
-        text_style.text = source_sub.text.strip().replace("@", "\n")
         
+        # 处理正文和高亮拆分
+        raw_text = source_sub.text.strip().replace("@", "\n")
+        
+        # 优化：如果没有关键词，直接全部使用默认样式
+        segments = split_text_by_keywords(raw_text, keywords_list) if keywords_list else [(raw_text, False)]
+        
+        # 1. 定义默认样式 (TS_Def)
         text_style_def = ET.SubElement(title, 'text-style-def', id=f"ts{total_index}")
-        
-        # 获取样式配置 (优先使用传入的 xml_style_settings)
         src_style = xml_style_settings.get('source', {}) if xml_style_settings else {}
-        
         text_style_attrs = get_style_attributes(src_style, "source", subtitle_setting)
-        text_style2 = ET.SubElement(text_style_def, 'text-style', attrib=text_style_attrs)
+        ET.SubElement(text_style_def, 'text-style', attrib=text_style_attrs)
         
+        # 2. 定义高亮样式 (TS_Def_HL)
+        # 默认高亮为黄色，或者根据 xml_style_settings 中的 'highlight' 字典
+        text_style_def_hl = ET.SubElement(title, 'text-style-def', id=f"ts{total_index}_hl")
+        hl_style = xml_style_settings.get('highlight', src_style.copy()) if xml_style_settings else src_style.copy()
+        
+        # 如果没有专门设置 highlight，我们在 source 基础上强制改个颜色做默认
+        if 'highlight' not in (xml_style_settings or {}):
+             # 简单的默认高亮策略：黄色
+             hl_style = src_style.copy()
+             hl_style['fontColor'] = (1.0, 1.0, 0.0, 1.0) # Yellow
+             
+        text_style_attrs_hl = get_style_attributes(hl_style, "source", subtitle_setting)
+        ET.SubElement(text_style_def_hl, 'text-style', attrib=text_style_attrs_hl)
+
+        # 3. 生成 text-style 引用节点
+        for seg_text, is_hl in segments:
+            ref_id = f"ts{total_index}_hl" if is_hl else f"ts{total_index}"
+            ts_elem = ET.SubElement(text, 'text-style', ref=ref_id)
+            ts_elem.text = seg_text
+
         adjust_conform = ET.SubElement(title, 'adjust-conform', type="fit")
         posY = str(src_style.get("pos", subtitle_setting.get("source_pos", "-45")))
         adjust_transform = ET.SubElement(title, 'adjust-transform', scale="1 1", position=f"0 {posY}", anchor="0 0")
