@@ -160,7 +160,7 @@ srt_max_chars = 35
 srt_pause_threshold = 0.2
 srt_delimiters = [" ", "\n", "।", "？", "?", "!", "！", ",", "，", "\"", "“", "”"]
 srt_sentence_enders = [".", "\n", "।", "？", "?", "!", "！"]
-debug_save_response = true    #是否保存 ElevenLabs API 的原始响应以供调试
+debug_save_response = false    #是否保存 ElevenLabs API 的原始响应以供调试
 
 # Groq 配置
 [groq]
