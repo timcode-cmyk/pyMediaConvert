@@ -160,7 +160,7 @@ srt_max_chars = 35
 srt_pause_threshold = 0.2
 srt_delimiters = [" ", "\n", "।", "？", "?", "!", "！", ",", "，", "\"", "“", "”"]
 srt_sentence_enders = [".", "\n", "।", "？", "?", "!", "！"]
-debug_save_response = true
+debug_save_response = true    #是否保存 ElevenLabs API 的原始响应以供调试
 
 # Groq 配置
 [groq]
@@ -168,4 +168,64 @@ api_key = ""
 model = "openai/gpt-oss-120b"
 timeout_seconds = 300
 
-    
+# XML 配置
+[xml_styles]
+# 字体样式配置
+[xml_styles.source] 
+alignment = "center" # 对齐方式: left, center, right
+fontColor = [1.0, 1.0, 1.0, 1.0] # 字体颜色: RGBA 数组
+font = "Arial" # 字体名称
+fontSize = 28 # 字体大小
+bold = false # 是否加粗
+italic = false # 是否斜体
+strokeColor = [0.0, 0.0, 0.0, 1.0] # 描边颜色: RGBA 数组
+strokeWidth = 2.0 # 描边宽度
+useStroke = true # 是否使用描边
+lineSpacing = 0 # 行间距
+pos = -45 # 位置偏移
+shadowColor = [0.0, 0.0, 0.0, 0.5] # 阴影颜色: RGBA 数组
+shadowOffset = [2, 2] # 阴影偏移: [x, y]
+useShadow = true # 是否使用阴影
+backgroundColor = [0.0, 0.0, 0.0, 0.0] # 背景颜色: RGBA 数组
+useBackground = false # 是否使用背景
+backgroundPadding = 0 # 背景内边距
+
+# 翻译字体样式配置
+[xml_styles.translate]
+alignment = "center" # 对齐方式: left, center, right
+fontColor = [1.0, 1.0, 1.0, 1.0] # 字体颜色: RGBA 数组
+font = "Arial" # 字体名称
+fontSize = 25 # 字体大小
+bold = false # 是否加粗
+italic = false # 是否斜体
+strokeColor = [0.0, 0.0, 0.0, 1.0]
+strokeWidth = 2.0
+useStroke = true
+lineSpacing = 0
+pos = -38
+shadowColor = [0.0, 0.0, 0.0, 0.5]
+shadowOffset = [2, 2]
+useShadow = true
+backgroundColor = [0.0, 0.0, 0.0, 0.0]
+useBackground = true
+backgroundPadding = 0
+
+# 高亮字体样式配置
+[xml_styles.highlight]
+alignment = "center"
+fontColor = [1.0, 1.0, 1.0, 1.0]
+font = "Arial"
+fontSize = 40
+bold = false
+italic = false
+strokeColor = [0.0, 0.0, 0.0, 1.0]
+strokeWidth = 2.0
+useStroke = true
+lineSpacing = 0
+pos = -38
+shadowColor = [0.0, 0.0, 0.0, 0.5]
+shadowOffset = [2, 2]
+useShadow = true
+backgroundColor = [1.0, 1.0, 1.0, 1.0]
+useBackground = true
+backgroundPadding = 5

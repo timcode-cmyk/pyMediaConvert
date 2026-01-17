@@ -45,7 +45,7 @@ class TTSWorker(QThread):
     finished = Signal(str)  # 返回保存的文件路径
     error = Signal(str)
 
-    def __init__(self, api_key=None, voice_id=None, text=None, save_path=None, output_format=None, translate=False, word_level=False, export_xml=False, words_per_line=1, groq_api_key=None, groq_model=None):
+    def __init__(self, api_key=None, voice_id=None, text=None, save_path=None, output_format=None, translate=False, word_level=False, export_xml=False, words_per_line=1, groq_api_key=None, groq_model=None, xml_style_settings=None, video_settings=None):
         super().__init__()
         cfg = load_project_config().get('elevenlabs', {})
         self.api_key = api_key or cfg.get('api_key') or os.getenv("ELEVENLABS_API_KEY", "")
@@ -60,6 +60,8 @@ class TTSWorker(QThread):
         self.export_xml = export_xml
         self.groq_api_key = groq_api_key
         self.groq_model = groq_model
+        self.xml_style_settings = xml_style_settings
+        self.video_settings = video_settings
 
     def run(self):
         json_cache_path = os.path.splitext(self.save_path)[0] + ".json"
@@ -215,7 +217,7 @@ class TTSWorker(QThread):
                                     with open(trans_srt_path, 'r', encoding='utf-8') as f:
                                         trans_contents.append(f.read())
                                 
-                                SrtsToFcpxml(src_content, trans_contents, xml_path, False)
+                                SrtsToFcpxml(src_content, trans_contents, xml_path, False, xml_style_settings=self.xml_style_settings, video_settings=self.video_settings)
                                 print(f"FCPXML 已导出: {xml_path}")
                             except ImportError:
                                 print("导出XML失败: 未找到 SrtsToFcpxml 模块或依赖缺失")
