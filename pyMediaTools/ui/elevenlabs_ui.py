@@ -172,6 +172,25 @@ class ElevenLabsWidget(QWidget):
                 'backgroundColor': (0.0, 0.0, 0.0, 0.0),
                 'useBackground': True,
                 'backgroundPadding': 0,
+            },
+            'highlight': {
+                'alignment': 'center',
+                'fontColor': (1.0, 1.0, 0.0, 1.0),
+                'font': 'Arial',
+                'fontSize': 50,
+                'bold': True,
+                'italic': False,
+                'strokeColor': (0.0, 0.0, 0.0, 1.0),
+                'strokeWidth': 2.0,
+                'useStroke': False,
+                'lineSpacing': 0,
+                'pos': -45,
+                'shadowColor': (0.0, 0.0, 0.0, 0.5),
+                'shadowOffset': (2, 2),
+                'useShadow': True,
+                'backgroundColor': (0.0, 0.0, 0.0, 0.0),
+                'useBackground': False,
+                'backgroundPadding': 0,
             }
         }
         
@@ -425,9 +444,11 @@ class ElevenLabsWidget(QWidget):
         
         source_style_widget = self.create_style_settings_panel('source')
         trans_style_widget = self.create_style_settings_panel('translate')
+        highlight_style_widget = self.create_style_settings_panel('highlight')
         
         self.style_tabs.addTab(source_style_widget, "原文字幕样式")
         self.style_tabs.addTab(trans_style_widget, "翻译字幕样式")
+        self.style_tabs.addTab(highlight_style_widget, "高亮字幕样式")
         
         scroll_layout.addWidget(self.style_tabs)
         scroll_layout.addStretch()
@@ -1031,7 +1052,12 @@ class ElevenLabsWidget(QWidget):
     def update_preview(self):
         """更新预览窗口"""
         current_tab = self.style_tabs.currentIndex()
-        style_type = 'source' if current_tab == 0 else 'translate'
+        if current_tab == 0:
+            style_type = 'source'
+        elif current_tab == 1:
+            style_type = 'translate'
+        else:
+            style_type = 'highlight'
         
         # 将当前样式数据传递给自定义 Label
         self.preview_label.update_style(self.xml_styles[style_type])

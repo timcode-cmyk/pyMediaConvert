@@ -7,6 +7,9 @@ from fractions import Fraction
 
 import pysrt
 import re
+from ..logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 subtitle_setting = {}
@@ -168,7 +171,7 @@ def SrtsToFcpxml(source_srt, trans_srts, save_path, seamless_fcpxml, xml_style_s
     source_subs = pysrt.from_string(source_srt)
     count = len(source_subs)
     if count == 0:
-        print("Srt 字幕长度为0")
+        logger.warning("Srt 字幕长度为0")
         return
     
     global subtitle_setting

@@ -1,14 +1,16 @@
-
 import requests
 import json
 import re
+from ..logging_config import get_logger
 
-def extract_keywords(text, api_key, model="llama3-70b-8192"):
+logger = get_logger(__name__)
+
+def extract_keywords(text, api_key, model="openai/gpt-oss-120b"):
     """
     Analyzes the text and returns a list of keywords/phrases to highlight.
     """
     if not api_key:
-        print("Groq API key extraction failed: No API key provided")
+        logger.warning("Groq API key extraction failed: No API key provided")
         return []
 
     url = "https://api.groq.com/openai/v1/chat/completions"
@@ -21,8 +23,8 @@ def extract_keywords(text, api_key, model="llama3-70b-8192"):
         "You are an expert content analyzer. Your task is to identify the most important keywords or short phrases "
         "in the provided text that should be highlighted for emphasis in a video subtitle. "
         "Select only the most impactful words (nouns, verbs, key adjectives). "
-        "Return the result strictly as a valid JSON array of strings. "
-        "Example: [\"freedom\", \"innovation\", \"future\"]"
+        "Return the result STRICTLY as a valid JSON object with a key 'keywords' containing the list of strings. "
+        "Example: {\"keywords\": [\"freedom\", \"innovation\", \"future\"]}"
     )
 
     data = {
@@ -62,8 +64,9 @@ def extract_keywords(text, api_key, model="llama3-70b-8192"):
                 matches = re.findall(r'"([^"]+)"', content)
                 return matches
         else:
-            print(f"Groq API Error ({response.status_code}): {response.text}")
-            return []
+            error_msg = f"Groq API Error ({response.status_code}): {response.text}"
+            logger.error(error_msg)
+            raise Exception(error_msg)
     except Exception as e:
-        print(f"Groq Analysis Exception: {e}")
-        return []
+        logger.error(f"Groq Analysis Exception: {e}")
+        raise e

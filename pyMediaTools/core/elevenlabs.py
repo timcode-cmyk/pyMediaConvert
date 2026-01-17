@@ -12,6 +12,9 @@ from .subtitle_writer import SubtitleWriter
 from .subtitle_builder import SubtitleSegmentBuilder
 from .translation_manager import TranslationManager
 from .groq_analysis import extract_keywords
+from ..logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 class QuotaWorker(QThread):
@@ -165,7 +168,9 @@ class TTSWorker(QThread):
                         standard_segments = builder.build_segments(chars, starts, ends, word_level=False)
                         standard_srt_path = base_path + ".srt"
                         SubtitleWriter.write_srt(standard_srt_path, standard_segments)
-                        print(f"标准字幕已保存: {standard_srt_path}")
+                        message = f"标准字幕已保存: {standard_srt_path}"
+                        logger.info(message)
+                        print(message)
                         
                         # 2.2 生成逐词字幕（可选）
                         if self.word_level:
@@ -176,7 +181,9 @@ class TTSWorker(QThread):
                             )
                             word_srt_path = base_path + "_word.srt"
                             SubtitleWriter.write_srt(word_srt_path, word_segments)
-                            print(f"逐词字幕已保存: {word_srt_path}")
+                            message = f"逐词字幕已保存: {word_srt_path}"
+                            logger.info(message)
+                            print(message)
                         
                         # 2.3 生成翻译字幕（可选）
                         if self.translate:
@@ -194,13 +201,19 @@ class TTSWorker(QThread):
                                     ignore_line_length=True  # 忽略行长度限制，只按标点和停顿分割
                                 )
                                 
-                                translator = TranslationManager(api_key=api_key, model=model)
-                                translated_segments = translator.translate_segments(translation_segments)
-                                trans_srt_path = base_path + "_cn.srt"
-                                SubtitleWriter.write_srt(trans_srt_path, translated_segments)
-                                print(f"翻译字幕已保存: {trans_srt_path}")
+                                try:
+                                    translator = TranslationManager(api_key=api_key, model=model)
+                                    translated_segments = translator.translate_segments(translation_segments)
+                                    trans_srt_path = base_path + "_cn.srt"
+                                    SubtitleWriter.write_srt(trans_srt_path, translated_segments)
+                                    message = f"翻译字幕已保存: {trans_srt_path}"
+                                    logger.info(message)
+                                    print(message)
+                                except Exception as e:
+                                    logger.error(f"翻译失败: {e}")
+                                    self.error.emit(f"翻译失败: {e}")
                             else:
-                                print("未找到 Groq API Key，跳过翻译。请在 config.toml 中配置 [groq] api_key。")
+                                logger.warning("未找到 Groq API Key，跳过翻译。请在 config.toml 中配置 [groq] api_key。")
                         
                         # 2.4 导出为 FCPXML（可选）
                         if self.export_xml:
@@ -226,22 +239,29 @@ class TTSWorker(QThread):
                                     groq_cfg = full_cfg.get('groq', {})
                                     g_key = self.groq_api_key or groq_cfg.get('api_key') or os.getenv("GROQ_API_KEY")
                                     if g_key:
-                                        print("正在使用 Groq 分析重点关键词...")
-                                        keywords = extract_keywords(self.text, g_key, model=self.groq_model or "llama3-70b-8192")
-                                        print(f"提取到的关键词: {keywords}")
-                                        self.video_settings['keywords'] = keywords
+                                        logger.info("正在使用 Groq 分析重点关键词...")
+                                        try:
+                                            keywords = extract_keywords(self.text, g_key, model=self.groq_model or "openai/gpt-oss-120b")
+                                            logger.info(f"提取到的关键词: {keywords}")
+                                            self.video_settings['keywords'] = keywords
+                                        except Exception as e:
+                                            logger.error(f"关键词提取失败: {e}")
+                                            self.error.emit(f"关键词提取失败: {e}")
                                     else:
-                                        print("未配置 Groq Key，跳过关键词高亮提取。")
+                                        logger.warning("未配置 Groq Key，跳过关键词高亮提取。")
 
                                 SrtsToFcpxml(src_content, trans_contents, xml_path, False, xml_style_settings=self.xml_style_settings, video_settings=self.video_settings)
-                                print(f"FCPXML 已导出: {xml_path}")
+                                message = f"FCPXML 已导出: {xml_path}"
+                                logger.info(message)
+                                print(message)
                             except ImportError:
-                                print("导出XML失败: 未找到 SrtsToFcpxml 模块或依赖缺失")
+                                logger.error("导出XML失败: 未找到 SrtsToFcpxml 模块或依赖缺失")
                             except Exception as e:
-                                print(f"导出XML出错: {e}")
+                                logger.error(f"导出XML出错: {e}")
                 
                 except Exception as e:
-                    print(f"字幕/后续处理生成失败: {e}")
+                    logger.error(f"字幕/后续处理生成失败: {e}")
+                    self.error.emit(f"字幕处理失败: {e}")
 
             self.finished.emit(self.save_path)
         except Exception as e:

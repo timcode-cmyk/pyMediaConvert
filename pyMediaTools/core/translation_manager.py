@@ -10,6 +10,9 @@ TranslationManager：翻译服务管理器
 
 import os
 import requests
+from ..logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 class TranslationManager:
@@ -67,13 +70,13 @@ class TranslationManager:
             '你好'
         """
         if not self.is_available():
-            print("⚠️  未找到 Groq API Key，跳过翻译。请在 config.toml 中配置 [groq] api_key。")
+            logger.warning("未找到 Groq API Key，跳过翻译。请在 config.toml 中配置 [groq] api_key。")
             return segments
 
         if not segments:
             return segments
 
-        print(f"🔄 正在使用 Groq ({self.model}) 翻译 {len(segments)} 个片段...")
+        # logger.info(f"正在使用 Groq ({self.model}) 翻译 {len(segments)} 个片段...")
 
         translated_segments = []
         for idx, segment in enumerate(segments):
@@ -86,14 +89,14 @@ class TranslationManager:
                     updated_segment = segment.copy()
                     updated_segment["text"] = translated_text
                     translated_segments.append(updated_segment)
-                    print(f"  [{idx + 1}/{len(segments)}] ✓ {original_text[:30]}... → {translated_text[:30]}...")
+                    logger.debug(f"[{idx + 1}/{len(segments)}] {original_text[:20]}... -> {translated_text[:20]}...")
                 else:
                     # 翻译失败，保持原文本
                     translated_segments.append(segment)
-                    print(f"  [{idx + 1}/{len(segments)}] ✗ 翻译失败，保持原文本")
+                    logger.warning(f"[{idx + 1}/{len(segments)}] 翻译失败，保持原文本")
             except Exception as e:
-                print(f"  [{idx + 1}/{len(segments)}] ✗ 错误：{e}，保持原文本")
-                translated_segments.append(segment)
+                # 重新抛出异常，以便上层捕获并提示用户
+                raise e
 
         return translated_segments
 
@@ -131,18 +134,22 @@ class TranslationManager:
                 if "choices" in res_json and len(res_json["choices"]) > 0:
                     return res_json["choices"][0]["message"]["content"].strip()
                 else:
-                    print(f"Groq 响应格式不符：{res_json}")
-                    return None
+                    error_msg = f"Groq 响应格式不符：{res_json}"
+                    logger.error(error_msg)
+                    raise Exception(error_msg)
             else:
-                print(f"Groq API Error: {response.status_code} - {response.text}")
-                return None
+                error_msg = f"Groq API Error: {response.status_code} - {response.text}"
+                logger.error(error_msg)
+                raise Exception(error_msg)
 
         except requests.Timeout:
-            print(f"Groq 请求超时 ({self.timeout}s)")
-            return None
+            error_msg = f"Groq 请求超时 ({self.timeout}s)"
+            logger.error(error_msg)
+            raise Exception(error_msg)
         except requests.RequestException as e:
-            print(f"Groq 请求异常：{e}")
-            return None
+            error_msg = f"Groq 请求异常：{e}"
+            logger.error(error_msg)
+            raise Exception(error_msg)
 
     def set_model(self, model):
         """

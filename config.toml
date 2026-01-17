@@ -213,10 +213,10 @@ backgroundPadding = 0
 # 高亮字体样式配置
 [xml_styles.highlight]
 alignment = "center"
-fontColor = [1.0, 1.0, 1.0, 1.0]
+fontColor = [1.0, 1.0, 0.0, 1.0]
 font = "Arial"
-fontSize = 40
-bold = false
+fontSize = 33
+bold = true
 italic = false
 strokeColor = [0.0, 0.0, 0.0, 1.0]
 strokeWidth = 2.0
