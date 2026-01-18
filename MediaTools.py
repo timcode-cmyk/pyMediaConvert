@@ -6,7 +6,7 @@
 许可证: GPL License
 """
 
-__version__ = "1.11.3"
+__version__ = "1.12.0"
 __author__ = "TimCode"
 __description__ = "A professional media conversion tool based on FFmpeg"
 __license__ = "GPL License"

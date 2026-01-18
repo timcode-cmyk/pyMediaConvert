@@ -41,6 +41,8 @@ class CJKTokenizer:
     def tokenize_by_cjk(chars, char_starts, char_ends):
         """
         将字符序列分词，处理 CJK 和非 CJK 字符的混合
+        
+        改进：标点符号被独立分离（不混入词中），保留时间戳便于后续处理
 
         Args:
             chars (list): 字符列表
@@ -68,11 +70,28 @@ class CJKTokenizer:
         if not chars:
             return []
 
+        # 标点符号集合（用于分离，而非累积到词中）
+        punctuation_chars = (
+            set(string.punctuation)
+            | set(["。", "，", "！", "？", "、", "；", "：", """, """, "'", "'", "（", "）", "…", "—", "·", "《", "》", "〈", "〉"])
+        )
+
         words = []
         current_word = ""
         word_start = None
 
         for i, char in enumerate(chars):
+            # 标点处理：独立分离（可选保留，便于句末标点检测）
+            if char in punctuation_chars:
+                # 先保存积累的词
+                if current_word:
+                    words.append({"text": current_word, "start": word_start, "end": char_starts[i]})
+                    current_word = ""
+                    word_start = None
+                # 将标点作为独立词保存（带时间戳）
+                words.append({"text": char, "start": char_starts[i], "end": char_ends[i]})
+                continue
+
             if word_start is None:
                 word_start = char_starts[i]
 
@@ -95,7 +114,7 @@ class CJKTokenizer:
                         {
                             "text": current_word,
                             "start": word_start,
-                            "end": char_ends[i],
+                            "end": char_starts[i],
                         }
                     )
                 current_word = ""
@@ -115,9 +134,10 @@ class CJKTokenizer:
         智能拼接词对象列表，返回拼接后的文本
 
         规则：
+        - 清理所有标点符号
+        - 清理前后空格和多余内部空格
         - CJK 字符之间不加空格
-        - 非 CJK 字符之间加空格
-        - 过滤掉所有标点符号
+        - 非 CJK 字符之间加单个空格
 
         Args:
             word_objects (list): 词对象列表，每个为 {"text": "词", "start": ..., "end": ...}
@@ -148,7 +168,9 @@ class CJKTokenizer:
         cleaned_parts = []
         for word_obj in word_objects:
             txt = "".join(c for c in word_obj["text"] if c not in punctuation_chars)
-            if txt.strip():
+            # 清理每个词内的多余空格，保留单个空格
+            txt = " ".join(txt.split())
+            if txt:
                 cleaned_parts.append(txt)
 
         if not cleaned_parts:
@@ -159,11 +181,20 @@ class CJKTokenizer:
         for i in range(1, len(cleaned_parts)):
             prev_text = cleaned_parts[i - 1]
             current_text = cleaned_parts[i]
-            # CJK 字符相邻时不加空格，否则加空格
-            if CJKTokenizer.is_cjk(prev_text[-1]) or CJKTokenizer.is_cjk(current_text[0]):
-                result += current_text
-            else:
+            # 先检查单词的最后和第一个字符
+            # CJK 相邻时不加空格，否则加单个空格
+            last_char = prev_text[-1] if prev_text else ""
+            first_char = current_text[0] if current_text else ""
+            
+            # 如果末尾和开头都是 CJK，或都是非 CJK，判断是否加空格
+            is_prev_cjk = CJKTokenizer.is_cjk(last_char)
+            is_curr_cjk = CJKTokenizer.is_cjk(first_char)
+            
+            # 只有在两个都不是 CJK 时才加空格（即两个英文词相连）
+            if not is_prev_cjk and not is_curr_cjk:
                 result += " " + current_text
+            else:
+                result += current_text
 
         return result
 
