@@ -5,8 +5,16 @@ import os
 import requests
 import base64
 import json
+import pysrt
 from PySide6.QtCore import QThread, Signal
 from ..utils import load_project_config
+from .subtitle_writer import SubtitleWriter
+from .subtitle_builder import SubtitleSegmentBuilder
+from .translation_manager import TranslationManager
+from .groq_analysis import extract_keywords
+from ..logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 class QuotaWorker(QThread):
@@ -41,7 +49,7 @@ class TTSWorker(QThread):
     finished = Signal(str)  # 返回保存的文件路径
     error = Signal(str)
 
-    def __init__(self, api_key=None, voice_id=None, text=None, save_path=None, output_format=None):
+    def __init__(self, api_key=None, voice_id=None, text=None, save_path=None, output_format=None, translate=False, word_level=False, export_xml=False, words_per_line=1, groq_api_key=None, groq_model=None, xml_style_settings=None, video_settings=None, keyword_highlight=False):
         super().__init__()
         cfg = load_project_config().get('elevenlabs', {})
         self.api_key = api_key or cfg.get('api_key') or os.getenv("ELEVENLABS_API_KEY", "")
@@ -50,6 +58,15 @@ class TTSWorker(QThread):
         self.save_path = save_path
         self.output_format = output_format or cfg.get('default_output_format') or "mp3_44100_128"
         self.debug_mode = cfg.get('debug_save_response', False)
+        self.translate = translate
+        self.word_level = word_level
+        self.words_per_line = words_per_line
+        self.export_xml = export_xml
+        self.groq_api_key = groq_api_key
+        self.groq_model = groq_model
+        self.xml_style_settings = xml_style_settings
+        self.video_settings = video_settings if video_settings else {}
+        self.keyword_highlight = keyword_highlight
 
     def run(self):
         json_cache_path = os.path.splitext(self.save_path)[0] + ".json"
@@ -108,9 +125,10 @@ class TTSWorker(QThread):
     def process_response(self, resp_json):
         """
         处理来自API或缓存的JSON响应。
-        这包括解码音频、保存文件和生成SRT字幕。
+        使用新的模块化工具类处理字幕生成、翻译等功能。
         """
         try:
+            # Step 1: 解码和保存音频
             audio_b64 = resp_json.get("audio_base64") or resp_json.get("audio")
             if not audio_b64:
                 self.error.emit("未能从 TTS 响应中提取音频(audio_base64)。")
@@ -130,90 +148,126 @@ class TTSWorker(QThread):
                 self.error.emit(f"保存音频失败: {str(e)}")
                 return
 
-            # 生成字幕
+            # Step 2: 生成字幕（委托给 SubtitleSegmentBuilder 和 SubtitleWriter）
             alignment = resp_json.get("alignment")
             if alignment:
                 try:
-                    srt_path = os.path.splitext(self.save_path)[0] + ".srt"
-                    self.create_srt(alignment, srt_path)
+                    base_path = os.path.splitext(self.save_path)[0]
+                    
+                    chars = alignment.get('characters', [])
+                    starts = alignment.get('character_start_times_seconds', [])
+                    ends = alignment.get('character_end_times_seconds', [])
+                    
+                    if not chars or not starts or not ends:
+                        print("警告: alignment 数据不完整，跳过字幕生成。")
+                    else:
+                        cfg = load_project_config().get('elevenlabs', {})
+                        
+                        # 2.1 生成标准字幕（始终）
+                        builder = SubtitleSegmentBuilder(config=cfg)
+                        standard_segments = builder.build_segments(chars, starts, ends, word_level=False)
+                        standard_srt_path = base_path + ".srt"
+                        SubtitleWriter.write_srt(standard_srt_path, standard_segments)
+                        message = f"标准字幕已保存: {standard_srt_path}"
+                        logger.info(message)
+                        print(message)
+                        
+                        # 2.2 生成逐词字幕（可选）
+                        if self.word_level:
+                            word_segments = builder.build_segments(
+                                chars, starts, ends, 
+                                word_level=True, 
+                                words_per_line=self.words_per_line
+                            )
+                            word_srt_path = base_path + "_word.srt"
+                            SubtitleWriter.write_srt(word_srt_path, word_segments)
+                            message = f"逐词字幕已保存: {word_srt_path}"
+                            logger.info(message)
+                            print(message)
+                        
+                        # 2.3 生成翻译字幕（可选）
+                        if self.translate:
+                            full_cfg = load_project_config()
+                            groq_cfg = full_cfg.get('groq', {})
+                            api_key = self.groq_api_key or groq_cfg.get('api_key') or os.getenv("GROQ_API_KEY")
+                            model = self.groq_model or groq_cfg.get('model', 'openai/gpt-oss-120b')
+                            
+                            if api_key:
+                                # ✨ 关键改进：翻译时使用完整句子分段（ignore_line_length=True）
+                                # 这样可以避免被行长度限制打断的不完整句子，提高翻译准确性
+                                translation_segments = builder.build_segments(
+                                    chars, starts, ends, 
+                                    word_level=False,
+                                    ignore_line_length=True  # 忽略行长度限制，只按标点和停顿分割
+                                )
+                                
+                                try:
+                                    translator = TranslationManager(api_key=api_key, model=model)
+                                    translated_segments = translator.translate_segments(translation_segments)
+                                    trans_srt_path = base_path + "_cn.srt"
+                                    SubtitleWriter.write_srt(trans_srt_path, translated_segments)
+                                    message = f"翻译字幕已保存: {trans_srt_path}"
+                                    logger.info(message)
+                                    print(message)
+                                except Exception as e:
+                                    logger.error(f"翻译失败: {e}")
+                                    self.error.emit(f"翻译失败: {e}")
+                            else:
+                                logger.warning("未找到 Groq API Key，跳过翻译。请在 config.toml 中配置 [groq] api_key。")
+                        
+                        # 2.4 导出为 FCPXML（可选）
+                        if self.export_xml:
+                            try:
+                                from .SrtsToFcpxml import SrtsToFcpxml
+                                xml_path = base_path + ".fcpxml"
+                                
+                                # 读取标准字幕
+                                with open(standard_srt_path, 'r', encoding='utf-8') as f:
+                                    src_content = f.read()
+                                
+                                # 收集翻译内容（如果有）
+                                trans_contents = []
+                                trans_srt_path = base_path + "_cn.srt"
+                                if os.path.exists(trans_srt_path):
+                                    with open(trans_srt_path, 'r', encoding='utf-8') as f:
+                                        trans_contents.append(f.read())
+                                
+                                # Extract keywords if enabled
+                                if self.keyword_highlight:
+                                    # Use configured Groq key, or fall back to env/config
+                                    full_cfg = load_project_config()
+                                    groq_cfg = full_cfg.get('groq', {})
+                                    g_key = self.groq_api_key or groq_cfg.get('api_key') or os.getenv("GROQ_API_KEY")
+                                    if g_key:
+                                        logger.info("正在使用 Groq 分析重点关键词...")
+                                        try:
+                                            keywords = extract_keywords(self.text, g_key, model=self.groq_model or "openai/gpt-oss-120b")
+                                            logger.info(f"提取到的关键词: {keywords}")
+                                            self.video_settings['keywords'] = keywords
+                                        except Exception as e:
+                                            logger.error(f"关键词提取失败: {e}")
+                                            self.error.emit(f"关键词提取失败: {e}")
+                                    else:
+                                        logger.warning("未配置 Groq Key，跳过关键词高亮提取。")
+
+                                SrtsToFcpxml(src_content, trans_contents, xml_path, False, xml_style_settings=self.xml_style_settings, video_settings=self.video_settings)
+                                message = f"FCPXML 已导出: {xml_path}"
+                                logger.info(message)
+                                print(message)
+                            except ImportError:
+                                logger.error("导出XML失败: 未找到 SrtsToFcpxml 模块或依赖缺失")
+                            except Exception as e:
+                                logger.error(f"导出XML出错: {e}")
+                
                 except Exception as e:
-                    print(f"字幕生成失败: {e}")
+                    logger.error(f"字幕/后续处理生成失败: {e}")
+                    self.error.emit(f"字幕处理失败: {e}")
 
             self.finished.emit(self.save_path)
         except Exception as e:
             self.error.emit(f"处理响应时出错: {str(e)}")
 
-    def create_srt(self, alignment, filename):
-        """基于 alignment 数据生成 SRT 字幕"""
-        chars = alignment.get('characters', [])
-        starts = alignment.get('character_start_times_seconds', [])
-        ends = alignment.get('character_end_times_seconds', [])
-
-        if not chars or not starts or not ends:
-            return
-
-        cfg = load_project_config().get('elevenlabs', {})
-
-        # 标点符号集合
-        DELIMITERS = set(cfg.get('srt_delimiters', [" ", "\n", "।", "？", "?", "!", "！", ",", "，", '"', "“", "”"]))
-        SENTENCE_ENDERS = set(cfg.get('srt_sentence_enders', [".", "\n", "。", "।", "？", "?", "!", "！", "…"]))
-        MAX_CHARS_PER_LINE = cfg.get('srt_max_chars', 35)
-        PAUSE_THRESHOLD = cfg.get('srt_pause_threshold', 0.2)
-
-        sentences = []
-        current_line_text = ""
-        current_line_start = None
-
-        if not chars: return
-
-        for i, char in enumerate(chars):
-            if current_line_start is None:
-                current_line_start = starts[i]
-
-            current_line_text += char
-
-            # --- 在添加字符后，判断是否需要结束当前行 ---
-
-            # 1. 当前字符是句末标点吗？
-            is_sentence_end = char in SENTENCE_ENDERS
-            
-            # 2. 当前字符后面有明显的停顿吗？
-            is_pause_after = (i < len(chars) - 1) and ( ends[i] - starts[i] >= PAUSE_THRESHOLD)
-            
-            # 3. 行是否已超长，并且当前字符是适合换行的标点？
-            is_long_and_at_delimiter = (len(current_line_text) > MAX_CHARS_PER_LINE) and (char in DELIMITERS)
-            
-            # 4. 这是最后一个字符吗？
-            is_last_char = (i == len(chars) - 1)
-
-            # 满足任一条件，则结束当前行
-            if is_sentence_end or is_pause_after or is_long_and_at_delimiter or is_last_char:
-                clean_text = current_line_text.strip()
-                if clean_text:
-                    sentences.append({
-                        "text": clean_text,
-                        "start": current_line_start,
-                        "end": ends[i]  # 结束时间是当前字符的结尾
-                    })
-                
-                # 为下一行重置
-                current_line_text = ""
-                current_line_start = None # 将在下一次循环开始时设置
-
-        with open(filename, "w", encoding="utf-8") as f:
-            for idx, s in enumerate(sentences):
-                f.write(f"{idx + 1}\n")
-                f.write(f"{self._format_time(s['start'])} --> {self._format_time(s['end'])}\n")
-                f.write(f"{s['text']}\n\n")
-
-    def _format_time(self, seconds):
-        """将秒数转换为 SRT 时间格式 HH:MM:SS,mmm"""
-        mils = int((seconds % 1) * 1000)
-        secs = int(seconds % 60)
-        mins = int((seconds / 60) % 60)
-        hours = int(seconds / 3600)
-        return f"{hours:02d}:{mins:02d}:{secs:02d},{mils:03d}"
-
+ 
 
 class SFXWorker(QThread):
     finished = Signal(str)

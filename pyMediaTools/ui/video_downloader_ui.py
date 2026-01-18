@@ -1,10 +1,8 @@
 import os
-import platform
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, 
                                QComboBox, QMessageBox, QProgressBar, QFileDialog, 
-                               QGroupBox, QTableWidget, QTableWidgetItem, QHeaderView, QCheckBox, QApplication, QSpinBox)
-from PySide6.QtCore import Qt, QUrl, Slot
-from PySide6.QtGui import QFont, QPalette, QColor, QCursor
+                               QGroupBox, QTableWidget, QTableWidgetItem, QHeaderView, QCheckBox, QSpinBox)
+from PySide6.QtCore import Qt
 
 from ..core.videodownloader import YtDlpInfoWorker, YtDlpDownloadWorker
 from .styles import apply_common_style

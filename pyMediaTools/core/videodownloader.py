@@ -154,7 +154,7 @@ class YtDlpDownloadWorker(QThread):
             # If NO FFmpeg, force 'best' (single file with audio/video interleaved).
             # 'bestvideo+bestaudio' WILL FAIL to merge without ffmpeg, resulting in no audio.
             if not has_ffmpeg:
-                print("FFmpeg not found. Forcing 'best' format to ensure audio.")
+                logger.warning("FFmpeg not found. Forcing 'best' format to ensure audio.")
                 ydl_opts['format'] = 'best'
             else:
                 # Standard high quality logic

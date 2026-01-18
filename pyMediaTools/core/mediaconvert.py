@@ -11,20 +11,13 @@ import subprocess
 from ..utils import get_ffmpeg_exe, get_ffprobe_exe, get_resource_path
 from ..logging_config import get_logger
 import sys
-# from tqdm import tqdm
-from PySide6.QtCore import QProcess, QEventLoop, QCoreApplication, Qt
+from PySide6.QtCore import QProcess, QEventLoop, QCoreApplication
 from abc import ABC, abstractmethod
 import re
-# import tempfile
-# import os
 import time
 _GLOBAL_ENCODER_CACHE = None
 
 logger = get_logger(__name__)
-
-
-# 用于存储 app.py 传递进来的 ProgressMonitor 实例
-# GlobalProgressMonitor = None
 
 class MediaConverter(ABC):
     """

@@ -5,9 +5,7 @@ import subprocess
 import json
 import sys
 import urllib.request
-import time
 import atexit
-from typing import Dict, List, Optional
 from ..utils import get_aria2c_exe, get_aria2_rpc_port, get_aria2_rpc_secret, get_default_download_dir
 from pyMediaTools import get_logger
 

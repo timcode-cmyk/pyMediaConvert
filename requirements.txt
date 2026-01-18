@@ -2,5 +2,5 @@ aria2p
 Requests
 yt_dlp
 PySide6
-tqdm
+pysrt
 toml
