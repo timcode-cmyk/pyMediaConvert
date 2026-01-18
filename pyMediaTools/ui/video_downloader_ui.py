@@ -151,10 +151,12 @@ class VideoDownloadWidget(QWidget):
         self.status_label.setWordWrap(True)
         
         self.btn_download = QPushButton("⬇️ 开始下载")
+        self.btn_download.setObjectName("StartStopButton") # Reuse the ID for similar styling
         self.btn_download.clicked.connect(self.toggle_download)
         self.btn_download.setMinimumHeight(36)
         self.btn_download.setMinimumWidth(120)
-        self.btn_download.setStyleSheet("font-weight: bold;")
+        self.btn_download.setProperty('converting', 'false') # Reuse 'converting' property for consistency or add 'downloading' to QSS
+
         
         ctrl_layout.addWidget(self.status_label, 1)
         ctrl_layout.addWidget(self.btn_download)
@@ -294,7 +296,9 @@ class VideoDownloadWidget(QWidget):
         
         self.is_downloading = True
         self.btn_download.setText("⏹ 停止下载")
-        self.btn_download.setStyleSheet("background-color: #8B0000; color: white; font-weight: bold;")
+        self.btn_download.setProperty('converting', 'true')
+        self.btn_download.style().unpolish(self.btn_download)
+        self.btn_download.style().polish(self.btn_download)
         
         # Reset table status for selected
         for item in items_to_download:
@@ -310,7 +314,9 @@ class VideoDownloadWidget(QWidget):
         self.is_downloading = False
         self.btn_download.setEnabled(True)
         self.btn_download.setText("⬇️ 开始下载")
-        self.btn_download.setStyleSheet("font-weight: bold;")
+        self.btn_download.setProperty('converting', 'false')
+        self.btn_download.style().unpolish(self.btn_download)
+        self.btn_download.style().polish(self.btn_download)
         self.status_label.setText("所有任务完成")
         self.overall_progress_bar.setValue(100)
 
@@ -318,7 +324,9 @@ class VideoDownloadWidget(QWidget):
         self.is_downloading = False
         self.btn_download.setEnabled(True)
         self.btn_download.setText("⬇️ 开始下载")
-        self.btn_download.setStyleSheet("font-weight: bold;")
+        self.btn_download.setProperty('converting', 'false')
+        self.btn_download.style().unpolish(self.btn_download)
+        self.btn_download.style().polish(self.btn_download)
         QMessageBox.critical(self, "错误", err)
 
     def on_progress(self, data):

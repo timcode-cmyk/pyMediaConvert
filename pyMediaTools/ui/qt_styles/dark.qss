@@ -1,0 +1,196 @@
+/* Modern Dark Theme - Pure Black & Minimalist */
+/* Variable placeholders like {{accent_color}} will be replaced by ThemeManager */
+
+QWidget {
+    background-color: #000000;
+    color: #E0E0E0;
+    font-family: "{{font_family}}";
+    font-size: 14px;
+}
+
+/* Headings */
+QLabel#TitleLabel {
+    color: #FFFFFF;
+    font-weight: bold;
+    font-size: 22px;
+}
+
+QGroupBox {
+    background-color: #0d0d0d; /* Slightly lighter than pure black for grouping */
+    border: 1px solid #333333;
+    border-radius: 12px;
+    margin-top: 1.5em;
+    padding: 15px;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    left: 15px;
+    padding: 0 5px;
+    color: {{accent_color}}; 
+    font-weight: bold;
+    font-size: 13px;
+    background-color: #000000; /* Match parent background to mask border */
+}
+
+/* Inputs */
+QLineEdit, QComboBox, QSpinBox, QTextEdit, QPlainTextEdit {
+    background-color: #1A1A1A;
+    border: 1px solid #333333;
+    border-radius: 8px;
+    padding: 8px;
+    color: #E0E0E0;
+    selection-background-color: {{accent_color}};
+    selection-color: #FFFFFF;
+}
+
+QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QTextEdit:focus {
+    border: 1px solid {{accent_color}};
+    background-color: #202020;
+}
+
+/* Disabled Inputs */
+QLineEdit:disabled, QComboBox:disabled {
+    background-color: #111111;
+    color: #666666;
+    border: 1px solid #222222;
+}
+
+/* Buttons */
+QPushButton {
+    background-color: #1A1A1A;
+    border: 1px solid #333333;
+    border-radius: 8px;
+    padding: 8px 16px;
+    color: #E0E0E0;
+    font-weight: 600;
+}
+
+QPushButton:hover {
+    background-color: #252525;
+    border: 1px solid {{accent_color}};
+    color: {{accent_color}};
+}
+
+QPushButton:pressed {
+    background-color: #111111;
+}
+
+/* Primary Action Button (Start/Stop) */
+QPushButton#PrimaryButton {
+    background-color: {{accent_color}};
+    color: #FFFFFF;
+    border: none;
+    font-size: 15px;
+    padding: 12px;
+}
+
+QPushButton#PrimaryButton:hover {
+    background-color: {{accent_hightlight}}; 
+}
+
+QPushButton#PrimaryButton:pressed {
+    background-color: {{accent_pressed}}; 
+}
+
+QPushButton#StartStopButton {
+    background-color: {{accent_color}};
+    color: #FFFFFF;
+    border: none;
+    font-size: 15px;
+    padding: 12px;
+    border-radius: 8px;
+    font-weight: bold;
+}
+QPushButton#StartStopButton:hover {
+    background-color: {{accent_hightlight}};
+}
+QPushButton#StartStopButton[converting="true"] {
+    background-color: #CF6679; /* Soft Red for Stop */
+    color: #000000;
+}
+QPushButton#StartStopButton[converting="true"]:hover {
+    background-color: #E57373;
+}
+
+/* Progress Bar */
+QProgressBar {
+    border: none;
+    background-color: #1A1A1A;
+    border-radius: 6px;
+    height: 12px;
+    text-align: center;
+    color: transparent; /* Hide text inside bar usually */
+}
+
+QProgressBar::chunk {
+    background-color: {{accent_color}};
+    border-radius: 6px;
+}
+
+/* Custom Widgets */
+DropLineEdit {
+    border: 2px dashed #444444;
+    background-color: rgba(255, 255, 255, 0.02);
+    border-radius: 10px;
+    color: #888888;
+}
+
+DropLineEdit:hover {
+    border-color: {{accent_color}};
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+/* Tab Widget */
+QTabWidget::pane {
+    border: 1px solid #222222;
+    background-color: #000000;
+    border-radius: 0 0 8px 8px;
+}
+
+QTabBar::tab {
+    background-color: #0d0d0d;
+    color: #888888;
+    padding: 10px 20px;
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+    margin-right: 2px;
+    border: 1px solid transparent;
+}
+
+QTabBar::tab:selected {
+    background-color: #000000; /* Merge with pane */
+    color: {{accent_color}};
+    border: 1px solid #222222;
+    border-bottom: 2px solid #000000; /* Hide bottom border to merge */
+    font-weight: bold;
+}
+
+QTabBar::tab:hover:!selected {
+    background-color: #151515;
+    color: #CCCCCC;
+}
+
+/* ScrollBars */
+QScrollBar:vertical {
+    border: none;
+    background: #000000;
+    width: 10px;
+    margin: 0px 0px 0px 0px;
+}
+QScrollBar::handle:vertical {
+    background: #333333;
+    min-height: 20px;
+    border-radius: 5px;
+}
+QScrollBar::handle:vertical:hover {
+    background: #444444;
+}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    height: 0px;
+}
+
+QMessageBox {
+    background-color: #121212;
+    color: #E0E0E0;
+}

@@ -26,9 +26,10 @@ if sys.stderr and hasattr(sys.stderr, 'reconfigure'):
     except Exception:
         pass
 
+
 from pyMediaTools import setup_logging
 from pyMediaTools.ui import MediaConverterWidget, ElevenLabsWidget, DownloadManagerWidget, VideoDownloadWidget
-
+from pyMediaTools.ui.styles import ThemeManager
 
 
 # initialize logging early
@@ -48,10 +49,13 @@ class ToolBoxMainWindow(QMainWindow):
         self.setCentralWidget(tabs)
 
 
-
-
 if __name__ == '__main__':
     app = QApplication(sys.argv)
+    
+    # Initialize and apply theme
+    theme_manager = ThemeManager()
+    theme_manager.apply_theme(app)
+    
     win = ToolBoxMainWindow()
     win.show()
     sys.exit(app.exec())

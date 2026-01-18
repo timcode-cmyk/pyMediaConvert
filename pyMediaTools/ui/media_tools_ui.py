@@ -121,7 +121,7 @@ class MediaConverterWidget(QWidget):
 
         # 标题区域
         title = QLabel("媒体转换工具")
-        title.setFont(QFont("Segoe UI", 20, QFont.Bold))
+        title.setObjectName("TitleLabel")
         title.setAlignment(Qt.AlignmentFlag.AlignLeft)
         main_layout.addWidget(title)
 

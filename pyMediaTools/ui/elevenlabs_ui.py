@@ -225,7 +225,7 @@ class ElevenLabsWidget(QWidget):
 
         # 标题
         title = QLabel("ElevenLabs 语音合成")
-        title.setFont(QFont("Segoe UI", 20, QFont.Bold))
+        title.setObjectName("TitleLabel")
         main_layout.addWidget(title)
 
         # 1. API 配置区
