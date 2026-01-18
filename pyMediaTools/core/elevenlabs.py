@@ -76,11 +76,11 @@ class TTSWorker(QThread):
             try:
                 with open(json_cache_path, 'r', encoding='utf-8') as f:
                     resp_json = json.load(f)
-                print(f"--- [调试模式] 从缓存加载TTS响应: {json_cache_path}")
+                logger.info(f"[调试模式] 从缓存加载TTS响应: {json_cache_path}")
                 self.process_response(resp_json)
                 return
             except Exception as e:
-                print(f"--- [调试模式] 加载缓存失败，将重新调用API. 错误: {e}")
+                logger.warning(f"[调试模式] 加载缓存失败，将重新调用API. 错误: {e}")
 
 
         # --- 正常API调用 ---
@@ -113,9 +113,9 @@ class TTSWorker(QThread):
                 try:
                     with open(json_cache_path, 'w', encoding='utf-8') as f:
                         json.dump(resp_json, f, ensure_ascii=False, indent=2)
-                    print(f"--- [调试模式] 已保存TTS响应到缓存: {json_cache_path}")
+                    logger.info(f"[调试模式] 已保存TTS响应到缓存: {json_cache_path}")
                 except Exception as e:
-                    print(f"--- [调试模式] 保存响应到缓存失败. 错误: {e}")
+                    logger.error(f"[调试模式] 保存响应到缓存失败. 错误: {e}")
 
             self.process_response(resp_json)
 
@@ -159,7 +159,7 @@ class TTSWorker(QThread):
                     ends = alignment.get('character_end_times_seconds', [])
                     
                     if not chars or not starts or not ends:
-                        print("警告: alignment 数据不完整，跳过字幕生成。")
+                        logger.warning("alignment 数据不完整，跳过字幕生成。")
                     else:
                         cfg = load_project_config().get('elevenlabs', {})
                         
@@ -170,7 +170,6 @@ class TTSWorker(QThread):
                         SubtitleWriter.write_srt(standard_srt_path, standard_segments)
                         message = f"标准字幕已保存: {standard_srt_path}"
                         logger.info(message)
-                        print(message)
                         
                         # 2.2 生成逐词字幕（可选）
                         if self.word_level:
@@ -183,7 +182,6 @@ class TTSWorker(QThread):
                             SubtitleWriter.write_srt(word_srt_path, word_segments)
                             message = f"逐词字幕已保存: {word_srt_path}"
                             logger.info(message)
-                            print(message)
                         
                         # 2.3 生成翻译字幕（可选）
                         if self.translate:
@@ -208,7 +206,6 @@ class TTSWorker(QThread):
                                     SubtitleWriter.write_srt(trans_srt_path, translated_segments)
                                     message = f"翻译字幕已保存: {trans_srt_path}"
                                     logger.info(message)
-                                    print(message)
                                 except Exception as e:
                                     logger.error(f"翻译失败: {e}")
                                     self.error.emit(f"翻译失败: {e}")
@@ -253,7 +250,6 @@ class TTSWorker(QThread):
                                 SrtsToFcpxml(src_content, trans_contents, xml_path, False, xml_style_settings=self.xml_style_settings, video_settings=self.video_settings)
                                 message = f"FCPXML 已导出: {xml_path}"
                                 logger.info(message)
-                                print(message)
                             except ImportError:
                                 logger.error("导出XML失败: 未找到 SrtsToFcpxml 模块或依赖缺失")
                             except Exception as e:
