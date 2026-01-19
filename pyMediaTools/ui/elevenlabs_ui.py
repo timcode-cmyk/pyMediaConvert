@@ -3,8 +3,8 @@ import datetime
 import uuid
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, 
                                QTextEdit, QComboBox, QMessageBox, QProgressBar, QFileDialog, QSlider,
-                               QGroupBox, QSizePolicy, QSpinBox, QCheckBox, QTabWidget, QScrollArea,
-                               QFontComboBox, QColorDialog, QDoubleSpinBox, QGridLayout)
+                               QGroupBox, QSizePolicy, QSpinBox, QCheckBox, QTabWidget, QScrollArea, QFrame,
+                               QFontComboBox, QColorDialog, QDoubleSpinBox, QGridLayout, QDialog, QDialogButtonBox)
 from PySide6.QtCore import Qt, QUrl, QSettings, QTimer, QSize, QRectF
 from PySide6.QtGui import QFont, QColor, QPainter, QPainterPath, QPen, QBrush, QFontMetrics
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
@@ -23,7 +23,7 @@ class SubtitlePreviewLabel(QLabel):
         self.style_data = {}
         self.setText("预览文本\nPreview Text")
         self.setAlignment(Qt.AlignCenter)
-        self.setMinimumHeight(100)
+        self.setMinimumHeight(80)
         self.setMinimumWidth(300)
 
     def update_style(self, style_data):
@@ -125,6 +125,368 @@ class SubtitlePreviewLabel(QLabel):
         painter.setBrush(QBrush(font_color))
         painter.drawPath(path)
 
+class VoiceSettingsDialog(QDialog):
+    """语音设定对话框"""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("语音设定")
+        self.setModal(True)
+        self.setMinimumWidth(450)
+        
+        # 初始化默认值
+        self.stability = 50
+        self.similarity = 75
+        self.style = 0
+        self.speed = 100
+        self.speaker_boost = True
+        
+        self.setup_ui()
+    
+    def setup_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setSpacing(15)
+        layout.setContentsMargins(20, 20, 20, 20)
+        
+        # 标题
+        title_label = QLabel("调整语音生成参数")
+        title_label.setFont(QFont("Segoe UI", 12, QFont.Bold))
+        layout.addWidget(title_label)
+        
+        # 设置网格
+        grid_layout = QGridLayout()
+        grid_layout.setSpacing(10)
+        
+        # 稳定性 (Stability)
+        stability_label = QLabel("稳定性:")
+        stability_label.setToolTip("控制声音的稳定性和随机性。较低值引入更多情感变化，较高值可能导致单调")
+        self.slider_stability = QSlider(Qt.Horizontal)
+        self.slider_stability.setRange(0, 100)
+        self.slider_stability.setValue(self.stability)
+        self.slider_stability.setTickPosition(QSlider.TicksBelow)
+        self.slider_stability.setTickInterval(10)
+        self.lbl_stability_value = QLabel(f"{self.stability}%")
+        self.slider_stability.valueChanged.connect(
+            lambda val: self.lbl_stability_value.setText(f"{val}%")
+        )
+        grid_layout.addWidget(stability_label, 0, 0)
+        grid_layout.addWidget(self.slider_stability, 0, 1)
+        grid_layout.addWidget(self.lbl_stability_value, 0, 2)
+        
+        # 相似度提升 (Similarity Boost)
+        similarity_label = QLabel("相似度提升:")
+        similarity_label.setToolTip("AI 应多紧密地复制原始声音")
+        self.slider_similarity = QSlider(Qt.Horizontal)
+        self.slider_similarity.setRange(0, 100)
+        self.slider_similarity.setValue(self.similarity)
+        self.slider_similarity.setTickPosition(QSlider.TicksBelow)
+        self.slider_similarity.setTickInterval(10)
+        self.lbl_similarity_value = QLabel(f"{self.similarity}%")
+        self.slider_similarity.valueChanged.connect(
+            lambda val: self.lbl_similarity_value.setText(f"{val}%")
+        )
+        grid_layout.addWidget(similarity_label, 1, 0)
+        grid_layout.addWidget(self.slider_similarity, 1, 1)
+        grid_layout.addWidget(self.lbl_similarity_value, 1, 2)
+        
+        # 风格 (Style)
+        style_label = QLabel("风格:")
+        style_label.setToolTip("风格夸张程度（增加计算资源消耗）")
+        self.slider_style = QSlider(Qt.Horizontal)
+        self.slider_style.setRange(0, 100)
+        self.slider_style.setValue(self.style)
+        self.slider_style.setTickPosition(QSlider.TicksBelow)
+        self.slider_style.setTickInterval(10)
+        self.lbl_style_value = QLabel(f"{self.style}%")
+        self.slider_style.valueChanged.connect(
+            lambda val: self.lbl_style_value.setText(f"{val}%")
+        )
+        grid_layout.addWidget(style_label, 2, 0)
+        grid_layout.addWidget(self.slider_style, 2, 1)
+        grid_layout.addWidget(self.lbl_style_value, 2, 2)
+        
+        # 速度 (Speed)
+        speed_label = QLabel("速度:")
+        speed_label.setToolTip("调整语音速度（0.7-1.2，默认1.0为正常速度）")
+        self.slider_speed = QSlider(Qt.Horizontal)
+        self.slider_speed.setRange(70, 120)
+        self.slider_speed.setValue(self.speed)
+        self.slider_speed.setTickPosition(QSlider.TicksBelow)
+        self.slider_speed.setTickInterval(10)
+        self.lbl_speed_value = QLabel(f"{self.speed/100:.2f}")
+        self.slider_speed.valueChanged.connect(
+            lambda val: self.lbl_speed_value.setText(f"{val/100:.2f}")
+        )
+        grid_layout.addWidget(speed_label, 3, 0)
+        grid_layout.addWidget(self.slider_speed, 3, 1)
+        grid_layout.addWidget(self.lbl_speed_value, 3, 2)
+        
+        layout.addLayout(grid_layout)
+        
+        # 扬声器增强 (Speaker Boost)
+        self.chk_speaker_boost = QCheckBox("扬声器增强")
+        self.chk_speaker_boost.setChecked(self.speaker_boost)
+        self.chk_speaker_boost.setToolTip("增强与原始扬声器的相似性（会略微增加延迟）")
+        layout.addWidget(self.chk_speaker_boost)
+        
+        # 按钮
+        button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        button_box.accepted.connect(self.accept)
+        button_box.rejected.connect(self.reject)
+        layout.addWidget(button_box)
+    
+    def get_settings(self):
+        """获取当前设置"""
+        return {
+            'stability': self.slider_stability.value() / 100.0,
+            'similarity_boost': self.slider_similarity.value() / 100.0,
+            'style': self.slider_style.value() / 100.0,
+            'use_speaker_boost': self.chk_speaker_boost.isChecked(),
+            'speed': self.slider_speed.value() / 100.0
+        }
+    
+    def set_settings(self, settings):
+        """设置对话框的值"""
+        if 'stability' in settings:
+            val = int(settings['stability'] * 100)
+            self.slider_stability.setValue(val)
+            self.stability = val
+        if 'similarity_boost' in settings:
+            val = int(settings['similarity_boost'] * 100)
+            self.slider_similarity.setValue(val)
+            self.similarity = val
+        if 'style' in settings:
+            val = int(settings['style'] * 100)
+            self.slider_style.setValue(val)
+            self.style = val
+        if 'speed' in settings:
+            val = int(settings['speed'] * 100)
+            self.slider_speed.setValue(val)
+            self.speed = val
+        if 'use_speaker_boost' in settings:
+            self.chk_speaker_boost.setChecked(settings['use_speaker_boost'])
+            self.speaker_boost = settings['use_speaker_boost']
+
+class SubtitleSettingsDialog(QDialog):
+    """字幕设置对话框 - 整合 Groq 配置和 XML 样式设置"""
+    def __init__(self, parent=None, xml_styles=None, video_settings=None, groq_settings=None):
+        super().__init__(parent)
+        self.setWindowTitle("字幕设置")
+        self.setModal(True)
+        self.setMinimumSize(700, 600)
+        
+        self.parent_widget = parent
+        self.xml_styles = xml_styles or {}
+        self.video_settings = video_settings or {}
+        self.groq_settings = groq_settings or {'api_key': '', 'model': 'openai/gpt-oss-120b'}
+        
+        # QSettings for Groq persistence
+        self.groq_qsettings = QSettings("pyMediaTools", "Groq")
+        
+        self.setup_ui()
+        self.load_groq_settings()
+    
+    def setup_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setSpacing(10)
+        layout.setContentsMargins(15, 15, 15, 15)
+        
+        # 标题
+        title_label = QLabel("字幕与样式设置")
+        title_label.setFont(QFont("Segoe UI", 14, QFont.Bold))
+        layout.addWidget(title_label)
+        
+        # 创建标签页
+        self.tabs = QTabWidget()
+        
+        # Tab 1: 常规设置 (Groq + 视频)
+        self.general_tab = self.create_general_settings_tab()
+        self.tabs.addTab(self.general_tab, "常规设置")
+        
+        # Tab 2-4: XML 样式设置 (从父控件获取)
+        if self.parent_widget and hasattr(self.parent_widget, 'create_style_settings_panel'):
+            source_tab = self.parent_widget.create_style_settings_panel('source')
+            self.tabs.addTab(source_tab, "原文样式")
+            
+            trans_tab = self.parent_widget.create_style_settings_panel('translate')
+            self.tabs.addTab(trans_tab, "翻译样式")
+            
+            highlight_tab = self.parent_widget.create_style_settings_panel('highlight')
+            self.tabs.addTab(highlight_tab, "高亮样式")
+        
+        self.tabs.setCurrentIndex(0)
+        self.tabs.currentChanged.connect(lambda: self.parent_widget.update_preview() if self.parent_widget else None)
+        
+        layout.addWidget(self.tabs)
+        
+        # 预览面板 (创建新的预览标签，避免Qt对象生命周期问题)
+        preview_group = QGroupBox("样式预览")
+        preview_layout = QVBoxLayout(preview_group)
+        self.dialog_preview_label = SubtitlePreviewLabel()
+        preview_layout.addWidget(self.dialog_preview_label)
+        layout.addWidget(preview_group)
+        
+        # 如果父控件有预览更新方法，连接样式变化事件
+        if self.parent_widget and hasattr(self.parent_widget, 'update_preview'):
+            # 初始化预览
+            current_tab = self.tabs.currentIndex()
+            if current_tab >= 1 and current_tab <= 3:  # XML style tabs
+                style_types = ['source', 'translate', 'highlight']
+                if current_tab - 1 < len(style_types):
+                    style_type = style_types[current_tab - 1]
+                    if style_type in self.xml_styles:
+                        self.dialog_preview_label.update_style(self.xml_styles[style_type])
+        
+        # 按钮
+        button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        button_box.accepted.connect(self.accept)
+        button_box.rejected.connect(self.reject)
+        layout.addWidget(button_box)
+    
+    def create_general_settings_tab(self):
+        """创建常规设置标签页 (Groq + 视频)"""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setSpacing(10)
+        layout.setContentsMargins(10, 10, 10, 10)
+        
+        # Scroll Area for settings
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll_content = QWidget()
+        scroll_layout = QVBoxLayout(scroll_content)
+        scroll_layout.setSpacing(15)
+        
+        # --- 1. Groq 配置 ---
+        groq_group = QGroupBox("Groq API 配置")
+        groq_layout = QVBoxLayout(groq_group)
+        
+        # API Key
+        key_layout = QHBoxLayout()
+        key_layout.addWidget(QLabel("API Key:"))
+        self.groq_api_input = QLineEdit()
+        self.groq_api_input.setEchoMode(QLineEdit.Password)
+        self.groq_api_input.setPlaceholderText("gsk_...")
+        key_layout.addWidget(self.groq_api_input, 1)
+        self.btn_save_groq = QPushButton("💾 保存")
+        self.btn_save_groq.setFixedWidth(80)
+        self.btn_save_groq.clicked.connect(self.save_groq_api_key)
+        key_layout.addWidget(self.btn_save_groq)
+        groq_layout.addLayout(key_layout)
+        
+        # 模型选择
+        model_layout = QHBoxLayout()
+        model_layout.addWidget(QLabel("选择模型:"))
+        self.groq_model_combo = QComboBox()
+        self.groq_model_combo.addItems([
+            "llama-3.1-8b-instant",
+            "llama-3.3-70b-versatile",
+            "meta-llama/llama-guard-4-12b",
+            "openai/gpt-oss-120b",
+            "openai/gpt-oss-20b"
+        ])
+        self.groq_model_combo.setCurrentText(self.groq_settings.get('model', 'openai/gpt-oss-120b'))
+        model_layout.addWidget(self.groq_model_combo, 1)
+        groq_layout.addLayout(model_layout)
+        
+        # 模型说明
+        model_info = QLabel(
+            "• llama-3.1-8b-instant: 快速响应\n"
+            "• llama-3.3-70b-versatile: 平衡性能和质量\n"
+            "• meta-llama/llama-guard-4-12b: 内容审核\n"
+            "• openai/gpt-oss-120b: 推荐使用，大模型，最高质量\n"
+            "• openai/gpt-oss-20b: 中型模型"
+        )
+        model_info.setStyleSheet("color: palette(mid); font-size: 11pt; font-weight: bold;")
+        groq_layout.addWidget(model_info)
+        
+        scroll_layout.addWidget(groq_group)
+        
+        # --- 2. 视频参数 ---
+        video_group = QGroupBox("视频参数设置")
+        video_layout = QGridLayout(video_group)
+        video_layout.setSpacing(10)
+        
+        video_layout.addWidget(QLabel("帧率 (FPS):"), 0, 0)
+        self.combo_fps = QComboBox()
+        self.combo_fps.addItems(["24", "25", "30", "60"])
+        fps_str = str(self.video_settings.get('fps', 30))
+        if self.combo_fps.findText(fps_str) != -1:
+            self.combo_fps.setCurrentText(fps_str)
+        video_layout.addWidget(self.combo_fps, 0, 1)
+        
+        video_layout.addWidget(QLabel("目标分辨率:"), 1, 0)
+        self.combo_res = QComboBox()
+        self.combo_res.addItems(["1080p (1920x1080)", "2K (2560x1440)", "4K (3840x2160)"])
+        # 根据当前 width/height 设置初始分辨率
+        w, h = self.video_settings.get('width', 1080), self.video_settings.get('height', 1920)
+        max_dim = max(w, h)
+        if max_dim >= 3840: self.combo_res.setCurrentIndex(2)
+        elif max_dim >= 2560: self.combo_res.setCurrentIndex(1)
+        else: self.combo_res.setCurrentIndex(0)
+        video_layout.addWidget(self.combo_res, 1, 1)
+        
+        self.chk_vertical = QCheckBox("使用竖屏分辨率 (旋转画布)")
+        # 默认启用竖屏
+        is_vert = w < h
+        self.chk_vertical.setChecked(is_vert)
+        video_layout.addWidget(self.chk_vertical, 2, 0, 1, 2)
+        
+        scroll_layout.addWidget(video_group)
+        scroll_layout.addStretch()
+        
+        scroll.setWidget(scroll_content)
+        layout.addWidget(scroll)
+        return widget
+    
+    def load_groq_settings(self):
+        """从 QSettings 加载 Groq 配置"""
+        saved_key = self.groq_qsettings.value("api_key", "")
+        saved_model = self.groq_qsettings.value("model", "openai/gpt-oss-120b")
+        
+        if saved_key:
+            self.groq_api_input.setText(saved_key)
+            self.groq_settings['api_key'] = saved_key
+        
+        if saved_model:
+            self.groq_model_combo.setCurrentText(saved_model)
+            self.groq_settings['model'] = saved_model
+    
+    def save_groq_api_key(self):
+        """保存 Groq API Key 到 QSettings"""
+        api_key = self.groq_api_input.text().strip()
+        self.groq_qsettings.setValue("api_key", api_key)
+        QMessageBox.information(self, "保存成功", "Groq API Key 已保存到本地配置。")
+    
+    def get_groq_settings(self):
+        """获取当前 Groq 设置"""
+        # Also save model to QSettings
+        model = self.groq_model_combo.currentText()
+        self.groq_qsettings.setValue("model", model)
+        
+        return {
+            'api_key': self.groq_api_input.text().strip(),
+            'model': model
+        }
+    
+    def get_video_settings(self):
+        """获取视频设置"""
+        width, height = 1920, 1080
+        res_text = self.combo_res.currentText()
+        if "2K" in res_text:
+            width, height = 2560, 1440
+        elif "4K" in res_text:
+            width, height = 3840, 2160
+        
+        if self.chk_vertical.isChecked():
+            width, height = height, width
+        
+        return {
+            'fps': int(self.combo_fps.currentText()),
+            'width': width,
+            'height': height
+        }
+
 class ElevenLabsWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -194,11 +556,27 @@ class ElevenLabsWidget(QWidget):
             }
         }
         
-        # 视频设置
+        # 视频设置 (默认竖屏)
         self.video_settings = {
             'fps': 30,
-            'width': 1920,
-            'height': 1080,
+            'width': 1080,
+            'height': 1920,
+        }
+        
+        # 语音设定 (默认值)
+        self.voice_settings = {
+            'stability': 0.5,
+            'similarity_boost': 0.75,
+            'style': 0.0,
+            'use_speaker_boost': True,
+            'speed': 1.0
+        }
+        
+        # Groq 设定 (默认值)
+        groq_qsettings = QSettings("pyMediaTools", "Groq")
+        self.groq_settings = {
+            'api_key': groq_qsettings.value("api_key", ""),
+            'model': groq_qsettings.value("model", "openai/gpt-oss-120b")
         }
         
         # 尝试从 config.toml 加载默认样式配置
@@ -207,6 +585,10 @@ class ElevenLabsWidget(QWidget):
             for key, val in cfg['xml_styles'].items():
                 if key in self.xml_styles and isinstance(val, dict):
                     self.xml_styles[key].update(val)
+        
+        # 创建预览标签（用于对话框）
+        self.preview_label = SubtitlePreviewLabel()
+        self.active_subtitle_dialog = None
         
         self.setup_ui()
         self.apply_styles()
@@ -290,6 +672,12 @@ class ElevenLabsWidget(QWidget):
         self.combo_voices.setPlaceholderText("请先刷新配置...")
         voice_layout.addWidget(self.combo_voices, 1)
 
+        self.btn_voice_settings = QPushButton("⚙️ 语音设定")
+        # self.btn_voice_settings.setFixedWidth(100)
+        self.btn_voice_settings.setToolTip("调整语音生成参数")
+        self.btn_voice_settings.clicked.connect(self.open_voice_settings)
+        voice_layout.addWidget(self.btn_voice_settings)
+
         self.btn_preview_voice = QPushButton("🔊 试听")
         self.btn_preview_voice.setFixedWidth(80)
         self.btn_preview_voice.setToolTip("播放官方样本 (不消耗额度)")
@@ -339,7 +727,15 @@ class ElevenLabsWidget(QWidget):
         sub_opts_layout.addWidget(self.spin_words_per_line)
         sub_opts_layout.addWidget(self.chk_export_xml)
         sub_opts_layout.addWidget(self.chk_keyword_highlight)
+        
         sub_opts_layout.addStretch()
+
+        # 字幕设置按钮
+        self.btn_subtitle_settings = QPushButton("⚙️ 字幕设置")
+        self.btn_subtitle_settings.setToolTip("配置 Groq API、模型和 XML 样式")
+        self.btn_subtitle_settings.clicked.connect(self.open_subtitle_settings)
+        sub_opts_layout.addWidget(self.btn_subtitle_settings)
+        
         tts_inner_layout.addLayout(sub_opts_layout)
 
         # 保存与生成
@@ -400,75 +796,9 @@ class ElevenLabsWidget(QWidget):
         sfx_action_layout.addWidget(self.btn_sfx_generate)
         sfx_inner_layout.addLayout(sfx_action_layout)
         
-        # --- XML 样式设置区域 ---
-        xml_group = QWidget()
-        xml_inner_layout = QVBoxLayout(xml_group)
-        xml_inner_layout.setContentsMargins(10, 15, 10, 10)
-        xml_inner_layout.setSpacing(10)
-        
-        # 创建可滚动的样式设置区域
-        scroll_area = QScrollArea()
-        scroll_area.setWidgetResizable(True)
-        scroll_widget = QWidget()
-        scroll_layout = QVBoxLayout(scroll_widget)
-        scroll_layout.setSpacing(15)
-        
-        # 视频基本设置
-        video_group = QGroupBox("视频设置")
-        video_layout = QHBoxLayout(video_group)
-        video_layout.setContentsMargins(5, 5, 5, 5)
-        
-        video_layout.addWidget(QLabel("帧率:"))
-        self.combo_fps = QComboBox()
-        self.combo_fps.addItems(["24", "25", "30", "60"])
-        fps_str = str(self.video_settings['fps'])
-        if self.combo_fps.findText(fps_str) != -1:
-            self.combo_fps.setCurrentText(fps_str)
-        self.combo_fps.currentTextChanged.connect(self.on_video_settings_changed)
-        video_layout.addWidget(self.combo_fps)
-        
-        video_layout.addWidget(QLabel("分辨率:"))
-        self.combo_res = QComboBox()
-        self.combo_res.addItems(["1080p (1920x1080)", "2K (2560x1440)", "4K (3840x2160)"])
-        self.combo_res.currentIndexChanged.connect(self.on_resolution_preset_changed)
-        video_layout.addWidget(self.combo_res)
-        
-        self.chk_vertical = QCheckBox("使用竖屏分辨率")
-        self.chk_vertical.toggled.connect(self.on_vertical_toggled)
-        video_layout.addWidget(self.chk_vertical)
-        
-        scroll_layout.addWidget(video_group)
-        
-        # 原文字幕样式设置
-        self.style_tabs = QTabWidget()
-        
-        source_style_widget = self.create_style_settings_panel('source')
-        trans_style_widget = self.create_style_settings_panel('translate')
-        highlight_style_widget = self.create_style_settings_panel('highlight')
-        
-        self.style_tabs.addTab(source_style_widget, "原文字幕样式")
-        self.style_tabs.addTab(trans_style_widget, "翻译字幕样式")
-        self.style_tabs.addTab(highlight_style_widget, "高亮字幕样式")
-        
-        scroll_layout.addWidget(self.style_tabs)
-        scroll_layout.addStretch()
-        
-        scroll_area.setWidget(scroll_widget)
-        xml_inner_layout.addWidget(scroll_area)
-        
-        # 预览窗口
-        preview_group = QGroupBox("样式预览")
-        preview_layout = QVBoxLayout(preview_group)
-        # 使用自定义预览 Label
-        self.preview_label = SubtitlePreviewLabel()
-        self.update_preview() # 初始化预览
-        preview_layout.addWidget(self.preview_label)
-        xml_inner_layout.addWidget(preview_group)
-        
         # 将两个功能区添加到 Tab
         tabs_widget.addTab(tts_group, "🗣️ 文本转语音 (TTS)")
         tabs_widget.addTab(sfx_group, "🎵 音效生成 (SFX)")
-        tabs_widget.addTab(xml_group, "⚙️ XML 样式设置")
 
         main_layout.addWidget(tabs_widget)
 
@@ -639,12 +969,56 @@ class ElevenLabsWidget(QWidget):
             return
 
         self.set_ui_busy(True, "生成中...")
-        self.tts_worker = TTSWorker(api_key=api_key, voice_id=voice_id, text=text, save_path=save_path, 
-                                    output_format=output_format, translate=translate, word_level=word_level, export_xml=export_xml, words_per_line=words_per_line,
-                                    xml_style_settings=self.xml_styles, video_settings=self.video_settings, keyword_highlight=keyword_highlight)
+        self.tts_worker = TTSWorker(
+            api_key=api_key, 
+            voice_id=voice_id, 
+            text=text, 
+            save_path=save_path, 
+            output_format=output_format, 
+            translate=translate, 
+            word_level=word_level, 
+            export_xml=export_xml, 
+            words_per_line=words_per_line,
+            groq_api_key=self.groq_settings.get('api_key'),
+            groq_model=self.groq_settings.get('model'),
+            xml_style_settings=self.xml_styles, 
+            video_settings=self.video_settings, 
+            keyword_highlight=keyword_highlight,
+            voice_settings=self.voice_settings
+        )
         self.tts_worker.finished.connect(self.on_generation_success)
         self.tts_worker.error.connect(self.on_error)
         self.tts_worker.start()
+    
+    def open_voice_settings(self):
+        """打开语音设定对话框"""
+        dialog = VoiceSettingsDialog(self)
+        dialog.set_settings(self.voice_settings)
+        
+        if dialog.exec() == QDialog.Accepted:
+            # 更新语音设定
+            self.voice_settings = dialog.get_settings()
+            logger.info(f"语音设定已更新: {self.voice_settings}")
+    
+    def open_subtitle_settings(self):
+        """打开字幕设置对话框"""
+        self.active_subtitle_dialog = SubtitleSettingsDialog(
+            self,
+            xml_styles=self.xml_styles,
+            video_settings=self.video_settings,
+            groq_settings=self.groq_settings
+        )
+        
+        if self.active_subtitle_dialog.exec() == QDialog.Accepted:
+            # 更新 Groq 设定
+            self.groq_settings = self.active_subtitle_dialog.get_groq_settings()
+            logger.info(f"Groq 设定已更新: {self.groq_settings}")
+            
+            # 更新视频设定
+            self.video_settings = self.active_subtitle_dialog.get_video_settings()
+            logger.info(f"视频设定已更新: {self.active_subtitle_dialog.get_video_settings()}")
+        
+        self.active_subtitle_dialog = None
 
     def generate_sfx_audio(self):
         cfg = load_project_config().get('elevenlabs', {})
@@ -821,7 +1195,7 @@ class ElevenLabsWidget(QWidget):
         font_layout.addWidget(QLabel("样式:"), 2, 0)
         font_layout.addLayout(style_layout, 2, 1, 1, 3)
         
-        # 对齐 & 行距 & Y轴
+        # 对齐 & Y轴位置
         align_combo = QComboBox()
         align_combo.addItems(['left', 'center', 'right'])
         align_combo.setCurrentText(self.xml_styles[style_type]['alignment'])
@@ -831,31 +1205,26 @@ class ElevenLabsWidget(QWidget):
         font_layout.addWidget(QLabel("对齐:"), 3, 0)
         font_layout.addWidget(align_combo, 3, 1)
         
-        line_spacing_spin = QSpinBox()
-        line_spacing_spin.setRange(0, 50)
-        line_spacing_spin.setValue(self.xml_styles[style_type]['lineSpacing'])
-        line_spacing_spin.valueChanged.connect(
-            lambda val: self.update_style(style_type, 'lineSpacing', val)
-        )
-        font_layout.addWidget(QLabel("行距:"), 3, 2)
-        font_layout.addWidget(line_spacing_spin, 3, 3)
-        
         pos_spin = QSpinBox()
-        pos_spin.setRange(-500, 500)
+        pos_spin.setRange(-1000, 1000)
         pos_spin.setValue(self.xml_styles[style_type]['pos'])
+        pos_spin.setToolTip("Y轴位置 (向上为负，向下为正)")
         pos_spin.valueChanged.connect(
             lambda val: self.update_style(style_type, 'pos', val)
         )
-        font_layout.addWidget(QLabel("Y轴:"), 4, 0)
-        font_layout.addWidget(pos_spin, 4, 1)
+        font_layout.addWidget(QLabel("Y轴位置:"), 3, 2)
+        font_layout.addWidget(pos_spin, 3, 3)
         
         main_layout.addWidget(font_group)
         
-        # --- 2. 描边设置 ---
-        stroke_group = QGroupBox("描边")
-        stroke_layout = QHBoxLayout(stroke_group)
+        # --- 2. 效果设置 (描边 + 阴影) ---
+        effect_group = QGroupBox("效果设置 (描边 & 阴影)")
+        effect_layout = QVBoxLayout(effect_group)
+        effect_layout.setSpacing(10)
         
-        stroke_chk = QCheckBox("启用")
+        # 描边行
+        stroke_layout = QHBoxLayout()
+        stroke_chk = QCheckBox("描边")
         stroke_chk.setChecked(self.xml_styles[style_type].get('useStroke', False))
         stroke_chk.toggled.connect(
             lambda checked: self.update_style(style_type, 'useStroke', checked)
@@ -866,18 +1235,17 @@ class ElevenLabsWidget(QWidget):
         stroke_width_spin.setRange(0, 20)
         stroke_width_spin.setValue(self.xml_styles[style_type]['strokeWidth'])
         stroke_width_spin.setSingleStep(0.5)
-        stroke_width_spin.setToolTip("描边宽度")
         stroke_width_spin.setSuffix(" px")
         stroke_width_spin.valueChanged.connect(
             lambda val: self.update_style(style_type, 'strokeWidth', val)
         )
         stroke_chk.toggled.connect(stroke_width_spin.setEnabled)
         stroke_width_spin.setEnabled(stroke_chk.isChecked())
-        stroke_layout.addWidget(QLabel("宽度:"))
         stroke_layout.addWidget(stroke_width_spin)
         
         stroke_color_btn = QPushButton()
         stroke_color_btn.setToolTip("描边颜色")
+        stroke_color_btn.setFixedWidth(40)
         self.set_button_color(stroke_color_btn, self.xml_styles[style_type]['strokeColor'])
         stroke_color_btn.clicked.connect(
             lambda: self.pick_color(style_type, 'strokeColor', stroke_color_btn)
@@ -887,34 +1255,20 @@ class ElevenLabsWidget(QWidget):
         stroke_layout.addWidget(stroke_color_btn)
         stroke_layout.addStretch()
         
-        main_layout.addWidget(stroke_group)
-        
-        # --- 3. 阴影设置 ---
-        shadow_group = QGroupBox("阴影")
-        shadow_layout = QHBoxLayout(shadow_group)
-        
-        shadow_chk = QCheckBox("启用")
+        # 阴影行
+        shadow_layout = QHBoxLayout()
+        shadow_chk = QCheckBox("阴影")
         shadow_chk.setChecked(self.xml_styles[style_type].get('useShadow', False))
         shadow_chk.toggled.connect(
             lambda checked: self.update_style(style_type, 'useShadow', checked)
         )
         shadow_layout.addWidget(shadow_chk)
         
-        shadow_color_btn = QPushButton()
-        shadow_color_btn.setToolTip("阴影颜色")
-        self.set_button_color(shadow_color_btn, self.xml_styles[style_type]['shadowColor'])
-        shadow_color_btn.clicked.connect(
-            lambda: self.pick_color(style_type, 'shadowColor', shadow_color_btn)
-        )
-        shadow_chk.toggled.connect(shadow_color_btn.setEnabled)
-        shadow_color_btn.setEnabled(shadow_chk.isChecked())
-        shadow_layout.addWidget(shadow_color_btn)
-        
         shadow_x = QSpinBox()
         shadow_x.setRange(-50, 50)
         shadow_x.setValue(self.xml_styles[style_type]['shadowOffset'][0])
-        shadow_x.setToolTip("阴影 X 偏移")
-        shadow_x.setPrefix("X: ")
+        shadow_x.setPrefix("X:")
+        shadow_x.setFixedWidth(60)
         shadow_x.valueChanged.connect(
             lambda val: self.update_shadow_offset(style_type, val, None)
         )
@@ -925,53 +1279,33 @@ class ElevenLabsWidget(QWidget):
         shadow_y = QSpinBox()
         shadow_y.setRange(-50, 50)
         shadow_y.setValue(self.xml_styles[style_type]['shadowOffset'][1])
-        shadow_y.setToolTip("阴影 Y 偏移")
-        shadow_y.setPrefix("Y: ")
+        shadow_y.setPrefix("Y:")
+        shadow_y.setFixedWidth(60)
         shadow_y.valueChanged.connect(
             lambda val: self.update_shadow_offset(style_type, None, val)
         )
         shadow_chk.toggled.connect(shadow_y.setEnabled)
         shadow_y.setEnabled(shadow_chk.isChecked())
         shadow_layout.addWidget(shadow_y)
+        
+        shadow_color_btn = QPushButton()
+        shadow_color_btn.setToolTip("阴影颜色")
+        shadow_color_btn.setFixedWidth(40)
+        self.set_button_color(shadow_color_btn, self.xml_styles[style_type]['shadowColor'])
+        shadow_color_btn.clicked.connect(
+            lambda: self.pick_color(style_type, 'shadowColor', shadow_color_btn)
+        )
+        shadow_chk.toggled.connect(shadow_color_btn.setEnabled)
+        shadow_color_btn.setEnabled(shadow_chk.isChecked())
+        shadow_layout.addWidget(shadow_color_btn)
         shadow_layout.addStretch()
         
-        main_layout.addWidget(shadow_group)
+        effect_layout.addLayout(stroke_layout)
+        effect_layout.addLayout(shadow_layout)
+        main_layout.addWidget(effect_group)
         
-        # --- 4. 背景设置 ---
-        bg_group = QGroupBox("背景")
-        bg_layout = QHBoxLayout(bg_group)
-        
-        bg_chk = QCheckBox("启用")
-        bg_chk.setChecked(self.xml_styles[style_type].get('useBackground', False))
-        bg_chk.toggled.connect(
-            lambda checked: self.update_style(style_type, 'useBackground', checked)
-        )
-        bg_layout.addWidget(bg_chk)
-        
-        bg_color_btn = QPushButton()
-        bg_color_btn.setToolTip("背景颜色")
-        self.set_button_color(bg_color_btn, self.xml_styles[style_type]['backgroundColor'])
-        bg_color_btn.clicked.connect(
-            lambda: self.pick_color(style_type, 'backgroundColor', bg_color_btn)
-        )
-        bg_chk.toggled.connect(bg_color_btn.setEnabled)
-        bg_color_btn.setEnabled(bg_chk.isChecked())
-        bg_layout.addWidget(bg_color_btn)
-        
-        bg_padding_spin = QSpinBox()
-        bg_padding_spin.setRange(0, 100)
-        bg_padding_spin.setValue(self.xml_styles[style_type]['backgroundPadding'])
-        bg_padding_spin.setToolTip("背景内边距")
-        bg_padding_spin.setPrefix("边距: ")
-        bg_padding_spin.valueChanged.connect(
-            lambda val: self.update_style(style_type, 'backgroundPadding', val)
-        )
-        bg_chk.toggled.connect(bg_padding_spin.setEnabled)
-        bg_padding_spin.setEnabled(bg_chk.isChecked())
-        bg_layout.addWidget(bg_padding_spin)
-        bg_layout.addStretch()
-        
-        main_layout.addWidget(bg_group)
+        main_layout.addStretch()
+        return widget
         
         main_layout.addStretch()
         
@@ -1049,15 +1383,24 @@ class ElevenLabsWidget(QWidget):
         # 重新触发一次分辨率选择逻辑以应用翻转
         self.on_resolution_preset_changed(self.combo_res.currentIndex())
 
-    def update_preview(self):
-        """更新预览窗口"""
-        current_tab = self.style_tabs.currentIndex()
-        if current_tab == 0:
-            style_type = 'source'
-        elif current_tab == 1:
-            style_type = 'translate'
-        else:
-            style_type = 'highlight'
+    def update_preview(self):  
+        """更新预览窗口 - 支持对话框和主窗口"""
+        # 如果对话框打开，更新对话框内的预览
+        if hasattr(self, 'active_subtitle_dialog') and self.active_subtitle_dialog and self.active_subtitle_dialog.isVisible():
+            dialog = self.active_subtitle_dialog
+            current_tab = dialog.tabs.currentIndex()
+            # Tab 0 是常规设置，1-3 是样式设置
+            if 1 <= current_tab <= 3:
+                style_types = ['source', 'translate', 'highlight']
+                style_type = style_types[current_tab - 1]
+                if style_type in self.xml_styles:
+                    dialog.dialog_preview_label.update_style(self.xml_styles[style_type])
+            return
+
+        # 否则更新主界面的预览
+        if not hasattr(self, 'preview_label') or not self.preview_label:
+            return
         
-        # 将当前样式数据传递给自定义 Label
-        self.preview_label.update_style(self.xml_styles[style_type])
+        style_type = 'source'  # 默认使用原文样式
+        if style_type in self.xml_styles:
+            self.preview_label.update_style(self.xml_styles[style_type])

@@ -49,7 +49,7 @@ class TTSWorker(QThread):
     finished = Signal(str)  # 返回保存的文件路径
     error = Signal(str)
 
-    def __init__(self, api_key=None, voice_id=None, text=None, save_path=None, output_format=None, translate=False, word_level=False, export_xml=False, words_per_line=1, groq_api_key=None, groq_model=None, xml_style_settings=None, video_settings=None, keyword_highlight=False):
+    def __init__(self, api_key=None, voice_id=None, text=None, save_path=None, output_format=None, translate=False, word_level=False, export_xml=False, words_per_line=1, groq_api_key=None, groq_model=None, xml_style_settings=None, video_settings=None, keyword_highlight=False, voice_settings=None):
         super().__init__()
         cfg = load_project_config().get('elevenlabs', {})
         self.api_key = api_key or cfg.get('api_key') or os.getenv("ELEVENLABS_API_KEY", "")
@@ -67,6 +67,14 @@ class TTSWorker(QThread):
         self.xml_style_settings = xml_style_settings
         self.video_settings = video_settings if video_settings else {}
         self.keyword_highlight = keyword_highlight
+        # Use provided voice settings or defaults
+        self.voice_settings = voice_settings if voice_settings else {
+            'stability': 0.5,
+            'similarity_boost': 0.75,
+            'style': 0,
+            'use_speaker_boost': True,
+            'speed': 1.0
+        }
 
     def run(self):
         json_cache_path = os.path.splitext(self.save_path)[0] + ".json"
@@ -92,7 +100,13 @@ class TTSWorker(QThread):
         data = {
             "text": self.text,
             "model_id": "eleven_multilingual_v2",
-            "voice_settings": {"stability": 0.5, "similarity_boost": 0.75},
+            "voice_settings": {
+                "stability": self.voice_settings.get('stability', 0.5),
+                "similarity_boost": self.voice_settings.get('similarity_boost', 0.75),
+                "style": self.voice_settings.get('style', 0),
+                "use_speaker_boost": self.voice_settings.get('use_speaker_boost', True),
+                "speed": self.voice_settings.get('speed', 1.0)
+            },
             "output_format": self.output_format
         }
 
