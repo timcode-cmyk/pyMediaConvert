@@ -175,7 +175,10 @@ class TTSWorker(QThread):
                     if not chars or not starts or not ends:
                         logger.warning("alignment 数据不完整，跳过字幕生成。")
                     else:
-                        cfg = load_project_config().get('elevenlabs', {})
+                        cfg = load_project_config().get('elevenlabs', {}).copy()
+                        # 使用 UI 传入的视频设置覆盖配置文件的默认值 (包含断行阈值、每行最大字符等)
+                        if self.video_settings:
+                            cfg.update(self.video_settings)
                         
                         # 2.1 生成标准字幕（始终）
                         builder = SubtitleSegmentBuilder(config=cfg)

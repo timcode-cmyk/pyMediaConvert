@@ -272,7 +272,7 @@ class SubtitleSettingsDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("字幕设置")
         self.setModal(True)
-        self.setMinimumSize(700, 600)
+        self.setMinimumSize(700, 700)  # 增加高度以防止内容被压缩
         
         self.parent_widget = parent
         self.xml_styles = xml_styles or {}
@@ -304,26 +304,37 @@ class SubtitleSettingsDialog(QDialog):
         
         # Tab 2-4: XML 样式设置 (从父控件获取)
         if self.parent_widget and hasattr(self.parent_widget, 'create_style_settings_panel'):
-            source_tab = self.parent_widget.create_style_settings_panel('source')
+            # 为每个样式面板增加滚动区域，防止被压缩切字
+            def wrap_with_scroll(widget):
+                scroll = QScrollArea()
+                scroll.setWidgetResizable(True)
+                scroll.setFrameShape(QFrame.NoFrame)
+                scroll.setWidget(widget)
+                return scroll
+
+            source_tab = wrap_with_scroll(self.parent_widget.create_style_settings_panel('source'))
             self.tabs.addTab(source_tab, "原文样式")
             
-            trans_tab = self.parent_widget.create_style_settings_panel('translate')
+            trans_tab = wrap_with_scroll(self.parent_widget.create_style_settings_panel('translate'))
             self.tabs.addTab(trans_tab, "翻译样式")
             
-            highlight_tab = self.parent_widget.create_style_settings_panel('highlight')
+            highlight_tab = wrap_with_scroll(self.parent_widget.create_style_settings_panel('highlight'))
             self.tabs.addTab(highlight_tab, "高亮样式")
         
         self.tabs.setCurrentIndex(0)
-        self.tabs.currentChanged.connect(lambda: self.parent_widget.update_preview() if self.parent_widget else None)
+        self.tabs.currentChanged.connect(self.on_tab_changed)
         
         layout.addWidget(self.tabs)
         
         # 预览面板 (创建新的预览标签，避免Qt对象生命周期问题)
-        preview_group = QGroupBox("样式预览")
-        preview_layout = QVBoxLayout(preview_group)
+        self.preview_group = QGroupBox("样式预览")
+        preview_layout = QVBoxLayout(self.preview_group)
         self.dialog_preview_label = SubtitlePreviewLabel()
         preview_layout.addWidget(self.dialog_preview_label)
-        layout.addWidget(preview_group)
+        layout.addWidget(self.preview_group)
+        
+        # 初始可见性设置
+        self.on_tab_changed(self.tabs.currentIndex())
         
         # 如果父控件有预览更新方法，连接样式变化事件
         if self.parent_widget and hasattr(self.parent_widget, 'update_preview'):
@@ -341,6 +352,16 @@ class SubtitleSettingsDialog(QDialog):
         button_box.accepted.connect(self.accept)
         button_box.rejected.connect(self.reject)
         layout.addWidget(button_box)
+
+    def on_tab_changed(self, index):
+        """当标签页切换时更新预览显示"""
+        if hasattr(self, 'preview_group'):
+            # 只有切换到样式设置页 (1, 2, 3) 时显示预览，常规设置 (0) 隐藏
+            self.preview_group.setVisible(index > 0)
+        
+        # 触发父窗口的整体预览更新逻辑
+        if self.parent_widget and hasattr(self.parent_widget, 'update_preview'):
+            self.parent_widget.update_preview()
     
     def create_general_settings_tab(self):
         """创建常规设置标签页 (Groq + 视频)"""
@@ -433,11 +454,82 @@ class SubtitleSettingsDialog(QDialog):
         video_layout.addWidget(self.chk_vertical, 2, 0, 1, 2)
         
         scroll_layout.addWidget(video_group)
+
+        # --- 3. 字幕切分规则 ---
+        split_group = QGroupBox("字幕切分规则")
+        split_layout = QVBoxLayout(split_group)
+        split_layout.setSpacing(12)
+        
+        # 断行阈值
+        pause_item_layout = QVBoxLayout()
+        pause_head_layout = QHBoxLayout()
+        pause_head_layout.addWidget(QLabel("<b>断行阈值 (停顿时间)</b>"))
+        pause_head_layout.addStretch()
+        self.lbl_pause_val = QLabel(f"{self.video_settings.get('srt_pause_threshold', 0.2):.2f}s")
+        self.lbl_pause_val.setStyleSheet("color: #3b82f6; font-weight: bold;")
+        pause_head_layout.addWidget(self.lbl_pause_val)
+        pause_item_layout.addLayout(pause_head_layout)
+        
+        pause_slider_layout = QHBoxLayout()
+        self.pause_slider = QSlider(Qt.Horizontal)
+        self.pause_slider.setRange(0, 100)
+        self.pause_slider.setValue(int(self.video_settings.get('srt_pause_threshold', 0.2) * 100))
+        pause_slider_layout.addWidget(self.pause_slider)
+        pause_item_layout.addLayout(pause_slider_layout)
+        
+        pause_info = QLabel("说明: 词间停顿超过此阈值即触发换行")
+        pause_info.setStyleSheet("color: palette(mid); font-size: 9pt;")
+        pause_item_layout.addWidget(pause_info)
+        split_layout.addLayout(pause_item_layout)
+        
+        # 分隔线
+        line = QFrame()
+        line.setFrameShape(QFrame.HLine)
+        line.setFrameShadow(QFrame.Sunken)
+        line.setStyleSheet("background-color: palette(midlight);")
+        split_layout.addWidget(line)
+        
+        # 最大字符数
+        max_chars_item_layout = QVBoxLayout()
+        max_chars_head_layout = QHBoxLayout()
+        max_chars_head_layout.addWidget(QLabel("<b>每行最大字符数</b>"))
+        max_chars_head_layout.addStretch()
+        self.lbl_max_chars_val = QLabel(str(self.video_settings.get('srt_max_chars', 35)))
+        self.lbl_max_chars_val.setStyleSheet("color: #3b82f6; font-weight: bold;")
+        max_chars_head_layout.addWidget(self.lbl_max_chars_val)
+        max_chars_item_layout.addLayout(max_chars_head_layout)
+        
+        max_chars_slider_layout = QHBoxLayout()
+        self.max_chars_slider = QSlider(Qt.Horizontal)
+        self.max_chars_slider.setRange(20, 50)
+        self.max_chars_slider.setValue(int(self.video_settings.get('srt_max_chars', 35)))
+        max_chars_slider_layout.addWidget(self.max_chars_slider)
+        max_chars_item_layout.addLayout(max_chars_slider_layout)
+        
+        max_chars_info = QLabel("说明: 单行超过此长度将尝试换行")
+        max_chars_info.setStyleSheet("color: palette(mid); font-size: 9pt;")
+        max_chars_item_layout.addWidget(max_chars_info)
+        split_layout.addLayout(max_chars_item_layout)
+        
+        self.pause_slider.valueChanged.connect(self.on_pause_changed)
+        self.max_chars_slider.valueChanged.connect(self.on_max_chars_changed)
+        
+        scroll_layout.addWidget(split_group)
+        
         scroll_layout.addStretch()
         
         scroll.setWidget(scroll_content)
         layout.addWidget(scroll)
         return widget
+
+    def on_pause_changed(self, value):
+        """断行阈值数值变化回调"""
+        duration = value / 100.0
+        self.lbl_pause_val.setText(f"{duration:.2f}s")
+
+    def on_max_chars_changed(self, value):
+        """最大字符数变化回调"""
+        self.lbl_max_chars_val.setText(str(value))
     
     def load_groq_settings(self):
         """从 QSettings 加载 Groq 配置"""
@@ -484,7 +576,9 @@ class SubtitleSettingsDialog(QDialog):
         return {
             'fps': int(self.combo_fps.currentText()),
             'width': width,
-            'height': height
+            'height': height,
+            'srt_pause_threshold': self.pause_slider.value() / 100.0,
+            'srt_max_chars': self.max_chars_slider.value()
         }
 
 class ElevenLabsWidget(QWidget):
@@ -561,6 +655,8 @@ class ElevenLabsWidget(QWidget):
             'fps': 30,
             'width': 1080,
             'height': 1920,
+            'srt_pause_threshold': 0.2,  # 停顿阈值
+            'srt_max_chars': 35,         # 单行最大字符数
         }
         
         # 语音设定 (默认值)
