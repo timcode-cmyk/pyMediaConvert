@@ -8,6 +8,7 @@ TranslationManager：翻译服务管理器
 - 记录翻译日志和缓存
 """
 
+import os
 import time
 import requests
 from ..logging_config import get_logger
@@ -78,9 +79,6 @@ class TranslationManager:
         if not segments:
             return segments
 
-        if not segments:
-            return segments
-
         logger.info(f"正在进行智能分批处理: {len(segments)} 个片段 (模型: {self.model})")
 
         translated_segments = []
@@ -109,13 +107,14 @@ class TranslationManager:
         """
         批量翻译文本列表
         """
-        combined_text = "\n---\n".join(texts)
+        separator = "###SEG_SEP###"
+        combined_text = f"\n{separator}\n".join(texts)
         
         system_prompt = (
             "You are a professional translator specializing in video subtitles. "
-            "Translate the following segments separated by '---\\n' into Simplified Chinese. "
+            f"Translate the following segments separated by '{separator}' into Simplified Chinese. "
             "Maintain the exact number of segments. "
-            "Output the translation for each segment separated by the same separator '---\\n'. "
+            f"Output the translation for each segment separated by the same separator '{separator}'. "
             "Output ONLY the translated segments, no preamble or extra text."
         )
 
@@ -125,14 +124,16 @@ class TranslationManager:
                 return [None] * len(texts)
             
             # Split by separator and clean up
-            translated_lines = [line.strip() for line in result_raw.split("---")]
+            translated_lines = [line.strip() for line in result_raw.split(separator)]
             
-            # Remove empty strings if the model added trailing separators
-            translated_lines = [l for l in translated_lines if l]
-
+            # If the model added a trailing separator, the last element might be empty.
+            # We only remove it if we have more lines than expected.
+            if len(translated_lines) > len(texts) and not translated_lines[-1]:
+                translated_lines.pop()
+            
+            # If we still have a mismatch, log it
             if len(translated_lines) != len(texts):
                 logger.warning(f"翻译数量不匹配: 期望 {len(texts)}, 实际 {len(translated_lines)}")
-                # Try to fix if it's just off by one due to splitting logic
                 if len(translated_lines) > len(texts):
                     translated_lines = translated_lines[:len(texts)]
                 else:

@@ -1,3 +1,4 @@
+import time
 import requests
 import json
 import re
@@ -37,36 +38,49 @@ def extract_keywords(text, api_key, model="openai/gpt-oss-120b"):
         "response_format": {"type": "json_object"} 
     }
 
-    try:
-        response = requests.post(url, headers=headers, json=data, timeout=30)
-        if response.status_code == 200:
-            res_json = response.json()
-            content = res_json['choices'][0]['message']['content']
-            
-            # Attempt to parse JSON
-            try:
-                # Some models might wrap it in a key, but we asked for array. 
-                # Let's try to find a list pattern if direct parse fails or if it returns an object.
-                parsed = json.loads(content)
+    retry_count = 0
+    max_retries = 3
+    backoff_delay = 5
+
+    while retry_count <= max_retries:
+        try:
+            response = requests.post(url, headers=headers, json=data, timeout=30)
+            if response.status_code == 200:
+                res_json = response.json()
+                content = res_json['choices'][0]['message']['content']
                 
-                if isinstance(parsed, list):
-                    return parsed
-                elif isinstance(parsed, dict):
-                    # If it returns {"keywords": [...]}, try to extract
-                    for key in parsed:
-                        if isinstance(parsed[key], list):
-                            return parsed[key]
-                    return []
-                else:
-                    return []
-            except json.JSONDecodeError:
-                # Fallback Regex extraction if JSON is malformed
-                matches = re.findall(r'"([^"]+)"', content)
-                return matches
-        else:
-            error_msg = f"Groq API Error ({response.status_code}): {response.text}"
-            logger.error(error_msg)
-            raise Exception(error_msg)
-    except Exception as e:
-        logger.error(f"Groq Analysis Exception: {e}")
-        raise e
+                # Attempt to parse JSON
+                try:
+                    parsed = json.loads(content)
+                    if isinstance(parsed, list):
+                        return parsed
+                    elif isinstance(parsed, dict):
+                        for key in parsed:
+                            if isinstance(parsed[key], list):
+                                return parsed[key]
+                        return []
+                    else:
+                        return []
+                except json.JSONDecodeError:
+                    matches = re.findall(r'"([^"]+)"', content)
+                    return matches
+            elif response.status_code == 429:
+                retry_count += 1
+                if retry_count > max_retries:
+                    logger.error("Groq Analysis: Max retries reached for 429 error")
+                    break
+                wait_time = backoff_delay * (2 ** (retry_count - 1))
+                logger.warning(f"Groq Analysis: Rate limit (429). Retrying in {wait_time}s ({retry_count}/{max_retries})...")
+                time.sleep(wait_time)
+            else:
+                error_msg = f"Groq API Error ({response.status_code}): {response.text}"
+                logger.error(error_msg)
+                raise Exception(error_msg)
+        except Exception as e:
+            logger.error(f"Groq Analysis Exception: {e}")
+            retry_count += 1
+            if retry_count > max_retries:
+                raise e
+            time.sleep(2)
+    
+    return []
