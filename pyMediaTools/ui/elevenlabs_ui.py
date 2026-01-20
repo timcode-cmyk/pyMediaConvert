@@ -809,7 +809,7 @@ class ElevenLabsWidget(QWidget):
         self.lbl_words_per_line.setEnabled(False)
 
         self.chk_export_xml = QCheckBox("导出 XML (DaVinci/FCP)")
-        self.chk_keyword_highlight = QCheckBox("智能高亮关键词 (Groq)")
+        self.chk_keyword_highlight = QCheckBox("高亮关键词")
         # Make highlight dependent on XML export
         self.chk_keyword_highlight.setEnabled(False)
         self.chk_export_xml.toggled.connect(self.chk_keyword_highlight.setEnabled)
