@@ -666,3 +666,29 @@ class WavConverter(MediaConverter):
         ]
         name = input_path.name # 确保获取到文件名
         self.process_ffmpeg(cmd, duration, monitor, name)
+
+class VideoTooboxConverter(MediaConverter):
+    """
+    使用 VideoToolbox 转码 (仅限 macOS)
+    """
+
+    def __init__(self, params: dict, support_exts=None, output_ext: str = None, init_checks: bool = True):
+        super().__init__(support_exts, output_ext, init_checks=init_checks)
+
+    def process_file(self, input_path: Path, output_path: Path, duration: float, monitor=None):
+        output_file_name = f"{output_path}{self.output_ext}"
+        cmd = [
+            "ffmpeg", "-y", "-hide_banner", "-nostats", "-loglevel", "error",
+            "-hwaccel", "auto",
+            "-i", str(input_path),
+            "-c:v", "h264_videotoolbox",
+            "-vf", "scale=1920:-2",
+            "-b:v", "2M",
+            "-maxrate", "3M",
+            "-bufsize", "6M",
+            "-preset", "fast",
+            "-c:a", "copy", "-movflags", "+faststart",
+            output_file_name
+        ]
+        name = input_path.name # 确保获取到文件名
+        self.process_ffmpeg(cmd, duration, monitor, name)

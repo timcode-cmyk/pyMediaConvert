@@ -150,6 +150,16 @@ support_exts = [".mp3", ".wav", ".flac", ".ogg", ".mpeg", ".m4a", ".aiff", ".mp4
 
 [modes.wav.params]
 
+[modes.videotoolbox]
+class = "VideoTooboxConverter"
+description = "14. 使用 VideoToolbox 转码为 H.264 (Mac 专用)"
+output_ext = "_vtb.mp4"
+support_exts = [".mov", ".avi", ".mkv", ".mp4", ".webm"]
+
+[modes.videotoolbox.params]
+
+
+
 # ElevenLabs 配置
 
 [elevenlabs]

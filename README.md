@@ -102,9 +102,13 @@ nuitka --standalone \
        --macos-create-app-bundle \
        --output-dir=dist-nuitka \
        --plugin-enable=pyside6 \
+       --nofollow-import-to=yt_dlp \
        --include-qt-plugins=multimedia,platforms,styles,imageformats \
        --include-package=pyMediaTools \
+       --include-module=optparse \
+       --include-module=asyncio \
        --include-data-dir=bin=bin \
+       --include-data-dir=yt_dlp=yt_dlp \
        --include-data-files=config.toml=config.toml \
        --include-data-dir=assets=assets \
        MediaTools.py
