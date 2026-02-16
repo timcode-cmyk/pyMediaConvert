@@ -26,6 +26,7 @@ from .mediaconvert import (
     PngConverter,
     Mp3Converter,
     WavConverter,
+    VideoTooboxConverter,
 )
 
 CLASS_MAP = {
@@ -36,6 +37,7 @@ CLASS_MAP = {
     'PngConverter': PngConverter,
     'Mp3Converter': Mp3Converter,
     'WavConverter': WavConverter,
+    'VideoTooboxConverter': VideoTooboxConverter,
 }
 
 

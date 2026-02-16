@@ -271,16 +271,111 @@ class YtDlpVersionManager:
         except Exception as e:
             logger.warning(f"保存备份元数据失败: {e}")
     
-    def get_latest_backup(self) -> Optional[str]:
-        """获取最新的备份目录"""
+    def _cleanup_old_backups(self, keep_latest: int = 3) -> int:
+        """
+        清理旧备份文件，只保留最新的N个
+        
+        Args:
+            keep_latest: 保留的最新备份数量，默认为3
+            
+        Returns:
+            清理的备份数量
+        """
         try:
-            backups = [d for d in os.listdir(self.backup_dir) 
-                      if d.startswith('yt_dlp_backup_')]
-            if backups:
-                return os.path.join(self.backup_dir, sorted(backups)[-1])
+            if not os.path.exists(self.backup_dir):
+                return 0
+            
+            # 列出所有备份目录
+            backups = []
+            for item in os.listdir(self.backup_dir):
+                if item.startswith('yt_dlp_backup_'):
+                    item_path = os.path.join(self.backup_dir, item)
+                    if os.path.isdir(item_path):
+                        # 获取修改时间作为排序键
+                        mtime = os.path.getmtime(item_path)
+                        backups.append((mtime, item, item_path))
+            
+            # 按时间排序，最新的在前
+            backups.sort(reverse=True)
+            
+            # 删除超出keep_latest的备份
+            deleted_count = 0
+            for _, backup_name, backup_path in backups[keep_latest:]:
+                try:
+                    shutil.rmtree(backup_path)
+                    logger.info(f"已删除旧备份: {backup_name}")
+                    deleted_count += 1
+                    
+                    # 从元数据中删除
+                    if os.path.exists(self.metadata_file):
+                        try:
+                            with open(self.metadata_file, 'r', encoding='utf-8') as f:
+                                metadata = json.load(f)
+                            if backup_name in metadata:
+                                del metadata[backup_name]
+                            with open(self.metadata_file, 'w', encoding='utf-8') as f:
+                                json.dump(metadata, f, indent=2, ensure_ascii=False)
+                        except Exception as e:
+                            logger.warning(f"删除备份元数据失败: {e}")
+                except Exception as e:
+                    logger.warning(f"删除备份失败 {backup_name}: {e}")
+            
+            if deleted_count > 0:
+                logger.info(f"清理完成，共删除 {deleted_count} 个旧备份")
+            
+            return deleted_count
+            
         except Exception as e:
-            logger.error(f"获取备份列表失败: {e}")
-        return None
+            logger.error(f"清理备份出错: {e}")
+            return 0
+    
+    def _is_yt_dlp_corrupted(self) -> bool:
+        """
+        检查yt_dlp源代码是否已损坏或不完整
+        
+        Returns:
+            True 表示损坏或不存在，False 表示正常
+        """
+        try:
+            # 检查目录是否存在
+            if not os.path.exists(self.yt_dlp_dir):
+                logger.warning(f"yt_dlp目录不存在: {self.yt_dlp_dir}")
+                return True
+            
+            # 检查关键文件是否存在
+            version_file = os.path.join(self.yt_dlp_dir, 'version.py')
+            main_file = os.path.join(self.yt_dlp_dir, '__init__.py')
+            
+            if not os.path.exists(version_file):
+                logger.warning(f"version.py 文件不存在")
+                return True
+            
+            if not os.path.exists(main_file):
+                logger.warning(f"__init__.py 文件不存在")
+                return True
+            
+            # 检查version.py是否可读
+            local_version = self.get_local_version()
+            if not local_version:
+                logger.warning(f"无法从version.py中读取版本信息")
+                return True
+            
+            logger.debug(f"yt_dlp源代码验证通过，版本: {local_version}")
+            return False
+            
+        except Exception as e:
+            logger.error(f"检查yt_dlp完整性出错: {e}")
+            return True
+
+        # """获取最新的备份目录"""
+        # try:
+        #     backups = [d for d in os.listdir(self.backup_dir) 
+        #               if d.startswith('yt_dlp_backup_')]
+        #     if backups:
+        #         return os.path.join(self.backup_dir, sorted(backups)[-1])
+        # except Exception as e:
+        #     logger.error(f"获取备份列表失败: {e}")
+        # return None
     
     def rollback(self, backup_path: Optional[str] = None) -> bool:
         """
@@ -364,11 +459,20 @@ class YtDlpUpdater(YtDlpVersionManager):
             if local_version and not VersionComparator.is_newer(remote_version, local_version):
                 return False, f"本地版本 {local_version} 已是最新"
             
-            # 备份当前版本
-            logger.info("正在备份当前版本...")
-            backup_path = self.backup_current()
-            if not backup_path:
-                return False, "备份失败，中止更新"
+            # 检查本地源码是否完整
+            is_corrupted = self._is_yt_dlp_corrupted()
+            backup_path = None
+            
+            if not is_corrupted:
+                # 本地源码完整，进行备份
+                logger.info("正在备份当前版本...")
+                backup_path = self.backup_current()
+                if not backup_path:
+                    logger.warning("备份失败，但将继续进行更新操作...")
+            else:
+                # 本地源码不存在或损坏，跳过备份
+                logger.warning("本地源码不存在或已损坏，将直接下载最新版本...")
+                backup_path = None
             
             logger.info(f"正在下载版本 {remote_version}...")
             
@@ -437,6 +541,10 @@ class YtDlpUpdater(YtDlpVersionManager):
                 os.remove(zip_path)
             logger.info(f"已清理临时文件")
             
+            # 更新成功，清理旧备份（只保留最新的3个）
+            logger.info("清理旧备份文件...")
+            self._cleanup_old_backups(keep_latest=3)
+            
             logger.info(f"更新成功，新版本: {remote_version}")
             return True, f"成功更新到版本 {remote_version}"
             
@@ -478,10 +586,20 @@ class YtDlpUpdater(YtDlpVersionManager):
             if local_version and not VersionComparator.is_newer(remote_version, local_version):
                 return False, f"本地版本 {local_version} 已是最新"
             
-            logger.info("正在备份当前版本...")
-            backup_path = self.backup_current()
-            if not backup_path:
-                return False, "备份失败，中止更新"
+            # 检查本地源码是否完整
+            is_corrupted = self._is_yt_dlp_corrupted()
+            backup_path = None
+            
+            if not is_corrupted:
+                # 本地源码完整，进行备份
+                logger.info("正在备份当前版本...")
+                backup_path = self.backup_current()
+                if not backup_path:
+                    logger.warning("备份失败，但将继续进行更新操作...")
+            else:
+                # 本地源码不存在或损坏，跳过备份
+                logger.warning("本地源码不存在或已损坏，将直接安装最新版本...")
+                backup_path = None
             
             logger.info(f"正在通过pip安装版本 {remote_version}...")
             
@@ -496,6 +614,10 @@ class YtDlpUpdater(YtDlpVersionManager):
                 logger.error(f"pip安装失败: {result.stderr}")
                 self.rollback(backup_path)
                 return False, f"pip安装失败: {result.stderr}"
+            
+            # 安装成功，清理旧备份（只保留最新的3个）
+            logger.info("清理旧备份文件...")
+            self._cleanup_old_backups(keep_latest=3)
             
             logger.info(f"更新成功，新版本: {remote_version}")
             return True, f"成功通过pip更新到版本 {remote_version}"
