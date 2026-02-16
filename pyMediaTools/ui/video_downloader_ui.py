@@ -1,10 +1,13 @@
 import os
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, 
                                QComboBox, QMessageBox, QProgressBar, QFileDialog, 
-                               QGroupBox, QTableWidget, QTableWidgetItem, QHeaderView, QCheckBox, QSpinBox)
+                               QGroupBox, QTableWidget, QTableWidgetItem, QHeaderView, QCheckBox, QSpinBox,
+                               QDialog, QTextEdit)
 from PySide6.QtCore import Qt
 
 from ..core.videodownloader import YtDlpInfoWorker, YtDlpDownloadWorker
+from ..core.ytdlp_updater import YtDlpVersionManager
+from ..core.ytdlp_update_worker import YtDlpCheckUpdateWorker, YtDlpUpdateWorker
 from .styles import apply_common_style
 
 class VideoDownloadWidget(QWidget):
@@ -12,11 +15,21 @@ class VideoDownloadWidget(QWidget):
         super().__init__()
         self.info_worker = None
         self.download_worker = None
+        self.check_update_worker = None
+        self.update_worker = None
         self.video_list_data = [] 
-        self.is_downloading = False 
+        self.is_downloading = False
+        
+        # yt-dlp 版本管理
+        self.version_manager = YtDlpVersionManager()
+        self.local_version = self.version_manager.get_local_version()
+        self.remote_version = None
         
         self.initUI()
         self.apply_styles()
+        
+        # 应用启动后自动检查更新
+        self.check_update_async()
 
     def apply_styles(self):
         # 使用统一样式表并保持局部可扩展性
@@ -27,7 +40,28 @@ class VideoDownloadWidget(QWidget):
         layout.setSpacing(15)
         layout.setContentsMargins(20, 20, 20, 20)
 
-        # 1. URL Area
+        # 0. 版本检查和更新区域
+        version_group = QGroupBox("yt-dlp 版本管理")
+        version_layout = QHBoxLayout(version_group)
+        
+        self.version_label = QLabel(f"本地版本: {self.local_version or '未知'}")
+        self.version_label.setObjectName("VersionLabel")
+        
+        self.btn_check_update = QPushButton("🔄 检查更新")
+        self.btn_check_update.setMaximumWidth(120)
+        self.btn_check_update.clicked.connect(self.check_update_async)
+        
+        self.btn_update = QPushButton("⬆️ 更新")
+        self.btn_update.setMaximumWidth(100)
+        self.btn_update.setEnabled(False)
+        self.btn_update.clicked.connect(self.start_update)
+        self.btn_update.setStyleSheet("background-color: #FFD700; font-weight: bold;")
+        
+        version_layout.addWidget(QLabel("yt-dlp 源代码版本:"))
+        version_layout.addWidget(self.version_label, 1)
+        version_layout.addWidget(self.btn_check_update)
+        version_layout.addWidget(self.btn_update)
+        layout.addWidget(version_group)
         url_group = QGroupBox("STEP 1: 视频链接解析")
         url_layout = QHBoxLayout(url_group)
         
@@ -342,3 +376,200 @@ class VideoDownloadWidget(QWidget):
                 self.table.item(ui_index, 3).setText("完成")
             else:
                 self.table.item(ui_index, 3).setText(f"{current_pct:.1f}%")
+
+    # ============ yt-dlp 版本管理相关方法 ============
+    
+    def check_update_async(self):
+        """异步检查yt-dlp更新"""
+        if self.check_update_worker is not None and self.check_update_worker.isRunning():
+            return
+        
+        self.btn_check_update.setEnabled(False)
+        self.btn_check_update.setText("检查中...")
+        
+        self.check_update_worker = YtDlpCheckUpdateWorker()
+        self.check_update_worker.version_checked.connect(self.on_version_checked)
+        self.check_update_worker.error.connect(self.on_check_update_error)
+        self.check_update_worker.start()
+    
+    def on_version_checked(self, info: dict):
+        """版本检查完成的回调"""
+        self.btn_check_update.setEnabled(True)
+        self.btn_check_update.setText("🔄 检查更新")
+        
+        try:
+            local = info.get('local_version')
+            remote = info.get('remote_version')
+            has_update = info.get('has_update', False)
+            
+            # 更新本地版本显示
+            if local:
+                self.local_version = local
+                self.version_label.setText(f"本地版本: {local}")
+            
+            if remote:
+                self.remote_version = remote
+            
+            if has_update and remote and local:
+                self.version_label.setText(f"本地版本: {local}  →  远程版本: {remote}")
+                self.btn_update.setEnabled(True)
+                
+                QMessageBox.information(
+                    self,
+                    "yt-dlp 更新可用",
+                    f"发现新版本: {remote}\n当前版本: {local}\n\n点击'更新'按钮开始更新。"
+                )
+            else:
+                self.btn_update.setEnabled(False)
+                if local == remote:
+                    self.version_label.setText(f"本地版本: {local} (已是最新)")
+                
+        except Exception as e:
+            self.on_check_update_error(f"处理版本信息失败: {str(e)}")
+    
+    def on_check_update_error(self, error_msg: str):
+        """版本检查错误的回调"""
+        self.btn_check_update.setEnabled(True)
+        self.btn_check_update.setText("🔄 检查更新")
+        
+        # 只显示警告，不影响用户操作
+        import logging
+        logging.warning(f"yt-dlp 版本检查失败: {error_msg}")
+    
+    def start_update(self):
+        """开始yt-dlp更新"""
+        if self.is_downloading:
+            QMessageBox.warning(self, "提示", "下载中，无法同时更新yt-dlp")
+            return
+        
+        if not self.remote_version:
+            QMessageBox.warning(self, "提示", "无法获取远程版本，请先检查更新")
+            return
+        
+        # 显示确认对话框
+        reply = QMessageBox.question(
+            self,
+            "确认更新",
+            f"确认更新yt-dlp?\n"
+            f"当前版本: {self.local_version}\n"
+            f"新版本: {self.remote_version}\n\n"
+            f"更新过程中将自动备份当前版本。",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        
+        if reply != QMessageBox.Yes:
+            return
+        
+        # 创建更新对话框
+        update_dialog = YtDlpUpdateDialog(self, self.remote_version)
+        
+        # 创建更新Worker
+        self.update_worker = YtDlpUpdateWorker(update_method='github')
+        self.update_worker.progress.connect(update_dialog.add_log)
+        self.update_worker.finished.connect(lambda info: self.on_update_finished(info, update_dialog))
+        self.update_worker.error.connect(lambda err: self.on_update_error(err, update_dialog))
+        
+        # 禁用相关按钮
+        self.btn_check_update.setEnabled(False)
+        self.btn_update.setEnabled(False)
+        self.btn_analyze.setEnabled(False)
+        self.btn_download.setEnabled(False)
+        
+        # 显示对话框并开始更新
+        update_dialog.show()
+        self.update_worker.start()
+    
+    def on_update_finished(self, info: dict, dialog):
+        """更新完成的回调"""
+        success = info.get('success', False)
+        message = info.get('message', '')
+        new_version = info.get('new_version')
+        
+        if success:
+            self.local_version = new_version
+            self.version_label.setText(f"本地版本: {new_version}")
+            self.btn_update.setEnabled(False)
+            
+            dialog.add_log(f"✅ {message}")
+            QMessageBox.information(
+                self,
+                "更新成功",
+                f"yt-dlp 已成功更新到版本 {new_version}\n\n"
+                "程序将继续使用新版本。"
+            )
+        else:
+            dialog.add_log(f"❌ {message}")
+            QMessageBox.warning(
+                self,
+                "更新失败",
+                f"更新过程中出现错误:\n{message}\n\n"
+                "已自动回滚到原版本。"
+            )
+        
+        # 重新启用按钮
+        self.btn_check_update.setEnabled(True)
+        self.btn_analyze.setEnabled(True)
+        self.btn_download.setEnabled(True)
+    
+    def on_update_error(self, error_msg: str, dialog):
+        """更新错误的回调"""
+        dialog.add_log(f"❌ 错误: {error_msg}")
+        
+        QMessageBox.critical(
+            self,
+            "更新失败",
+            f"yt-dlp 更新失败:\n{error_msg}"
+        )
+        
+        # 重新启用按钮
+        self.btn_check_update.setEnabled(True)
+        self.btn_analyze.setEnabled(True)
+        self.btn_download.setEnabled(True)
+
+
+class YtDlpUpdateDialog(QDialog):
+    """yt-dlp 更新进度对话框"""
+    
+    def __init__(self, parent, target_version: str):
+        super().__init__(parent)
+        self.setWindowTitle(f"更新yt-dlp到 {target_version}")
+        self.setGeometry(100, 100, 500, 300)
+        self.setModal(True)
+        
+        layout = QVBoxLayout(self)
+        
+        # 进度日志
+        self.log_text = QTextEdit()
+        self.log_text.setReadOnly(True)
+        self.log_text.setStyleSheet("""
+            QTextEdit {
+                background-color: #f5f5f5;
+                color: #333333;
+                font-family: 'Courier New', monospace;
+                font-size: 10pt;
+                padding: 5px;
+                border-radius: 3px;
+            }
+        """)
+        layout.addWidget(QLabel("更新日志:"), 0)
+        layout.addWidget(self.log_text, 1)
+        
+        # 关闭按钮
+        self.btn_close = QPushButton("关闭")
+        self.btn_close.setEnabled(False)
+        self.btn_close.clicked.connect(self.accept)
+        layout.addWidget(self.btn_close)
+        
+        self.add_log("开始更新过程...")
+    
+    def add_log(self, message: str):
+        """添加日志消息"""
+        self.log_text.append(message)
+        # 自动滚动到底部
+        self.log_text.verticalScrollBar().setValue(
+            self.log_text.verticalScrollBar().maximum()
+        )
+    
+    def finished(self):
+        """标记更新完成"""
+        self.btn_close.setEnabled(True)
