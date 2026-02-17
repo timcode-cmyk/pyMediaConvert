@@ -16,8 +16,60 @@ from ..logging_config import get_logger
 
 logger = get_logger(__name__)
 
+# ============================================================================
+# ElevenLabs API 常量定义 - 模型、语言、情绪支持
+# ============================================================================
+
+# 支持的模型列表 (最新版本，包含 V3)
+ELEVENLABS_MODELS = {
+
+}
+
+# 语言代码列表 (根据 ElevenLabs 官方支持)
+LANGUAGE_CODES = {
+
+}
+
+# 情绪标签列表
+EMOTION_OPTIONS = {
+    'neutral': {
+        'name': '中立',
+        'description': '理性、客观、标准播读风格',
+        'emoji': '😐',
+    },
+    'cheerful': {
+        'name': '欢快',
+        'description': '积极、开朗、充满能量',
+        'emoji': '😊',
+    },
+    'sad': {
+        'name': '悲伤',
+        'description': '低沉、忧伤、富有表现力',
+        'emoji': '😢',
+    },
+    'fearful': {
+        'name': '害怕',
+        'description': '紧张、不安、带有恐惧感',
+        'emoji': '😨',
+    },
+    'angry': {
+        'name': '愤怒',
+        'description': '严肃、坚定、充满力量',
+        'emoji': '😠',
+    },
+    'hopeful': {
+        'name': '希望',
+        'description': '期待、鼓励、积极向上',
+        'emoji': '🤗',
+    },
+}
+
 
 class QuotaWorker(QThread):
+    """
+    从 ElevenLabs API 获取额度信息
+    根据 API 文档: GET /v1/user
+    """
     quota_info = Signal(int, int)  # (usage, limit)
     error = Signal(str)
 
@@ -46,10 +98,17 @@ class QuotaWorker(QThread):
 
 
 class TTSWorker(QThread):
+    """
+    从 ElevenLabs API 生成语音
+    根据 API 文档: POST /v1/text-to-speech/{voice_id}/with-timestamps
+    """
     finished = Signal(str)  # 返回保存的文件路径
     error = Signal(str)
 
-    def __init__(self, api_key=None, voice_id=None, text=None, save_path=None, output_format=None, translate=False, word_level=False, export_xml=False, words_per_line=1, groq_api_key=None, groq_model=None, xml_style_settings=None, video_settings=None, keyword_highlight=False, voice_settings=None):
+    def __init__(self, api_key=None, voice_id=None, text=None, save_path=None, output_format=None, 
+                 translate=False, word_level=False, export_xml=False, words_per_line=1, 
+                 groq_api_key=None, groq_model=None, xml_style_settings=None, video_settings=None, 
+                 keyword_highlight=False, voice_settings=None, model_id=None, language_code=None, emotion=None):
         super().__init__()
         cfg = load_project_config().get('elevenlabs', {})
         self.api_key = api_key or cfg.get('api_key') or os.getenv("ELEVENLABS_API_KEY", "")
@@ -67,6 +126,12 @@ class TTSWorker(QThread):
         self.xml_style_settings = xml_style_settings
         self.video_settings = video_settings if video_settings else {}
         self.keyword_highlight = keyword_highlight
+        
+        # ⭐ 新增：模型、语言、情绪参数
+        self.model_id = model_id or cfg.get('default_model_id')
+        self.language_code = language_code or cfg.get('default_language_code')
+        self.emotion = emotion or cfg.get('default_emotion')
+        
         # Use provided voice settings or defaults
         self.voice_settings = voice_settings if voice_settings else {
             'stability': 0.5,
@@ -97,9 +162,11 @@ class TTSWorker(QThread):
             "Content-Type": "application/json",
             "xi-api-key": self.api_key
         }
+        
+        # 构建请求体 - 支持新的模型、语言、情绪参数
         data = {
             "text": self.text,
-            "model_id": "eleven_multilingual_v2",
+            "model_id": self.model_id,  # ⭐ 使用可配置的模型ID
             "voice_settings": {
                 "stability": self.voice_settings.get('stability', 0.5),
                 "similarity_boost": self.voice_settings.get('similarity_boost', 0.75),
@@ -109,6 +176,18 @@ class TTSWorker(QThread):
             },
             "output_format": self.output_format
         }
+        
+        # ⭐ 条件性添加语言代码（可选参数）
+        if self.language_code:
+            data["language_code"] = self.language_code
+            logger.info(f"使用语言代码: {self.language_code}")
+        
+        # ⭐ 条件性添加情绪标签（可选参数）
+        if self.emotion:
+            data["voice_settings"]["emotion"] = self.emotion
+            logger.info(f"使用情绪标签: {self.emotion}")
+        
+        logger.info(f"使用模型: {self.model_id}")
 
         try:
             response = requests.post(url, json=data, headers=headers, timeout=120)
@@ -283,6 +362,9 @@ class TTSWorker(QThread):
  
 
 class SFXWorker(QThread):
+    """从 ElevenLabs API 生成音效
+    根据 API 文档: POST /v1/sound-generation
+    """
     finished = Signal(str)
     error = Signal(str)
 
@@ -339,6 +421,69 @@ class SFXWorker(QThread):
                     self.error.emit(f"SFX 生成失败 ({response.status_code}): {resp_text}")
         except Exception as e:
             self.error.emit(str(e))
+
+
+# ============================================================================
+# ModelListWorker: 从 API 获取可用模型列表及其功能
+# ============================================================================
+class ModelListWorker(QThread):
+    """
+    从 ElevenLabs API 获取可用模型列表
+    根据 API 文档: GET /v1/models
+    """
+    finished = Signal(list)  # 发送 (model_id, model_info_dict) 元组列表
+    error = Signal(str)
+
+    def __init__(self, api_key=None):
+        super().__init__()
+        cfg = load_project_config().get('elevenlabs', {})
+        self.api_key = api_key or cfg.get('api_key') or os.getenv("ELEVENLABS_API_KEY", "")
+
+    def run(self):
+        url = "https://api.elevenlabs.io/v1/models"
+        headers = {
+            "xi-api-key": self.api_key,
+            "Accept": "application/json"
+        }
+        try:
+            response = requests.get(url, headers=headers, timeout=15)
+            if response.status_code == 200:
+                data = response.json()
+                models_list = []
+                
+                # 响应是一个数组
+                if isinstance(data, list):
+                    for model in data:
+                        model_id = model.get('model_id')
+                        if model_id:
+                            models_list.append({
+                                'model_id': model_id,
+                                'name': model.get('name', model_id),
+                                'description': model.get('description', ''),
+                                'can_do_text_to_speech': model.get('can_do_text_to_speech', False),
+                                'can_do_voice_conversion': model.get('can_do_voice_conversion', False),
+                                'can_use_style': model.get('can_use_style', False),
+                                'can_use_speaker_boost': model.get('can_use_speaker_boost', False),
+                                'serves_pro_voices': model.get('serves_pro_voices', False),
+                                'requires_alpha_access': model.get('requires_alpha_access', False),
+                                'token_cost_factor': model.get('token_cost_factor', 1.0),
+                                'maximum_text_length_per_request': model.get('maximum_text_length_per_request', 1000),
+                                'max_characters_request_free_user': model.get('max_characters_request_free_user'),
+                                'max_characters_request_subscribed_user': model.get('max_characters_request_subscribed_user'),
+                                'languages': model.get('languages', []),  # 列表
+                                'concurrency_group': model.get('concurrency_group', ''),
+                            })
+                
+                if not models_list:
+                    self.error.emit("未能从 API 响应中解析任何模型。")
+                    return
+                
+                logger.info(f"成功获取 {len(models_list)} 个模型")
+                self.finished.emit(models_list)
+            else:
+                self.error.emit(f"获取模型列表失败 ({response.status_code}): {response.text}")
+        except Exception as e:
+            self.error.emit(f"获取模型列表异常: {str(e)}")
 
 
 class VoiceListWorker(QThread):

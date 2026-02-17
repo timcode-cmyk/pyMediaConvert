@@ -1,20 +1,227 @@
 import os
 import datetime
 import uuid
+import re
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, 
                                QTextEdit, QComboBox, QMessageBox, QProgressBar, QFileDialog, QSlider,
                                QGroupBox, QSizePolicy, QSpinBox, QCheckBox, QTabWidget, QScrollArea, QFrame,
                                QFontComboBox, QColorDialog, QDoubleSpinBox, QGridLayout, QDialog, QDialogButtonBox)
-from PySide6.QtCore import Qt, QUrl, QSettings, QTimer, QSize, QRectF
-from PySide6.QtGui import QFont, QColor, QPainter, QPainterPath, QPen, QBrush, QFontMetrics
+from PySide6.QtCore import Qt, QUrl, QSettings, QTimer, QSize, QRectF, QMimeData
+from PySide6.QtGui import QFont, QColor, QPainter, QPainterPath, QPen, QBrush, QFontMetrics, QDrag
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 
-from ..core.elevenlabs import QuotaWorker, TTSWorker, SFXWorker, VoiceListWorker
+from ..core.elevenlabs import QuotaWorker, TTSWorker, SFXWorker, VoiceListWorker, ModelListWorker
 from ..utils import load_project_config
 from .styles import apply_common_style
 from ..logging_config import get_logger
 
 logger = get_logger(__name__)
+
+
+class EmotionTagButton(QPushButton):
+    """可拖动的情绪标签按钮"""
+    def __init__(self, emotion_key, emotion_info, parent=None):
+        super().__init__(parent)
+        self.emotion_key = emotion_key
+        self.emotion_info = emotion_info
+        self.setText(f"{emotion_info['emoji']} {emotion_info['name']}")
+        self.setToolTip(emotion_info['description'])
+        self.setCheckable(False)
+        self.setStyleSheet("""
+            QPushButton {
+                padding: 5px 10px;
+                border-radius: 4px;
+                background-color: #3498db;
+                color: white;
+                border: 1px solid #2980b9;
+                font-weight: bold;
+                font-size: 11px;
+            }
+            QPushButton:hover {
+                background-color: #2980b9;
+            }
+        """)
+    
+    def mouseMoveEvent(self, event):
+        """支持拖动"""
+        if event.buttons() == Qt.LeftButton:
+            drag = QDrag(self)
+            mime_data = QMimeData()
+            mime_data.setText(f"[{self.emotion_key}] ")
+            drag.setMimeData(mime_data)
+            drag.exec(Qt.CopyAction)
+
+
+class EmotionTagManager(QWidget):
+    """情绪标签管理器 - 用于v3模型的情绪标签管理"""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.text_edit = None  # 会在下面被设置
+        self.setup_ui()
+    
+    def setup_ui(self):
+        """设置UI"""
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+
+        # 第一行：自动插入按钮 + 分组按钮 (情绪 / 语气)
+        top_row = QHBoxLayout()
+        self.btn_auto_insert = QPushButton("自动插入情绪")
+        self.btn_auto_insert.setToolTip("分析文案，自动在合适位置插入情绪标签")
+        self.btn_auto_insert.clicked.connect(self.auto_insert_emotions)
+        top_row.addWidget(self.btn_auto_insert)
+
+        top_row.addStretch()
+
+        # 分组按钮
+        self.btn_group_emotion = QPushButton("情绪")
+        self.btn_group_tone = QPushButton("语气")
+        self.btn_group_emotion.setCheckable(True)
+        self.btn_group_tone.setCheckable(True)
+        self.btn_group_emotion.setChecked(True)
+        self.btn_group_emotion.clicked.connect(lambda: self.show_group('emotion'))
+        self.btn_group_tone.clicked.connect(lambda: self.show_group('tone'))
+        top_row.addWidget(self.btn_group_emotion)
+        top_row.addWidget(self.btn_group_tone)
+
+        layout.addLayout(top_row)
+
+        # 提示行
+        info_label = QLabel("💡 提示：点击或拖动下面的标签插入到文案中（示例: [happy]）")
+        info_label.setStyleSheet("color: #7f8c8d; font-size: 11px;")
+        layout.addWidget(info_label)
+
+        # 标签横向可滚动区域
+        self.scroll = QScrollArea()
+        self.scroll.setWidgetResizable(True)
+        self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.scroll.setFixedHeight(60)
+
+        scroll_content = QWidget()
+        self.tags_layout = QHBoxLayout(scroll_content)
+        self.tags_layout.setContentsMargins(6, 6, 6, 6)
+        self.tags_layout.setSpacing(6)
+
+        self.scroll.setWidget(scroll_content)
+        layout.addWidget(self.scroll)
+
+        # 内部数据：两个分组的标签（按照用户需求固定列表）
+        self.groups = {
+            'emotion': [
+                'happy','sad','excited','angry','whisper','annoyed','appalled','thoughtful','surprised'
+            ],
+            'tone': [
+                'laughing','chuckles','sighs','clears throat','short pause','long pause','exhales sharply','inhales deeply'
+            ]
+        }
+
+        # 初始展示情绪组
+        self.current_group = 'emotion'
+        self._populate_tags()
+    
+    def set_text_edit(self, text_edit):
+        """设置关联的文本编辑器"""
+        self.text_edit = text_edit
+        self.text_edit.setAcceptDrops(True)
+        self.text_edit.dropEvent = self.handle_text_edit_drop
+    
+    def handle_text_edit_drop(self, event):
+        """处理文本编辑器的拖放事件"""
+        if event.mimeData().hasText():
+            emotion_tag = event.mimeData().text()
+            cursor = self.text_edit.textCursor()
+            cursor.insertText(emotion_tag)
+            event.accept()
+        else:
+            event.ignore()
+
+    def _populate_tags(self):
+        """根据当前分组填充标签按钮"""
+        # 清空现有按钮
+        while self.tags_layout.count():
+            item = self.tags_layout.takeAt(0)
+            widget = item.widget()
+            if widget:
+                widget.setParent(None)
+
+        # 添加标签按钮
+        for tag in self.groups.get(self.current_group, []):
+            info = {'name': tag, 'description': tag, 'emoji': ''}
+            btn = EmotionTagButton(tag, info, self)
+            # 点击直接插入
+            btn.clicked.connect(lambda checked, t=tag: self._insert_tag(t))
+            self.tags_layout.addWidget(btn)
+
+        # 填充伸缩
+        spacer = QWidget()
+        spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        self.tags_layout.addWidget(spacer)
+
+    def show_group(self, group_name):
+        """切换分组并刷新标签显示"""
+        if group_name not in self.groups:
+            return
+        self.current_group = group_name
+        # 切换按钮状态
+        self.btn_group_emotion.setChecked(group_name == 'emotion')
+        self.btn_group_tone.setChecked(group_name == 'tone')
+        self._populate_tags()
+
+    def _insert_tag(self, tag_text):
+        """向关联文本编辑器插入标签"""
+        if not self.text_edit:
+            return
+        to_insert = f"[{tag_text}] "
+        cursor = self.text_edit.textCursor()
+        cursor.insertText(to_insert)
+    
+    def auto_insert_emotions(self):
+        """自动检测文案中的句子并插入情绪标签"""
+        if not self.text_edit:
+            return
+        
+        text = self.text_edit.toPlainText()
+        if not text.strip():
+            QMessageBox.information(self.parent(), "提示", "请先输入文案")
+            return
+        
+        # 分割句子（简单的正则表达式实现）
+        # 支持多语言的句子分割
+        sentence_pattern = r'[。！？\n]+|\. |! |\? '
+        sentences = re.split(sentence_pattern, text)
+        sentences = [s.strip() for s in sentences if s.strip()]
+        
+        if not sentences:
+            QMessageBox.information(self.parent(), "提示", "未检测到有效的句子")
+            return
+        
+        # 简单的情绪分配逻辑
+        emotions = ['cheerful', 'neutral', 'hopeful', 'sad', 'angry']
+        
+        new_text = ""
+        for i, sent in enumerate(sentences):
+            # 使用循环分配情绪
+            emotion = emotions[i % len(emotions)]
+            from ..core.elevenlabs import EMOTION_OPTIONS
+            emoji = EMOTION_OPTIONS.get(emotion, {}).get('emoji', '')
+            new_text += f"[{emotion}] {sent}\n"
+        
+        self.text_edit.setPlainText(new_text.strip())
+        QMessageBox.information(self.parent(), "成功", f"已自动插入情绪标签到 {len(sentences)} 个句子")
+    
+    def get_emotion_tags(self):
+        """从当前文本中提取所有情绪标签"""
+        if not self.text_edit:
+            return {}
+        
+        text = self.text_edit.toPlainText()
+        # 匹配 [emotion_key] 格式
+        pattern = r'\[(\w+)\]'
+        matches = re.findall(pattern, text)
+        return {emotion: text.count(f'[{emotion}]') for emotion in matches}
+
 
 class SubtitlePreviewLabel(QLabel):
     """自定义预览标签，支持描边、阴影和背景绘制"""
@@ -127,11 +334,11 @@ class SubtitlePreviewLabel(QLabel):
 
 class VoiceSettingsDialog(QDialog):
     """语音设定对话框"""
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, model_features=None, model_info=None):
         super().__init__(parent)
         self.setWindowTitle("语音设定")
         self.setModal(True)
-        self.setMinimumWidth(450)
+        self.setMinimumWidth(500)
         
         # 初始化默认值
         self.stability = 50
@@ -139,6 +346,15 @@ class VoiceSettingsDialog(QDialog):
         self.style = 0
         self.speed = 100
         self.speaker_boost = True
+        # self.emotion = None  # ⭐ 新增：情绪标签
+        
+        # ⭐ 新增：模型功能信息
+        self.model_features = model_features or {
+            'can_use_style': True,
+            'can_use_speaker_boost': True,
+        }
+        # 当前模型信息（用于填充可用语言）
+        self.model_info = model_info or {}
         
         self.setup_ui()
     
@@ -200,6 +416,14 @@ class VoiceSettingsDialog(QDialog):
         self.slider_style.valueChanged.connect(
             lambda val: self.lbl_style_value.setText(f"{val}%")
         )
+        # ⭐ 根据模型功能启用/禁用风格选项
+        can_use_style = self.model_features.get('can_use_style', True)
+        self.slider_style.setEnabled(can_use_style)
+        style_label.setEnabled(can_use_style)
+        self.lbl_style_value.setEnabled(can_use_style)
+        if not can_use_style:
+            style_label.setToolTip("当前选择的模型不支持风格调整")
+        
         grid_layout.addWidget(style_label, 2, 0)
         grid_layout.addWidget(self.slider_style, 2, 1)
         grid_layout.addWidget(self.lbl_style_value, 2, 2)
@@ -222,11 +446,70 @@ class VoiceSettingsDialog(QDialog):
         
         layout.addLayout(grid_layout)
         
+        # # ⭐ 新增：情绪标签选择 (Emotion)
+        # emotion_label_widget = QLabel("情绪标签:")
+        # emotion_label_widget.setToolTip("为语音设定特定情绪（需要模型支持）")
+        # self.combo_emotion = QComboBox()
+        # self.combo_emotion.addItem("默认（无特定情绪）", None)
+        # from ..core.elevenlabs import EMOTION_OPTIONS
+        # for emotion_key, emotion_info in EMOTION_OPTIONS.items():
+        #     display_text = f"{emotion_info['emoji']} {emotion_info['name']}"
+        #     self.combo_emotion.addItem(display_text, emotion_key)
+        
+        # emotion_h_layout = QHBoxLayout()
+        # emotion_h_layout.addWidget(emotion_label_widget)
+        # emotion_h_layout.addWidget(self.combo_emotion, 1)
+        # layout.addLayout(emotion_h_layout)
+        
         # 扬声器增强 (Speaker Boost)
         self.chk_speaker_boost = QCheckBox("扬声器增强")
         self.chk_speaker_boost.setChecked(self.speaker_boost)
         self.chk_speaker_boost.setToolTip("增强与原始扬声器的相似性（会略微增加延迟）")
-        layout.addWidget(self.chk_speaker_boost)
+        # ⭐ 根据模型功能启用/禁用扬声器增强
+        can_use_speaker_boost = self.model_features.get('can_use_speaker_boost', True)
+        self.chk_speaker_boost.setEnabled(can_use_speaker_boost)
+        if not can_use_speaker_boost:
+            self.chk_speaker_boost.setToolTip("当前选择的模型不支持扬声器增强")
+
+        # ⭐ 新增：语言选择（将语言下拉移至语音设定）
+        self.combo_language = QComboBox()
+        self.combo_language.addItem("自动检测", None)
+        from ..core.elevenlabs import LANGUAGE_CODES
+        # LANGUAGE_CODES 可能是 code->name 或 name->code，做容错处理
+        for k, v in LANGUAGE_CODES.items():
+            if isinstance(k, str) and (len(k) <= 3 and '-' not in k):
+                # key 可能是短 code，例如 'en'
+                code = k
+                name = v
+            else:
+                # key 可能是名称，value 为 code
+                name = k
+                code = v
+            self.combo_language.addItem(name, code)
+
+        # 如果模型信息包含支持语言，尝试限制选项
+        supported = []
+        langs = self.model_info.get('languages', [])
+        if langs:
+            supported_ids = set()
+            for lang in langs:
+                lang_id = lang.get('language_id') if isinstance(lang, dict) else lang
+                supported_ids.add(lang_id)
+            # 只保留支持列表
+            # 遍历现有项并隐藏/显示
+            for i in range(self.combo_language.count()-1, -1, -1):
+                data = self.combo_language.itemData(i)
+                if data is None:
+                    continue
+                if data not in supported_ids:
+                    self.combo_language.removeItem(i)
+            # 将语言下拉添加到对话框布局
+            lang_h = QHBoxLayout()
+            lang_h.addWidget(QLabel("语言:"))
+            lang_h.addWidget(self.combo_language, 1)
+            layout.addLayout(lang_h)
+
+            layout.addWidget(self.chk_speaker_boost)
         
         # 按钮
         button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
@@ -241,7 +524,8 @@ class VoiceSettingsDialog(QDialog):
             'similarity_boost': self.slider_similarity.value() / 100.0,
             'style': self.slider_style.value() / 100.0,
             'use_speaker_boost': self.chk_speaker_boost.isChecked(),
-            'speed': self.slider_speed.value() / 100.0
+            'speed': self.slider_speed.value() / 100.0,
+            'language_code': self.combo_language.currentData()
         }
     
     def set_settings(self, settings):
@@ -265,6 +549,20 @@ class VoiceSettingsDialog(QDialog):
         if 'use_speaker_boost' in settings:
             self.chk_speaker_boost.setChecked(settings['use_speaker_boost'])
             self.speaker_boost = settings['use_speaker_boost']
+        if 'emotion' in settings:  # ⭐ 新增
+            # legacy: ignore stored emotion in dialog
+            pass
+        if 'language_code' in settings:
+            code = settings['language_code']
+            if code is None:
+                # 自动检测
+                idx = self.combo_language.findData(None)
+                if idx >= 0:
+                    self.combo_language.setCurrentIndex(idx)
+            else:
+                idx = self.combo_language.findData(code)
+                if idx >= 0:
+                    self.combo_language.setCurrentIndex(idx)
 
 class SubtitleSettingsDialog(QDialog):
     """字幕设置对话框 - 整合 Groq 配置和 XML 样式设置"""
@@ -589,6 +887,13 @@ class ElevenLabsWidget(QWidget):
         self.audio_output = QAudioOutput()
         self.player.setAudioOutput(self.audio_output)
         
+        # ⭐ 新增：存储从API获取的模型信息
+        self.models_info = {}  # { model_id: {model_data} }
+        self.current_model_features = {  # 当前选择的模型的功能信息
+            'can_use_style': True,
+            'can_use_speaker_boost': True,
+        }
+        
         # XML 样式设置字典
         self.xml_styles = {
             'source': {
@@ -701,10 +1006,10 @@ class ElevenLabsWidget(QWidget):
         main_layout.setContentsMargins(20, 20, 20, 20)
         main_layout.setSpacing(15)
 
-        # 标题
-        title = QLabel("ElevenLabs 语音合成")
-        title.setFont(QFont("Segoe UI", 20, QFont.Bold))
-        main_layout.addWidget(title)
+        # # 标题
+        # title = QLabel("ElevenLabs 语音合成")
+        # title.setFont(QFont("Segoe UI", 20, QFont.Bold))
+        # main_layout.addWidget(title)
 
         # 1. API 配置区
         top_bar = QGroupBox("API 配置")
@@ -763,7 +1068,7 @@ class ElevenLabsWidget(QWidget):
 
         # 声音选择
         voice_layout = QHBoxLayout()
-        voice_layout.addWidget(QLabel("选择声音模型:"))
+        voice_layout.addWidget(QLabel("选择声音:"))
         self.combo_voices = QComboBox()
         self.combo_voices.setPlaceholderText("请先刷新配置...")
         voice_layout.addWidget(self.combo_voices, 1)
@@ -782,19 +1087,47 @@ class ElevenLabsWidget(QWidget):
 
         tts_inner_layout.addLayout(voice_layout)
 
+        # ⭐ 新增：模型、语言选择
+        model_lang_layout = QGridLayout()
+        model_lang_layout.setSpacing(10)
+        
+        # 模型选择
+        model_lang_layout.addWidget(QLabel("模型:"), 0, 0)
+        self.combo_model = QComboBox()
+        from ..core.elevenlabs import ELEVENLABS_MODELS
+        for model_id, info in ELEVENLABS_MODELS.items():
+            self.combo_model.addItem(f"{info['name']} - {info['description']}", model_id)
+        # 默认选择推荐模型
+        for i in range(self.combo_model.count()):
+            model_id = self.combo_model.itemData(i)
+            if ELEVENLABS_MODELS[model_id].get('recommended'):
+                self.combo_model.setCurrentIndex(i)
+                break
+        # ⭐ 连接模型选择变化信号
+        self.combo_model.currentIndexChanged.connect(self.on_model_changed)
+        model_lang_layout.addWidget(self.combo_model, 0, 1)
+        
+        # 设置第 3 列可以拉伸，占用剩余空间（保留用于右侧对齐）
+        model_lang_layout.setColumnStretch(3, 1)
+
+        tts_inner_layout.addLayout(model_lang_layout)
+
+        # ⭐ 新增：情绪/语气 标签管理器（合并并显示在模型选择下一行）
+        # 直接放置 EmotionTagManager 到主界面，默认禁用（仅v3模型支持）
+        self.emotion_manager = EmotionTagManager(self)
+        self.emotion_manager.setEnabled(False)
+        tts_inner_layout.addWidget(self.emotion_manager)
+
         # 文本输入
         # 5. 优化文本输入框，在窗口缩放时自动调节文本框高度
         self.tts_text_input = QTextEdit()
         self.tts_text_input.setPlaceholderText("请输入要转换的文本内容...")
         self.tts_text_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         
-        # # 6. 文本框内增加一个实时的剩余字符长度提示
-        # self.lbl_char_count = QLabel("字符数: 0")
-        # self.lbl_char_count.setAlignment(Qt.AlignmentFlag.AlignRight)
-        # self.tts_text_input.textChanged.connect(self.update_char_count)
+        # ⭐ 关联文本编辑框到情绪管理器
+        self.emotion_manager.set_text_edit(self.tts_text_input)
         
         tts_inner_layout.addWidget(self.tts_text_input)
-        # tts_inner_layout.addWidget(self.lbl_char_count)
 
         # 字幕选项
         sub_opts_layout = QHBoxLayout()
@@ -962,11 +1295,25 @@ class ElevenLabsWidget(QWidget):
         if not api_key:
             QMessageBox.warning(self, "缺少 Key", "请输入 API Key (或在 config.toml / 环境变量中配置)")
             return
-        self.set_ui_busy(True, "连接中...")
+        self.set_ui_busy(True, "正在加载模型、声音和额度...")
+        
+        # ⭐ 新增：用于追踪两个 worker 是否都完成
+        self.models_loaded = False
+        self.voices_loaded = False
+        
+        # 同时加载模型列表和声音列表
+        self.model_worker = ModelListWorker(api_key)
+        self.model_worker.finished.connect(self.on_models_loaded)
+        self.model_worker.error.connect(self.on_error)
+        
         self.voice_worker = VoiceListWorker(api_key)
         self.voice_worker.finished.connect(self.on_voices_loaded)
         self.voice_worker.error.connect(self.on_error)
+        
+        # 启动两个 worker
+        self.model_worker.start()
         self.voice_worker.start()
+        
         self.refresh_quota_only(api_key)
 
     def refresh_quota_only(self, api_key=None):
@@ -980,7 +1327,7 @@ class ElevenLabsWidget(QWidget):
         self.quota_worker.start()
 
     def on_voices_loaded(self, voices):
-        self.set_ui_busy(False, "加载完成")
+        self.voices_loaded = True
         self.combo_voices.clear()
         for item in voices:
             # 兼容处理：解包 (name, vid, preview_url)
@@ -993,6 +1340,137 @@ class ElevenLabsWidget(QWidget):
             self.combo_voices.addItem(name, vid)
             if preview_url:
                 self.combo_voices.setItemData(self.combo_voices.count() - 1, preview_url, Qt.UserRole + 1)
+        
+        self._check_all_loaded()
+    
+    def on_models_loaded(self, models):
+        """当模型列表成功加载时的回调"""
+        self.models_loaded = True
+        self.models_info = {}  # 清空旧数据
+        
+        # 仅保留支持TTS的模型
+        tts_models = [m for m in models if m.get('can_do_text_to_speech', False)]
+        
+        if not tts_models:
+            logger.warning("未找到支持TTS的模型")
+            self.on_error("未找到支持TTS的模型")
+            return
+        
+        # 清空并重新填充模型选择框
+        self.combo_model.blockSignals(True)
+        self.combo_model.clear()
+        
+        for model in tts_models:
+            model_id = model.get('model_id')
+            if model_id:
+                self.models_info[model_id] = model
+                display_name = model.get('name', model_id)
+                display_text = f"{display_name}"
+                self.combo_model.addItem(display_text, model_id)
+        
+        # 默认选择第二个支持TTS的模型
+        if self.combo_model.count() > 1:
+            self.combo_model.setCurrentIndex(1)
+        
+        self.combo_model.blockSignals(False)
+        
+        # 触发模型变化处理逻辑
+        self.on_model_changed()
+        
+        logger.info(f"已加载 {len(tts_models)} 个支持TTS的模型")
+        self._check_all_loaded()
+    
+    def _check_all_loaded(self):
+        """检查两个 worker 是否都完成，如果完成则更新 UI 状态"""
+        if self.models_loaded and self.voices_loaded:
+            self.set_ui_busy(False, "加载完成")
+    
+    def on_model_changed(self):
+        """当选择的模型改变时，更新可用功能和语言列表"""
+        model_id = self.combo_model.currentData()
+        if not model_id:
+            return
+        
+        model_info = self.models_info.get(model_id, {})
+        model_name = model_info.get('name', model_id)
+
+        # 保存当前模型信息以供对话框使用
+        self.current_model_info = model_info
+        
+        # 检查模型是否支持TTS
+        can_tts = model_info.get('can_do_text_to_speech', False)
+        if not can_tts:
+            QMessageBox.warning(self, "模型不支持TTS", 
+                               f"选中的模型 '{model_name}' 不支持文本转语音功能。")
+        
+        # ⭐ 检查是否是v3模型，支持情绪标签
+        is_v3 = 'v3' in model_id.lower()
+        # 启用/禁用合并后的情绪管理器
+        self.emotion_manager.setEnabled(is_v3)
+        
+        # 更新提示文本
+        if is_v3:
+            logger.info(f"模型 '{model_name}' 支持情绪标签功能")
+        else:
+            logger.info(f"模型 '{model_name}' 不支持情绪标签，该功能已禁用")
+        
+        # 根据模型功能启用/禁用对应选项
+        self.update_feature_availability(model_info)
+        
+        # 更新可用语言列表
+        self.update_available_languages(model_info)
+    
+    def update_feature_availability(self, model_info):
+        """根据模型信息启用/禁用相关功能"""
+        # 风格选项（VoiceSettingsDialog中）- 目前先保持，之后可以在对话框中处理
+        can_use_style = model_info.get('can_use_style', False)
+        
+        # 扬声器增强（VoiceSettingsDialog中）
+        can_use_speaker_boost = model_info.get('can_use_speaker_boost', False)
+        
+        # 记录这些信息以供VoiceSettingsDialog使用
+        self.current_model_features = {
+            'can_use_style': can_use_style,
+            'can_use_speaker_boost': can_use_speaker_boost,
+            'can_do_voice_conversion': model_info.get('can_do_voice_conversion', False),
+        }
+        
+        # 显示模型信息
+        max_chars = model_info.get('maximum_text_length_per_request', 999999)
+        logger.info(f"模型: {model_info.get('name')}, 支持风格: {can_use_style}, "
+                   f"支持扬声器增强: {can_use_speaker_boost}, 最大字符数: {max_chars}")
+    
+    def update_available_languages(self, model_info):
+        """根据模型支持的语言列表更新语言选择框"""
+        languages = model_info.get('languages', [])
+        
+        if not languages:
+            # 如果模型没有指定语言列表，保持现有的全部语言选项
+            logger.warning(f"模型 {model_info.get('name')} 未提供支持的语言列表")
+            self.available_languages = []
+            return
+        # 构建可用语言列表并存储，实际的下拉由 VoiceSettingsDialog 在打开时处理
+        from ..core.elevenlabs import LANGUAGE_CODES
+        supported = []
+        for lang in languages:
+            lang_id = lang.get('language_id') if isinstance(lang, dict) else lang
+            # 查找对应的语言名称
+            name = None
+            for k, v in LANGUAGE_CODES.items():
+                # 兼容 code->name 或 name->code
+                if v == lang_id:
+                    name = k
+                    break
+                if k == lang_id:
+                    name = v
+                    break
+            if not name:
+                name = lang_id
+            supported.append((name, lang_id))
+
+        self.available_languages = sorted(supported)
+        logger.info(f"模型支持 {len(self.available_languages)} 种语言")
+
         
     def save_api_key(self):
         key = self.key_input.text().strip()
@@ -1057,6 +1535,13 @@ class ElevenLabsWidget(QWidget):
         export_xml = self.chk_export_xml.isChecked()
         keyword_highlight = self.chk_keyword_highlight.isChecked()
         
+        # ⭐ 修改：获取模型、语言参数；情绪标签现在嵌入在文本中
+        model_id = self.combo_model.currentData()
+        # 语言参数从语音设定中获取（语言下拉已移入语音设定窗口）
+        language_code = self.voice_settings.get('language_code') if isinstance(self.voice_settings, dict) else None
+        # 情绪标签现在由文案中的 [emotion] 标签提供
+        # API 会自动解析文本中的情绪标签，所以这里不需要单独传递 emotion 参数
+        
         if not voice_id:
              QMessageBox.warning(self, "提示", "请先加载并选择一个声音模型。")
              return
@@ -1080,7 +1565,10 @@ class ElevenLabsWidget(QWidget):
             xml_style_settings=self.xml_styles, 
             video_settings=self.video_settings, 
             keyword_highlight=keyword_highlight,
-            voice_settings=self.voice_settings
+            voice_settings=self.voice_settings,
+            model_id=model_id,              # ⭐ 模型ID
+            language_code=language_code,    # ⭐ 语言代码
+            emotion=None                    # ⭐ 情绪现在嵌入在文本中，通过 [emotion] 标签指定
         )
         self.tts_worker.finished.connect(self.on_generation_success)
         self.tts_worker.error.connect(self.on_error)
@@ -1088,7 +1576,12 @@ class ElevenLabsWidget(QWidget):
     
     def open_voice_settings(self):
         """打开语音设定对话框"""
-        dialog = VoiceSettingsDialog(self)
+        # ⭐ 传递当前模型的功能信息
+        model_features = getattr(self, 'current_model_features', {
+            'can_use_style': True,
+            'can_use_speaker_boost': True,
+        })
+        dialog = VoiceSettingsDialog(self, model_features=model_features, model_info=getattr(self, 'current_model_info', {}))
         dialog.set_settings(self.voice_settings)
         
         if dialog.exec() == QDialog.Accepted:
