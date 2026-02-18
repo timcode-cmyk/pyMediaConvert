@@ -70,6 +70,31 @@ class YtDlpVersionManager:
         
         # 确保备份目录存在
         os.makedirs(self.backup_dir, exist_ok=True)
+
+    # ------------------------------------------------------------------
+    # internal helpers
+    # ------------------------------------------------------------------
+    def _remove_path(self, path: str) -> bool:
+        """Remove a file or directory.
+
+        Handles both files and directories and logs any errors.
+        Returns ``True`` if the path was removed or did not exist,
+        ``False`` if an error occurred.
+        """
+        try:
+            if not os.path.exists(path):
+                logger.debug(f"_remove_path: path does not exist: {path}")
+                return True
+
+            if os.path.isdir(path):
+                shutil.rmtree(path)
+            else:
+                os.remove(path)
+            logger.debug(f"_remove_path: removed {path}")
+            return True
+        except Exception as exc:
+            logger.warning(f"_remove_path: failed to remove {path}: {exc}")
+            return False
     
     def get_local_version(self) -> Optional[str]:
         """
@@ -397,7 +422,7 @@ class YtDlpVersionManager:
             
             # 删除当前yt_dlp目录，恢复备份
             if os.path.exists(self.yt_dlp_dir):
-                shutil.rmtree(self.yt_dlp_dir)
+                self._remove_path(self.yt_dlp_dir)
             
             shutil.copytree(backup_path, self.yt_dlp_dir)
             logger.info(f"回滚成功")
@@ -489,7 +514,7 @@ class YtDlpUpdater(YtDlpVersionManager):
             
             # 先删除临时目录（如果存在）
             if os.path.exists(temp_extract_dir):
-                shutil.rmtree(temp_extract_dir)
+                self._remove_path(temp_extract_dir)
             
             with zipfile.ZipFile(zip_path, 'r') as zip_ref:
                 zip_ref.extractall(temp_extract_dir)
@@ -529,14 +554,14 @@ class YtDlpUpdater(YtDlpVersionManager):
             
             # 替换yt_dlp目录
             if os.path.exists(self.yt_dlp_dir):
-                shutil.rmtree(self.yt_dlp_dir)
+                self._remove_path(self.yt_dlp_dir)
             
             shutil.copytree(src_path, self.yt_dlp_dir)
             logger.info(f"成功替换yt_dlp目录")
             
             # 清理临时文件
             if os.path.exists(temp_extract_dir):
-                shutil.rmtree(temp_extract_dir)
+                self._remove_path(temp_extract_dir)
             if os.path.exists(zip_path):
                 os.remove(zip_path)
             logger.info(f"已清理临时文件")
@@ -559,7 +584,7 @@ class YtDlpUpdater(YtDlpVersionManager):
                 temp_dirs = glob.glob(os.path.join(self.backup_dir, "yt_dlp_temp_*"))
                 for temp_dir in temp_dirs:
                     if os.path.exists(temp_dir):
-                        shutil.rmtree(temp_dir)
+                        self._remove_path(temp_dir)
                         logger.debug(f"清理临时目录: {temp_dir}")
             except Exception as cleanup_err:
                 logger.warning(f"临时文件清理出错: {cleanup_err}")

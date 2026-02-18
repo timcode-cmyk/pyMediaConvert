@@ -136,6 +136,49 @@ def test_backup_and_rollback():
         print("✗ 无法获取备份")
 
 
+def test_remove_path():
+    """确保内置的路径删除助手工作正常"""
+
+    print("\n" + "="*60)
+    print("测试 X: _remove_path helper")
+    print("="*60)
+
+    manager = YtDlpVersionManager()
+    # also verify updater inherits the helper
+    updater = YtDlpUpdater()
+    assert hasattr(updater, '_remove_path'), "YtDlpUpdater 应继承 _remove_path 方法"
+
+    import tempfile
+    print("\n" + "="*60)
+    print("测试 X: _remove_path helper")
+    print("="*60)
+
+    manager = YtDlpVersionManager()
+    import tempfile
+
+    # 临时文件
+    tmp_file = tempfile.NamedTemporaryFile(delete=False)
+    tmp_file.write(b"hello")
+    tmp_file.flush()
+    tmp_file.close()
+
+    print(f"创建临时文件 {tmp_file.name}")
+    assert os.path.exists(tmp_file.name)
+    assert manager._remove_path(tmp_file.name)
+    assert not os.path.exists(tmp_file.name)
+    print("✓ 临时文件删除成功")
+
+    # 临时目录
+    tmp_dir = tempfile.mkdtemp()
+    nested = os.path.join(tmp_dir, "nested.txt")
+    with open(nested, "w") as f:
+        f.write("x")
+    assert os.path.exists(nested)
+    assert manager._remove_path(tmp_dir)
+    assert not os.path.exists(tmp_dir)
+    print("✓ 临时目录删除成功")
+
+
 def test_get_release_info():
     """测试获取发布信息"""
     print("\n" + "="*60)
