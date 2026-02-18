@@ -179,7 +179,7 @@ class EmotionTagManager(QWidget):
         self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         # 缩小滚动高度以节省垂直空间，并在外层将该行的高度锁定为单行
-        self.scroll.setFixedHeight(36)
+        self.scroll.setFixedHeight(45)
 
         scroll_content = QWidget()
         self.tags_layout = QHBoxLayout(scroll_content)
@@ -205,7 +205,7 @@ class EmotionTagManager(QWidget):
         top_widget = QWidget()
         top_widget.setLayout(top_row)
         top_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        top_widget.setFixedHeight(50)
+        top_widget.setFixedHeight(55)
         layout.addWidget(top_widget)
 
         # 内部数据：两个分组的标签（按照用户需求固定列表）
@@ -1298,7 +1298,7 @@ class ElevenLabsWidget(QWidget):
         self.btn_tts_browse.setFixedWidth(40)
         self.btn_tts_browse.clicked.connect(lambda: self.browse_save_path(self.tts_save_input, "Audio (*.mp3)"))
         self.btn_tts_default = QPushButton("默认路径")
-        self.btn_tts_default.setFixedWidth(110)
+        # self.btn_tts_default.setFixedWidth(110)
         self.btn_tts_default.clicked.connect(lambda: self.choose_default_save_path(self.tts_save_input))
         
         self.btn_tts_generate = QPushButton("生成语音")

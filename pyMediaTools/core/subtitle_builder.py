@@ -7,6 +7,8 @@ SubtitleSegmentBuilder：字幕分段生成器
 - 返回标准的分段列表格式
 """
 
+import re
+
 from .cjk_tokenizer import CJKTokenizer
 
 
@@ -139,7 +141,17 @@ class SubtitleSegmentBuilder:
                 current_line_text = ""
                 current_line_start = None
 
-        return sentences
+        # 在标准模式结束后进行短句合并
+        merged = []
+        for seg in sentences:
+            if merged and self._should_merge_short(seg["text"]) and not merged[-1]["text"][-1] in self.sentence_enders:
+                # 将短句与上一句合并
+                merged[-1]["text"] += " " + seg["text"]
+                merged[-1]["end"] = seg["end"]
+            else:
+                merged.append(seg)
+
+        return merged
 
     def _build_segments_word_level(self, chars, char_starts, char_ends, words_per_line):
         """
@@ -242,6 +254,16 @@ class SubtitleSegmentBuilder:
             i += 1
         
         return result
+
+    def _should_merge_short(self, text):
+        """
+        判断一个句子是否足够短，需要和前一句合并。
+
+        规则：文本中单词数量（忽略标点）小于等于 2。
+        中文等无空格语言会被当作单词字符，通过正则抓取 \w+。
+        """
+        words = re.findall(r"\b\w+\b", text)
+        return len(words) <= 2
 
     def reconfigure(self, **kwargs):
         """

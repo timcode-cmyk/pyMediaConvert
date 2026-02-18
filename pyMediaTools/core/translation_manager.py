@@ -84,12 +84,39 @@ class TranslationManager:
         translated_segments = []
         for i in range(0, len(segments), self.batch_size):
             batch = segments[i : i + self.batch_size]
-            batch_texts = [s.get("text", "") for s in batch]
+            # add numbering prefix to each segment text to help maintain alignment after translation
+            batch_texts = [f"{idx+1}. {s.get('text', '')}" for idx, s in enumerate(batch)]
             
             try:
                 translated_texts = self._translate_batch(batch_texts)
-                
-                for idx, (original_seg, trans_text) in enumerate(zip(batch, translated_texts)):
+                # parsed_texts will be reordered according to detected prefixes
+                reordered = [None] * len(batch)
+                for t in translated_texts:
+                    if t is None:
+                        continue
+                    # try to extract leading index
+                    import re
+                    m = re.match(r"\s*(\d+)\s*[\.:]\s*(.*)", t, re.S)
+                    if m:
+                        idx = int(m.group(1)) - 1
+                        txt = m.group(2).strip()
+                        if 0 <= idx < len(batch):
+                            reordered[idx] = txt
+                        else:
+                            # out of range, push to next available slot later
+                            reordered.append(txt)
+                    else:
+                        # no index found; will place sequentially
+                        for j in range(len(reordered)):
+                            if reordered[j] is None:
+                                reordered[j] = t.strip()
+                                break
+                # fill any missing translations with original text or empty string
+                for j in range(len(reordered)):
+                    if reordered[j] is None:
+                        reordered[j] = batch[j].get("text", "")
+
+                for original_seg, trans_text in zip(batch, reordered):
                     updated_segment = original_seg.copy()
                     if trans_text:
                         updated_segment["text"] = trans_text
@@ -112,10 +139,11 @@ class TranslationManager:
         
         system_prompt = (
             "You are a professional translator specializing in video subtitles. "
-            f"Translate the following segments separated by '{separator}' into Simplified Chinese. "
+            "Each segment provided to you is prefixed with its index number followed by a dot and a space (e.g. '1. Hello world'). "
+            f"Translate the following segments separated by '{separator}' into Simplified Chinese, preserving the original numbering at the beginning of each segment. "
             "Maintain the exact number of segments. "
             f"Output the translation for each segment separated by the same separator '{separator}'. "
-            "Output ONLY the translated segments, no preamble or extra text."
+            "Do not remove or change the numeric prefixes. Output ONLY the translated segments, no preamble or extra text."
         )
 
         try:
