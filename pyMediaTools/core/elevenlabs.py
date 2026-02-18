@@ -22,15 +22,47 @@ logger = get_logger(__name__)
 
 # 支持的模型列表 (最新版本，包含 V3)
 ELEVENLABS_MODELS = {
-
+    
 }
 
 # 语言代码列表 (根据 ElevenLabs 官方支持)
 LANGUAGE_CODES = {
-
+    'en': '英语 (English)',
+    'es': '西班牙语 (Español)',
+    'pt': '葡萄牙语 (Português)',
+    'fr': '法语 (Français)',
+    'de': '德语 (Deutsch)',
+    'it': '意大利语 (Italiano)',
+    'pl': '波兰语 (Polski)',
+    'tr': '土耳其语 (Türkçe)',
+    'ru': '俄语 (Русский)',
+    'nl': '荷兰语 (Nederlands)',
+    'cs': '捷克语 (Čeština)',
+    'sv': '瑞典语 (Svenska)',
+    'no': '挪威语 (Norsk)',
+    'ja': '日语 (日本語)',
+    'ko': '韩语 (한국어)',
+    'zh': '中文 (简体)',
+    'zh-TW': '中文 (繁體)',
+    'hi': '印地语 (हिंदी)',
+    'th': '泰语 (ไทย)',
+    'ar': '阿拉伯语 (العربية)',
+    'uk': '乌克兰语 (Українська)',
+    'vi': '越南语 (Tiếng Việt)',
+    'id': '印尼语 (Bahasa Indonesia)',
+    'ms': '马来语 (Bahasa Melayu)',
+    'el': '希腊语 (Ελληνικά)',
+    'da': '丹麦语 (Dansk)',
+    'fi': '芬兰语 (Suomi)',
+    'hu': '匈牙利语 (Magyar)',
+    'ro': '罗马尼亚语 (Română)',
+    'he': '希伯来语 (עברית)',
+    'fa': '波斯语 (فارسی)',
+    'bn': '孟加拉语 (বাংলা)',
+    'ta': '泰米尔语 (தமிழ்)',
 }
 
-# 情绪标签列表
+# 情绪标签列表 - 包含英文标签和中文+表情映射
 EMOTION_OPTIONS = {
     'neutral': {
         'name': '中立',
@@ -41,6 +73,11 @@ EMOTION_OPTIONS = {
         'name': '欢快',
         'description': '积极、开朗、充满能量',
         'emoji': '😊',
+    },
+    'happy': {
+        'name': '开心',
+        'description': '高兴、愉快、充满喜悦',
+        'emoji': '😄',
     },
     'sad': {
         'name': '悲伤',
@@ -62,7 +99,83 @@ EMOTION_OPTIONS = {
         'description': '期待、鼓励、积极向上',
         'emoji': '🤗',
     },
+    'excited': {
+        'name': '兴奋',
+        'description': '激动、兴奋、充满能量',
+        'emoji': '🤩',
+    },
+    'whisper': {
+        'name': '耳语',
+        'description': '低声细语、温柔私密',
+        'emoji': '🤫',
+    },
+    'annoyed': {
+        'name': '厌烦',
+        'description': '烦恼、不满、略感沮丧',
+        'emoji': '😒',
+    },
+    'appalled': {
+        'name': '震惊',
+        'description': '惊讶、震惊、无法置信',
+        'emoji': '😱',
+    },
+    'thoughtful': {
+        'name': '思考',
+        'description': '沉思、体贴、深思熟虑',
+        'emoji': '🤔',
+    },
+    'surprised': {
+        'name': '惊讶',
+        'description': '意外、惊喜、出乎意料',
+        'emoji': '😲',
+    },
+    'laughing': {
+        'name': '笑声',
+        'description': '大声笑、欢快的笑声',
+        'emoji': '😂',
+    },
+    'chuckles': {
+        'name': '轻笑',
+        'description': '轻声笑、温和的笑声',
+        'emoji': '😄',
+    },
+    'sighs': {
+        'name': '叹气',
+        'description': '深叹、无奈、释然',
+        'emoji': '😔',
+    },
+    'clears throat': {
+        'name': '清嗓子',
+        'description': '清喉咙、整理嗓子',
+        'emoji': '🗣️',
+    },
+    'short pause': {
+        'name': '短停顿',
+        'description': '短暂停顿、瞬间沉默',
+        'emoji': '⏸️',
+    },
+    'long pause': {
+        'name': '长停顿',
+        'description': '长时间停顿、深长的沉默',
+        'emoji': '⏸️',
+    },
+    'exhales sharply': {
+        'name': '急速呼气',
+        'description': '快速吐气、呼吸声',
+        'emoji': '💨',
+    },
+    'inhales deeply': {
+        'name': '深吸气',
+        'description': '深吸一口气、吸气声',
+        'emoji': '🌬️',
+    },
 }
+
+# ⭐ 新增：英文标签到中文+表情的映射
+EMOTION_DISPLAY_MAP = {emotion_key: f"{info['emoji']} {info['name']}" for emotion_key, info in EMOTION_OPTIONS.items()}
+
+# ⭐ 新增：中文+表情到英文标签的反向映射
+DISPLAY_TO_EMOTION_MAP = {display: emotion_key for emotion_key, display in EMOTION_DISPLAY_MAP.items()}
 
 
 class QuotaWorker(QThread):

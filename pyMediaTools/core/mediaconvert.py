@@ -385,12 +385,6 @@ class MediaConverter(ABC):
 
         # 创建总进度条（仅在 CLI 模式下）
         overall_pbar = None
-        if self.use_cli:
-            try:
-                from tqdm import tqdm as _tqdm
-                overall_pbar = _tqdm(total=total, desc="总进度", unit="文件")
-            except Exception:
-                overall_pbar = None
 
         if monitor:
             monitor.update_overall_progress(0, total, f"准备就绪 ({total} 文件)")

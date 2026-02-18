@@ -52,6 +52,10 @@ class ToolBoxMainWindow(QMainWindow):
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
+    
+    # 强制设置 Fusion 样式，确保在所有平台打包后都有统一美观的界面
+    app.setStyle("Fusion")
+    
     win = ToolBoxMainWindow()
     win.show()
     sys.exit(app.exec())
