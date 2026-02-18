@@ -18,7 +18,6 @@ a = Analysis(
         ('bin', 'bin'),                 # 存放 ffmpeg/ffprobe 等
         ('assets', 'assets'),           # 图片、图标等资源
         ('config.toml', '.'),           # 配置文件
-        ('subtitle_pref.json', '.'),    # 字幕配置
         ('yt_dlp', 'yt_dlp'),           # yt-dlp 源码（支持动态更新）
         *collect_data_files('PySide6'), # 自动收集 PySide6 的资源文件
     ],
