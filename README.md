@@ -116,7 +116,7 @@ nuitka --standalone \
 
 ### Windows 打包
 ```bash
-nuitka --standalone --windows-console-mode=disable --output-dir=dist-nuitka --windows-icon-from-ico=MediaTools.ico --include-package=pyMediaTools --plugin-enable=pyside6 --include-qt-plugins=multimedia,platforms,styles,imageformats --include-data-files=bin\aria2c.exe=bin\aria2c.exe --include-data-files=bin\ffmpeg.exe=bin\ffmpeg.exe --include-data-files=bin\ffprobe.exe=bin\ffprobe.exe --include-data-files=config.toml=config.toml --include-data-dir=assets=assets MediaTools.py
+nuitka --standalone --windows-console-mode=disable --output-dir=dist-nuitka --windows-icon-from-ico=MediaTools.ico --nofollow-import-to=yt_dlp --no-deployment-flag=excluded-module-usage --include-package=pyMediaTools --plugin-enable=pyside6 --include-qt-plugins=multimedia,platforms,styles,imageformats --include-data-dir=yt_dlp=yt_dlp --include-data-files=bin\aria2c.exe=bin\aria2c.exe --include-data-files=bin\ffmpeg.exe=bin\ffmpeg.exe --include-data-files=bin\ffprobe.exe=bin\ffprobe.exe --include-data-files=config.toml=config.toml --include-data-dir=assets=assets MediaTools.py
 
 ```
 
