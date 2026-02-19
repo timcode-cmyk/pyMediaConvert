@@ -259,11 +259,11 @@ class SubtitleSegmentBuilder:
         """
         判断一个句子是否足够短，需要和前一句合并。
 
-        规则：文本中单词数量（忽略标点）小于等于 2。
+        规则：文本中单词数量（忽略标点）小于等于 3。
         中文等无空格语言会被当作单词字符，通过正则抓取 \w+。
         """
         words = re.findall(r"\b\w+\b", text)
-        return len(words) <= 2
+        return len(words) <= 3
 
     def reconfigure(self, **kwargs):
         """

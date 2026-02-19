@@ -2,18 +2,18 @@
 项目名称: pyMediaTools
 创建日期: 2025-12-20
 作者: TimCode
-版本: v1.11.3
+版本: v1.13.1
 许可证: GPL License
 """
 
-__version__ = "1.12.0"
+__version__ = "1.13.1"
 __author__ = "TimCode"
 __description__ = "A professional media conversion tool based on FFmpeg"
 __license__ = "GPL License"
 
 import sys
 from PySide6.QtWidgets import QApplication, QMainWindow, QTabWidget
-
+    
 # 解决打包环境下 stdout/stderr 默认编码可能为 ascii 导致的 UnicodeEncodeError
 if sys.stdout and hasattr(sys.stdout, 'reconfigure'):
     try:
