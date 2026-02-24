@@ -8,6 +8,7 @@ SubtitleSegmentBuilder：字幕分段生成器
 """
 
 import re
+import string
 
 from .cjk_tokenizer import CJKTokenizer
 
@@ -23,7 +24,7 @@ class SubtitleSegmentBuilder:
 
         Args:
             config (dict): 配置字典，支持以下键：
-                - srt_delimiters: 行分隔符集（默认 [" ", "\n", "।", "？", "?", "!", "！", ",", "，", '"', """, """]）
+                - srt_delimiters: 行分隔符集（默认 [" ", "\n", "।", "？", "?", "!", "！", ",", "，"]）
                 - srt_sentence_enders: 句末标点集（默认 [".", "\n", "。", "।", "？", "?", "!", "！", "…"]）
                 - srt_max_chars: 单行最大字符数（默认 35）
                 - srt_pause_threshold: 停顿阈值秒数（默认 0.2）
@@ -44,7 +45,7 @@ class SubtitleSegmentBuilder:
             )
         )
         self.max_chars_per_line = self.config.get("srt_max_chars", 35)
-        self.pause_threshold = self.config.get("srt_pause_threshold", 0.2)
+        self.pause_threshold = self.config.get("srt_pause_threshold", 0.4)
 
     def build_segments(self, chars, char_starts, char_ends, word_level=False, words_per_line=1, ignore_line_length=False):
         """
@@ -74,11 +75,14 @@ class SubtitleSegmentBuilder:
             return []
 
         if word_level:
-            return self._build_segments_word_level(
+            segs = self._build_segments_word_level(
                 chars, char_starts, char_ends, words_per_line
             )
         else:
-            return self._build_segments_standard(chars, char_starts, char_ends, ignore_line_length)
+            segs = self._build_segments_standard(chars, char_starts, char_ends, ignore_line_length)
+
+        # 一致化后处理，修复常见切分问题
+        return self._post_process_segments(segs)
 
     def _build_segments_standard(self, chars, char_starts, char_ends, ignore_line_length=False):
         """
@@ -144,8 +148,8 @@ class SubtitleSegmentBuilder:
         # 在标准模式结束后进行短句合并
         merged = []
         for seg in sentences:
-            if merged and self._should_merge_short(seg["text"]) and not merged[-1]["text"][-1] in self.sentence_enders:
-                # 将短句与上一句合并
+            if merged and self._should_merge_short(seg["text"]):
+                # 将短句与上一句合并（无视上一句末尾标点）
                 merged[-1]["text"] += " " + seg["text"]
                 merged[-1]["end"] = seg["end"]
             else:
@@ -174,7 +178,8 @@ class SubtitleSegmentBuilder:
         # 第一步：分词
         words = CJKTokenizer.tokenize_by_cjk(chars, char_starts, char_ends)
 
-        # 预处理：标点词与前一词合并（避免标点单独成行）
+        # 预处理：数字+字母、标点词与前一词合并（避免数字/标点单独成行）
+        words = self._merge_numeric_with_adjacent(words)
         processed_words = self._merge_punctuation_with_previous(words)
 
         # 第二步：按词数和句末条件分组
@@ -265,6 +270,95 @@ class SubtitleSegmentBuilder:
         words = re.findall(r"\b\w+\b", text)
         return len(words) <= 3
 
+    def _merge_numeric_with_adjacent(self, words):
+        """
+        将纯数字词与其后的非标点词合并，避免数字与文字之间因为空格而分成独立分段。
+
+        示例：
+            [{'text': '2026', ...}, {'text': 'बहनों', ...}] -> [{'text': '2026 बहनों', ...}]
+        """
+        if not words:
+            return words
+
+        punctuation_chars = set(string.punctuation)
+        result = []
+        i = 0
+        while i < len(words):
+            word = words[i]
+            if word["text"].isdigit() and i + 1 < len(words):
+                nxt = words[i + 1]
+                # 后一个不是纯标点时合并
+                if not all(c in punctuation_chars for c in nxt["text"] if c.strip()):
+                    merged = {
+                        "text": word["text"] + " " + nxt["text"],
+                        "start": word["start"],
+                        "end": nxt["end"],
+                    }
+                    result.append(merged)
+                    i += 2
+                    continue
+            result.append(word)
+            i += 1
+        return result
+
+    def _post_process_segments(self, segments):
+        """
+        后处理分段结果以解决各类边缘情况。
+
+        1. 如果分段发生在未闭合的括号内部，则把后续分段合并到前一个，保证括号内容保持整体。
+        2. 如果某一行首字符是标点（除了允许的开引号）或数字，则把该行合并到前一行。
+        3. 进一步补强：连续标点、数字等不会单独拆行。
+
+        Args:
+            segments (list): 初步生成的分段列表
+        Returns:
+            list: 修正后的分段列表
+        """
+        if not segments:
+            return []
+
+        # 1. 按括号深度合并
+        merged = []
+        depth = 0
+        for seg in segments:
+            text = seg["text"]
+            if merged and depth > 0:
+                merged[-1]["text"] += " " + text
+                merged[-1]["end"] = seg["end"]
+            else:
+                merged.append(seg.copy())
+            depth += text.count("(") - text.count(")")
+
+        # 2. 处理首字符是标点或数字的情况
+        final = []
+        punctuation_chars = set(string.punctuation) | self.delimiters | self.sentence_enders
+        for seg in merged:
+            text = seg["text"]
+            if final:
+                first = text[0]
+                if (first in punctuation_chars or first.isdigit()):
+                    prev = final[-1]
+                    # 如果两边均为标点，则不插入空格，否则保留空格以便单词分隔
+                    if prev["text"] and prev["text"][-1] in punctuation_chars and first in punctuation_chars:
+                        prev["text"] += text
+                    else:
+                        prev["text"] += " " + text
+                    prev["end"] = seg["end"]
+                    continue
+            final.append(seg)
+
+        # 最后对每个分段做简单的标点间距规范化
+        for seg in final:
+            t = seg["text"]
+            # 1. 去掉左括号后的空格
+            t = re.sub(r"\(\s+", "(", t)
+            # 2. 去掉闭合括号前的空格
+            t = re.sub(r"\s+\)", ")", t)
+            # 3. 数字与冒号间不留空格
+            t = re.sub(r"(\d)\s*:\s*(\d)", r"\1:\2", t)
+            seg["text"] = t
+        return final
+
     def reconfigure(self, **kwargs):
         """
         动态更新配置参数
@@ -290,4 +384,4 @@ class SubtitleSegmentBuilder:
             )
         )
         self.max_chars_per_line = self.config.get("srt_max_chars", 35)
-        self.pause_threshold = self.config.get("srt_pause_threshold", 0.2)
+        self.pause_threshold = self.config.get("srt_pause_threshold", 0.4)
