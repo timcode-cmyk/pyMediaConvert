@@ -25,7 +25,7 @@ class SubtitleSegmentBuilder:
         Args:
             config (dict): 配置字典，支持以下键：
                 - srt_delimiters: 行分隔符集（默认 [" ", "\n", "।", "？", "?", "!", "！", ",", "，"]）
-                - srt_sentence_enders: 句末标点集（默认 [".", "\n", "。", "।", "？", "?", "!", "！", "…"]）
+                - srt_sentence_enders: 句末标点集（默认 [".", "\n", "。", "।", "？", "?", "!", "！", "…"]；
                 - srt_max_chars: 单行最大字符数（默认 35）
                 - srt_pause_threshold: 停顿阈值秒数（默认 0.2）
         """
@@ -41,11 +41,11 @@ class SubtitleSegmentBuilder:
         self.sentence_enders = set(
             self.config.get(
                 "srt_sentence_enders",
-                [".", "\n", "。", "।", "？", "?", "!", "！", "…"],
+                [".", "\n", ",", "،", "।", "？", "?", "!", "！", "…"],
             )
         )
         self.max_chars_per_line = self.config.get("srt_max_chars", 35)
-        self.pause_threshold = self.config.get("srt_pause_threshold", 0.4)
+        self.pause_threshold = self.config.get("srt_pause_threshold", 0.2)
 
     def build_segments(self, chars, char_starts, char_ends, word_level=False, words_per_line=1, ignore_line_length=False):
         """
@@ -117,43 +117,75 @@ class SubtitleSegmentBuilder:
 
             current_line_text += char
 
-            # 判断分段条件
+            # 优先级判断：
+            # 1. 标点结束 2. 停顿 3. 超出长度且在分隔符处 4. 最后一个字符
             is_sentence_end = char in self.sentence_enders
-            is_pause_after = (i < len(chars) - 1) and (char_ends[i] - char_starts[i] >= self.pause_threshold)
-            
-            # # 改进：检测字符间隔而非字符时长
-            # # 停顿 = 下一个字符的开始 - 当前字符的结束
-            # is_pause_after = False
-            # if i < len(chars) - 1:
-            #     gap_time = char_starts[i + 1] - char_ends[i]
-            #     is_pause_after = gap_time >= self.pause_threshold
-            
-            # 只有在不忽略行长度时才检查行长度限制
+
+            # 停顿基于字符间隔
+            is_pause_after = False
+            if i < len(chars) - 1:
+                gap_time = char_starts[i + 1] - char_ends[i]
+                is_pause_after = gap_time >= self.pause_threshold
+
             is_long_and_at_delimiter = False
             if not ignore_line_length:
-                is_long_and_at_delimiter = (len(current_line_text) > self.max_chars_per_line) and (char in self.delimiters)
-            
+                is_long_and_at_delimiter = (
+                    len(current_line_text) > self.max_chars_per_line
+                ) and (char in self.delimiters)
+
             is_last_char = i == len(chars) - 1
 
-            # 满足任意条件就结束当前分段
-            if is_sentence_end or is_pause_after or is_long_and_at_delimiter or is_last_char:
+            # 根据优先级决定是否分段
+            if is_sentence_end:
+                reason = "punct"
+            elif is_pause_after:
+                reason = "pause"
+            elif is_long_and_at_delimiter:
+                reason = "length"
+            elif is_last_char:
+                reason = "last"
+            else:
+                reason = None
+
+            if reason:
                 clean_text = current_line_text.strip()
-                # 清理多余空格
                 clean_text = " ".join(clean_text.split())
                 if clean_text:
-                    sentences.append({"text": clean_text, "start": current_line_start, "end": char_ends[i]})
+                    sentences.append(
+                        {
+                            "text": clean_text,
+                            "start": current_line_start,
+                            "end": char_ends[i],
+                            "reason": reason,
+                        }
+                    )
                 current_line_text = ""
                 current_line_start = None
 
-        # 在标准模式结束后进行短句合并
+        # 仅对长度/停顿/末尾产生的短句进行合并，标点分割始终保留
+        # 之前的实现合并了所有原因导致的短句，导致多个句子被折叠在一起。
         merged = []
         for seg in sentences:
-            if merged and self._should_merge_short(seg["text"]):
-                # 将短句与上一句合并（无视上一句末尾标点）
-                merged[-1]["text"] += " " + seg["text"]
-                merged[-1]["end"] = seg["end"]
+            # always merge tiny fragments that follow a length-based split
+            prev_reason = merged[-1].get("reason") if merged else None
+            should_merge = self._should_merge_short(seg["text"])
+            if (
+                merged
+                and should_merge
+                and (
+                    seg.get("reason") in ("length", "pause", "last")
+                    or prev_reason == "length"
+                )
+            ):
+                prev = merged[-1]
+                prev["text"] += " " + seg["text"]
+                prev["end"] = seg["end"]
             else:
                 merged.append(seg)
+
+        # 删除reason字段，后处理不需要它
+        for seg in merged:
+            seg.pop("reason", None)
 
         return merged
 
@@ -268,6 +300,7 @@ class SubtitleSegmentBuilder:
         中文等无空格语言会被当作单词字符，通过正则抓取 \w+。
         """
         words = re.findall(r"\b\w+\b", text)
+        # only merge when there are three or fewer words
         return len(words) <= 3
 
     def _merge_numeric_with_adjacent(self, words):
@@ -340,7 +373,11 @@ class SubtitleSegmentBuilder:
                     prev = final[-1]
                     # 如果两边均为标点，则不插入空格，否则保留空格以便单词分隔
                     if prev["text"] and prev["text"][-1] in punctuation_chars and first in punctuation_chars:
-                        prev["text"] += text
+                        # 当首字符是开括号时，仍保留空格，提高可读性（例如 ")。("）
+                        if first in "([{" or first in "（“『":
+                            prev["text"] += " " + text
+                        else:
+                            prev["text"] += text
                     else:
                         prev["text"] += " " + text
                     prev["end"] = seg["end"]
@@ -380,8 +417,8 @@ class SubtitleSegmentBuilder:
         self.sentence_enders = set(
             self.config.get(
                 "srt_sentence_enders",
-                [".", "\n", "。", "।", "？", "?", "!", "！", "…"],
+                [".", "\n", ",", "，", "।", "？", "?", "!", "！", "…"],
             )
         )
         self.max_chars_per_line = self.config.get("srt_max_chars", 35)
-        self.pause_threshold = self.config.get("srt_pause_threshold", 0.4)
+        self.pause_threshold = self.config.get("srt_pause_threshold", 0.2)

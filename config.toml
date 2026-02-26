@@ -171,10 +171,10 @@ default_model_id = "eleven_multilingual_v2"  # 默认模型：multilingual v2
 default_language_code = ""  # 语言代码，留空则自动检测
 default_emotion = ""  # 留空，情绪现在通过文本中的 [emotion] 标签指定
 srt_max_chars = 35
-srt_pause_threshold = 0.4
-srt_delimiters = [" ", "\n", "।", "？", "?", "!", "！", ",", "，"]
-srt_sentence_enders = [".", "\n", "。", "।", "？", "?", "!", "！", "…"]
-debug_save_response = false    #是否保存 ElevenLabs API 的原始响应以供调试
+srt_pause_threshold = 0.2
+srt_delimiters = [" ", "\n", "।", ":", "：", "？", "?", "!", "！", ",", "，"]
+srt_sentence_enders = [".", "\n", "।", ",", "，", ":", "：", "？", "?", "!", "！", "…"]  
+debug_save_response = true    #是否保存 ElevenLabs API 的原始响应以供调试
 
 # Groq 配置
 [groq]
