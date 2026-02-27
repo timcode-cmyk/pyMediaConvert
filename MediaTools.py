@@ -6,7 +6,7 @@
 许可证: GPL License
 """
 
-__version__ = "1.13.1"
+__version__ = "1.13.2"
 __author__ = "TimCode"
 __description__ = "A professional media conversion tool based on FFmpeg"
 __license__ = "GPL License"
@@ -28,7 +28,7 @@ if sys.stderr and hasattr(sys.stderr, 'reconfigure'):
         pass
 
 from pyMediaTools import setup_logging
-from pyMediaTools.ui import MediaConverterWidget, ElevenLabsWidget, DownloadManagerWidget, VideoDownloadWidget
+from pyMediaTools.ui import MediaConverterWidget, ElevenLabsWidget, DownloadManagerWidget, VideoDownloadWidget, VideoCutWidget
 
 
 
@@ -44,6 +44,7 @@ class MainWindow(QMainWindow):
         tabs = QTabWidget()
         tabs.addTab(MediaConverterWidget(), "媒体转换")
         tabs.addTab(ElevenLabsWidget(), "ElevenLabs")
+        tabs.addTab(VideoCutWidget(), "场景分割")
         tabs.addTab(DownloadManagerWidget(), "云端同步")
         tabs.addTab(VideoDownloadWidget(), "视频下载")
         self.setCentralWidget(tabs)
