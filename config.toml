@@ -89,6 +89,49 @@ font_size = "24"
 font_color = "white"
 text = "AI Created"
 
+[modes.image1]
+class = "AddCustomLogo"
+description = "6. 添加 AI-जनित"
+output_ext = ""
+support_exts = [".mp4", ".png", ".jpg", ".jpeg"]
+ 
+[modes.image1.params]
+x = "W-tw-10"
+y = 40
+font_path = "assets/Hind-Bold.ttf"
+font_size = "24"
+font_color = "white"
+text = "AI-जनित"
+ 
+[modes.image2]
+class = "AddCustomLogo"
+description = "6. 添加 AI से छवि"
+output_ext = ""
+support_exts = [".mp4", ".png", ".jpg", ".jpeg"]
+ 
+[modes.image2.params]
+x = "W-tw-10"
+y = 40
+font_path = "assets/Hind-Bold.ttf"
+font_size = "24"
+font_color = "white"
+text = "AI से छवि"
+
+[modes.image3]
+class = "AddCustomLogo"
+description = "6. 添加 Dibuat dengan Al"
+output_ext = ""
+support_exts = [".mp4", ".png", ".jpg", ".jpeg"]
+ 
+[modes.image3.params]
+x = "W-tw-10"
+y = 40
+font_path = "assets/Roboto-Bold.ttf"
+font_size = "24"
+font_color = "white"
+text = "Dibuat dengan Al"
+ 
+
 [modes.h264]
 class = "H264Converter"
 description = "7. 转换为 H.264 (MP4)"

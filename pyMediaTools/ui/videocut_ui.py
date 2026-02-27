@@ -2,13 +2,13 @@ import os
 from pathlib import Path
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                                QLineEdit, QPushButton, QProgressBar, QMessageBox,
-                               QFileDialog, QSizePolicy, QGroupBox, QSlider, QCheckBox, QSpinBox, QColorDialog, QFontComboBox, QDialog, QFormLayout, QDialogButtonBox, QTextEdit, QGridLayout)
+                               QFileDialog, QSizePolicy, QGroupBox, QSlider, QCheckBox, QSpinBox, QColorDialog, QFontComboBox, QDialog, QFormLayout, QDialogButtonBox, QTextEdit, QGridLayout, QComboBox)
 from PySide6.QtCore import QObject, QThread, Signal, Slot, Qt
 from PySide6.QtGui import QFont, QColor
 
 from .styles import apply_common_style
 from .media_tools_ui import DropLineEdit, ProgressMonitor
-from ..core.vidoecut import SceneCutter
+from ..core.vidoecut import SceneCutter, get_available_fonts
 from ..utils import get_resource_path
 from pyMediaTools import get_logger
 
@@ -30,7 +30,12 @@ class SceneCutWorker(QObject):
         is_successful = False
         error_msg = ""
         try:
-            cutter = SceneCutter(monitor=self.monitor)
+            # 从watermark_params中提取font_name用于初始化SceneCutter
+            font_name = None
+            if self.options.get('watermark_params'):
+                font_name = self.options['watermark_params'].get('font_name')
+            
+            cutter = SceneCutter(monitor=self.monitor, font_name=font_name)
             cutter.run(Path(self.input_path), Path(self.output_path), **self.options)
             is_successful = not self.monitor.check_stop_flag()
         except Exception as e:
@@ -48,19 +53,29 @@ class WatermarkSettingsDialog(QDialog):
         self.setMinimumWidth(450)
 
         self.settings = current_settings or {}
+        
+        # 加载可用字体
+        self.available_fonts = get_available_fonts()
 
         main_layout = QVBoxLayout(self)
         form_layout = QFormLayout()
         form_layout.setSpacing(10)
 
-        # Font
-        self.font_path_edit = QLineEdit(self.settings.get('font_path', "assets/Roboto-Bold.ttf"))
-        self.font_browse_btn = QPushButton("浏览字体...")
-        self.font_browse_btn.clicked.connect(self.browse_font)
-        font_layout = QHBoxLayout()
-        font_layout.addWidget(self.font_path_edit)
-        font_layout.addWidget(self.font_browse_btn)
-        form_layout.addRow("字体文件:", font_layout)
+        # Font - 使用下拉框选择
+        self.font_combo = QComboBox()
+        if self.available_fonts:
+            self.font_combo.addItems(self.available_fonts.keys())
+            # 设置当前选择
+            current_font = self.settings.get('font_name', list(self.available_fonts.keys())[0])
+            idx = self.font_combo.findText(current_font)
+            if idx >= 0:
+                self.font_combo.setCurrentIndex(idx)
+        else:
+            self.font_combo.addItem("未找到字体文件")
+            self.font_combo.setEnabled(False)
+        
+        self.font_combo.setToolTip("从 assets 目录选择字体文件")
+        form_layout.addRow("字体文件:", self.font_combo)
 
         # Size
         self.size_spin = QSpinBox()
@@ -77,7 +92,9 @@ class WatermarkSettingsDialog(QDialog):
 
         # Position
         self.x_edit = QLineEdit(str(self.settings.get('x', "W-tw-10")))
-        self.y_edit = QLineEdit(str(self.settings.get('y', 40)))
+        self.y_edit = QLineEdit(str(self.settings.get('y', "40")))
+        self.x_edit.setToolTip("例如: 10, w-text_w-10, (w-text_w)/2")
+        self.y_edit.setToolTip("例如: 10, h-text_h-10, (h-text_h)/2")
         form_layout.addRow("X 坐标:", self.x_edit)
         form_layout.addRow("Y 坐标:", self.y_edit)
 
@@ -87,11 +104,6 @@ class WatermarkSettingsDialog(QDialog):
         button_box.accepted.connect(self.accept)
         button_box.rejected.connect(self.reject)
         main_layout.addWidget(button_box)
-
-    def browse_font(self):
-        path, _ = QFileDialog.getOpenFileName(self, "选择字体文件", self.font_path_edit.text(), "Font Files (*.ttf *.otf)")
-        if path:
-            self.font_path_edit.setText(path)
 
     def set_button_color(self, button, color_name):
         color = QColor(color_name)
@@ -107,7 +119,7 @@ class WatermarkSettingsDialog(QDialog):
 
     def get_settings(self):
         return {
-            'font_path': self.font_path_edit.text(),
+            'font_name': self.font_combo.currentText(),
             'font_size': str(self.size_spin.value()),
             'font_color': self.color_btn.text(),
             'x': self.x_edit.text(),
@@ -121,8 +133,13 @@ class VideoCutWidget(QWidget):
         self.monitor = None
         self.is_processing = False
         self.init_ui()
+        
+        # 加载可用字体，初始化水印设置
+        available_fonts = get_available_fonts()
+        default_font = list(available_fonts.keys())[0] if available_fonts else "Roboto-Bold"
+        
         self.watermark_settings = {
-            'font_path': "assets/Roboto-Bold.ttf",
+            'font_name': default_font,
             'font_size': "24",
             'font_color': "white",
             'x': "W-tw-10",
@@ -307,12 +324,13 @@ class VideoCutWidget(QWidget):
             try:
                 # Update text from the main UI just before running
                 self.watermark_settings['text'] = self.txt_watermark_text.text()
-                font_path = Path(self.watermark_settings['font_path'])
-                if not font_path.exists() and not Path(get_resource_path(self.watermark_settings['font_path'])).exists():
-                     raise FileNotFoundError(f"字体文件 '{self.watermark_settings['font_path']}' 未找到。")
+                
+                # 验证选择的字体是否存在
+                available_fonts = get_available_fonts()
+                if self.watermark_settings['font_name'] not in available_fonts:
+                    raise ValueError(f"字体 '{self.watermark_settings['font_name']}' 未找到。可用字体: {', '.join(available_fonts.keys())}")
                 
                 options['watermark_params'] = self.watermark_settings.copy()
-                options['watermark_params']['font_path'] = str(font_path).replace('\\', '/')
             except Exception as e:
                 QMessageBox.critical(self, "水印参数错误", str(e))
                 return
