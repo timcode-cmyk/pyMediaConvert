@@ -1111,8 +1111,10 @@ class ElevenLabsWidget(QWidget):
         self.apply_styles()
         
         # 1. 程序启动时如有读取到api自动刷新
+        #     仅在存在非空 API Key 时执行，并且使用 silent 模式避免
+        #     因无效/失效 Key 或网络问题而弹出错误对话框。
         if self.key_input.text().strip():
-            self.load_voices()
+            self.load_voices(show_errors=False)
 
     def apply_styles(self):
         apply_common_style(self)
@@ -1436,17 +1438,36 @@ class ElevenLabsWidget(QWidget):
         if fname:
             line_edit.setText(fname)
 
-    def load_voices(self):
+    def get_current_api_key(self):
+        """Return the effective API key from input, config or environment."""
         cfg = load_project_config().get('elevenlabs', {})
-        api_key = self.key_input.text().strip() or cfg.get('api_key') or os.getenv("ELEVENLABS_API_KEY", "")
+        return self.key_input.text().strip() or cfg.get('api_key') or os.getenv("ELEVENLABS_API_KEY", "")
+
+    def load_voices(self, show_errors=True):
+        """Load model/voice/usage data from ElevenLabs.
+
+        Parameters
+        ----------
+        show_errors : bool
+            When False errors emitted by workers during this call will only be
+            logged instead of popping up a dialog. This is used for the
+            automatic startup refresh so that a missing/invalid key or network
+            outage does not annoy the user.
+        """
+        api_key = self.get_current_api_key()
         if not api_key:
-            QMessageBox.warning(self, "缺少 Key", "请输入 API Key (或在 config.toml / 环境变量中配置)")
+            if show_errors:
+                QMessageBox.warning(self, "缺少 Key", "请输入 API Key (或在 config.toml / 环境变量中配置)")
             return
+
         self.set_ui_busy(True, "正在加载模型、声音和额度...")
         
         # ⭐ 新增：用于追踪两个 worker 是否都完成
         self.models_loaded = False
         self.voices_loaded = False
+
+        # 根据 show_errors 决定是否在 on_error 中弹窗
+        self._suppress_errors = not show_errors
         
         # 同时加载模型列表和声音列表
         self.model_worker = ModelListWorker(api_key)
@@ -1461,7 +1482,8 @@ class ElevenLabsWidget(QWidget):
         self.model_worker.start()
         self.voice_worker.start()
         
-        self.refresh_quota_only(api_key)
+        # 一并刷新额度，传递 show_errors 标识
+        self.refresh_quota_only(api_key, show_errors=show_errors)
 
     def choose_default_save_path(self, line_edit):
         """选择一个默认保存目录，并把当前行编辑框的路径设为该目录下的默认文件名。"""
@@ -1474,14 +1496,35 @@ class ElevenLabsWidget(QWidget):
             line_edit.setText(fname)
             QMessageBox.information(self, "已设置", f"默认保存路径已设置为: {directory}")
 
-    def refresh_quota_only(self, api_key=None):
+    def refresh_quota_only(self, api_key=None, show_errors=True):
+        """Query remaining quota.  If no key is available this function will
+        silently update the UI but not perform a network call.
+
+        Parameters
+        ----------
+        api_key : str or None
+            Optional explicit API key to use.
+        show_errors : bool
+            If False any errors from the quota worker are logged instead of
+            shown in a dialog.
+        """
         if not api_key:
              cfg = load_project_config().get('elevenlabs', {})
              api_key = self.key_input.text().strip() or cfg.get('api_key') or os.getenv("ELEVENLABS_API_KEY", "")
+
+        if not api_key:
+            # no key -> nothing to contact, reset UI and quit early
+            logger.info("跳过额度查询：未配置 API Key")
+            self.quota_label.setText("未设置API Key")
+            self.quota_bar.setValue(0)
+            return
         
         self.quota_worker = QuotaWorker(api_key)
         self.quota_worker.quota_info.connect(self.on_quota_loaded)
-        self.quota_worker.error.connect(self.on_error)
+        if show_errors:
+            self.quota_worker.error.connect(self.on_error)
+        else:
+            self.quota_worker.error.connect(lambda msg: logger.warning(f"(silent) {msg}"))
         self.quota_worker.start()
 
     def on_voices_loaded(self, voices):
@@ -1811,10 +1854,15 @@ class ElevenLabsWidget(QWidget):
             self.sfx_save_input.setText(self._generate_filename("sfx"))
             
         # 2. 每次生成音频后自动刷新额度
-        self.refresh_quota_only()
+        #    不需要在这里因为缺少 Key 或网络问题弹出错误
+        self.refresh_quota_only(show_errors=False)
 
     def on_error(self, error_msg):
+        # 当 _suppress_errors 标志为 True 时，错误仅记录不弹窗。
         self.set_ui_busy(False, "错误")
+        if getattr(self, '_suppress_errors', False):
+            logger.warning(f"(suppressed) API 错误: {error_msg}")
+            return
         QMessageBox.critical(self, "API 错误", str(error_msg))
 
     def set_ui_busy(self, is_busy, status_text=""):

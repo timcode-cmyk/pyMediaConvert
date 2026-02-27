@@ -32,15 +32,10 @@ class DropLineEdit(QLineEdit):
     def dropEvent(self, event):
         if event.mimeData().hasUrls():
             local_path = event.mimeData().urls()[0].toLocalFile()
-            if os.path.isdir(local_path):
-                self.setText(local_path)
-                self.pathDropped.emit(local_path)
-                event.accept()
-            else:
-                directory = os.path.dirname(local_path)
-                self.setText(directory)
-                self.pathDropped.emit(directory)
-                event.accept()
+            # 直接使用路径本身，无论是文件还是目录
+            self.setText(local_path)
+            self.pathDropped.emit(local_path)
+            event.accept()
         else:
             super().dropEvent(event)
 
@@ -250,17 +245,12 @@ class MediaConverterWidget(QWidget):
             self.desc_label.setText("模式说明: 未知模式或配置未加载。")
 
     def selectInputPath(self):
-        path, _ = QFileDialog.getOpenFileName(self, "选择输入文件 (将使用其目录) 或选择目录", "", "All Files (*);;Videos (*.mp4 *.mkv *.mov)")
+        # 允许用户选文件或目录，文件路径会直接作为输入
+        path, _ = QFileDialog.getOpenFileName(self, "选择输入文件或目录", "", "All Files (*);;Videos (*.mp4 *.mkv *.mov *.avi *.m4v *.webm)")
         if not path:
-            # 尝试作为目录打开 (Qt 没有原生的既选文件又选目录的对话框，通常分步处理)
             path = QFileDialog.getExistingDirectory(self, "选择输入目录")
-        
         if path:
-            if os.path.isfile(path):
-                directory = os.path.dirname(path)
-                self.input_path_edit.setText(directory)
-            else:
-                self.input_path_edit.setText(path)
+            self.input_path_edit.setText(path)
             self.updateOutputPath(self.input_path_edit.text())
 
     def selectOutputDirectory(self):
@@ -273,7 +263,7 @@ class MediaConverterWidget(QWidget):
         input_path = input_path.strip()
         if input_path and os.path.exists(input_path):
             input_dir = os.path.dirname(input_path) if os.path.isfile(input_path) else input_path
-            default_output = os.path.join(input_dir, "PROCESSED_OUTPUT")
+            default_output = os.path.join(input_dir, "CONVERTED_OUTPUT")
             self.output_path_edit.setText(default_output)
         else:
             self.output_path_edit.setText("")
@@ -290,8 +280,9 @@ class MediaConverterWidget(QWidget):
         mode_key = self.mode_combo.currentData()
         mode_config = MODES.get(mode_key)
         
-        if not os.path.isdir(input_dir) or not mode_config:
-            QMessageBox.critical(self, "配置错误", "请输入有效的文件夹路径并选择转换模式。")
+        # 输入可以是目录或单个文件，底层 converter.run() 会处理
+        if not (os.path.isdir(input_dir) or os.path.isfile(input_dir)) or not mode_config:
+            QMessageBox.critical(self, "配置错误", "请输入有效的文件或文件夹路径并选择转换模式。")
             return
             
         if not os.path.exists(output_dir):

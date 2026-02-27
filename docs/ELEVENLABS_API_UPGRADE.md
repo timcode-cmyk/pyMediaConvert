@@ -71,8 +71,20 @@ class ModelListWorker(QThread):
 ### 2. **更新 UI 模型加载逻辑**
 
 #### load_voices() 方法改进
+新增参数 `show_errors` 用于控制是否在发生错误时弹出对话框。启动时使用 `show_errors=False` 可避免因为缺少或无效 API key 导致的提示弹窗。
+
 ```python
-def load_voices(self):
+def load_voices(self, show_errors=True):
+    # 先检查是否有有效的 API key，若无则直接返回
+    api_key = self.get_current_api_key()
+    if not api_key:
+        if show_errors:
+            QMessageBox.warning(self, "缺少 Key", ...)
+        return
+
+    # 标记是否在当前调用中抑制错误提示
+    self._suppress_errors = not show_errors
+
     # 同时启动两个 worker
     self.model_worker = ModelListWorker(api_key)
     self.voice_worker = VoiceListWorker(api_key)

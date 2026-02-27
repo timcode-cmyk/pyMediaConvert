@@ -251,7 +251,10 @@ class VideoCutWidget(QWidget):
         main_layout.addWidget(self.start_stop_button)
 
     def select_input_path(self):
-        path = QFileDialog.getExistingDirectory(self, "选择包含视频的目录")
+        # 支持选单个文件或整个目录
+        path, _ = QFileDialog.getOpenFileName(self, "选择视频文件或目录", "", "视频文件 (*.mp4 *.mkv *.mov *.avi *.m4v *.webm);;所有文件 (*)")
+        if not path:
+            path = QFileDialog.getExistingDirectory(self, "选择包含视频的目录")
         if path:
             self.input_path_edit.setText(path)
 
