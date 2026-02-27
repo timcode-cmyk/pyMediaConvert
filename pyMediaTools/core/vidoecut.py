@@ -26,7 +26,8 @@ logger = get_logger(__name__)
 def get_available_fonts() -> dict:
     """
     扫描 assets 目录，获取所有可用的 TTF 字体文件
-    返回字典: {字体名称: 字体文件路径}
+    返回字典: {字体名称: 相对路径}
+    例如: {"Roboto-Bold": "assets/Roboto-Bold.ttf"}
     """
     fonts = {}
     assets_dir = get_resource_path("assets")
@@ -38,7 +39,8 @@ def get_available_fonts() -> dict:
     try:
         for font_file in assets_dir.glob("*.ttf"):
             font_name = font_file.stem  # 获取不带扩展名的文件名
-            fonts[font_name] = str(font_file)
+            # 返回相对路径
+            fonts[font_name] = f"assets/{font_file.name}"
         
         if fonts:
             logger.info(f"发现 {len(fonts)} 个字体: {', '.join(fonts.keys())}")
@@ -217,17 +219,18 @@ class SceneCutter:
         if not watermark_params:
             return None
         
-        # 获取字体名称并查找对应的路径
+        # 获取字体名称并查找对应的相对路径
         font_name = watermark_params.get('font_name')
         if not font_name or font_name not in self.available_fonts:
             logger.warning(f"水印字体未指定或不存在: {font_name}")
             return None
         
-        font_path = self.available_fonts[font_name]
-        
-        # 构建 FFmpeg 过滤器，使用获取的字体路径
+        # 获取相对路径（如 assets/Roboto-Bold.ttf）
+        font_relative_path = self.available_fonts[font_name]
+        # print(f"使用水印字体: {font_name} -> {font_relative_path}")
+        # 构建 FFmpeg 过滤器，使用相对路径
         return (
-            f"drawtext=fontfile='{font_path}':"
+            f"drawtext=fontfile='{font_relative_path}':"
             f"text='{watermark_params['text']}':"
             f"fontcolor={watermark_params['font_color']}:"
             f"fontsize={watermark_params['font_size']}:"
@@ -363,7 +366,7 @@ class SceneCutter:
                     img_path = video_output_dir / img_name
                     capture_t = start_t + offset_time
                     
-                    cmd_frame = [get_ffmpeg_exe(), '-y', '-ss', str(capture_t), '-i', str(video_path), '-frames:v', '1']
+                    cmd_frame = [get_ffmpeg_exe(), "-y", "-hide_banner", "-nostats", "-loglevel", "error", '-ss',str(capture_t), '-i', str(video_path), '-frames:v', '1']
                     if watermark_filter:
                         cmd_frame.extend(['-vf', watermark_filter])
                     cmd_frame.extend(['-q:v', '2', str(img_path)])
