@@ -144,6 +144,51 @@ class SceneCutter:
             except Exception as e:
                 logger.warning(f"无法写入调试日志: {e}")
 
+    def _execute_ffmpeg_command(self, cmd: list, debug_log_file: Path = None) -> tuple[bool, str]:
+        """
+        执行FFmpeg命令并捕获错误
+        返回: (success, stderr_output)
+        """
+        # Windows 下隐藏 cmd 窗口
+        creationflags = 0
+        if sys.platform == "win32":
+            creationflags = subprocess.CREATE_NO_WINDOW
+        
+        self._log_command(cmd, debug_log_file)
+        
+        try:
+            process = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                encoding='utf-8',
+                creationflags=creationflags,
+                check=False  # 不自动抛异常，手动检查返回码
+            )
+            
+            # 记录详细输出
+            if self.debug and debug_log_file:
+                with open(debug_log_file, "a", encoding="utf-8") as f:
+                    f.write(f"[{datetime.now().isoformat()}] 返回码: {process.returncode}\n")
+                    if process.stdout:
+                        f.write(f"STDOUT: {process.stdout[:500]}\n")
+                    if process.stderr:
+                        f.write(f"STDERR: {process.stderr[:500]}\n")
+            
+            if process.returncode != 0:
+                error_msg = process.stderr or process.stdout or "未知错误"
+                logger.error(f"FFmpeg 命令失败 (返回码: {process.returncode}): {error_msg[:200]}")
+                return False, error_msg
+            
+            return True, process.stderr
+            
+        except Exception as e:
+            logger.exception(f"执行FFmpeg命令时发生异常: {e}")
+            if debug_log_file:
+                with open(debug_log_file, "a", encoding="utf-8") as f:
+                    f.write(f"[{datetime.now().isoformat()}] 异常: {str(e)}\n")
+            return False, str(e)
+
 
     def find_files(self, directory: Path):
         """递归查找支持的视频文件"""
@@ -215,11 +260,6 @@ class SceneCutter:
                 f.write(f"生成时间: {datetime.now().isoformat()}\n")
                 f.write("=" * 50 + "\n\n")
 
-        # Windows 下隐藏 cmd 窗口
-        creationflags = 0
-        if sys.platform == "win32":
-            creationflags = subprocess.CREATE_NO_WINDOW
-
         # 1. 场景检测
         cmd_detect = [
             get_ffmpeg_exe(), '-i', str(video_path),
@@ -228,13 +268,14 @@ class SceneCutter:
         ]
         
         logger.info(f"正在分析场景 (阈值: {threshold})...")
-        self._log_command(cmd_detect, debug_log_file)
+        success, stderr_output = self._execute_ffmpeg_command(cmd_detect, debug_log_file)
         
-        process = subprocess.run(cmd_detect, capture_output=True, text=True, encoding='utf-8',
-                                creationflags=creationflags)
+        if not success:
+            logger.error(f"场景检测失败: {stderr_output[:200]}")
+            return
         
         scene_times = [0.0]
-        times = re.findall(r"pts_time:([\d\.]+)", process.stderr)
+        times = re.findall(r"pts_time:([\d\.]+)", stderr_output)
         scene_times.extend([float(t) for t in times])
         logger.info(f"检测到 {len(scene_times)} 个场景分段。")
         
@@ -300,14 +341,21 @@ class SceneCutter:
                     
                     cmd_split.append(str(clip_path))
                     
-                    self._log_command(cmd_split, debug_log_file)
-                    subprocess.run(cmd_split, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
-                                  creationflags=creationflags)
-                    report_line += f" | 视频: {clip_name}"
+                    # 执行FFmpeg命令
+                    success, output = self._execute_ffmpeg_command(cmd_split, debug_log_file)
                     
-                    if self.debug and debug_log_file:
-                        with open(debug_log_file, "a", encoding="utf-8") as f:
-                            f.write(f"场景 {scene_idx}: 视频分割完成 -> {clip_name}\n")
+                    # 验证输出文件是否存在
+                    if success and clip_path.exists():
+                        report_line += f" | 视频: {clip_name}"
+                        if self.debug and debug_log_file:
+                            with open(debug_log_file, "a", encoding="utf-8") as f:
+                                f.write(f"场景 {scene_idx}: 视频分割完成 -> {clip_name} (大小: {clip_path.stat().st_size} 字节)\n")
+                    else:
+                        report_line += f" | 视频分割失败: {clip_name}"
+                        if self.debug and debug_log_file:
+                            with open(debug_log_file, "a", encoding="utf-8") as f:
+                                f.write(f"场景 {scene_idx}: 视频分割失败 -> {clip_name}\n")
+                        logger.error(f"视频分割失败: {clip_name}")
 
                 # B. 导出静帧
                 if export_frame:
@@ -320,14 +368,21 @@ class SceneCutter:
                         cmd_frame.extend(['-vf', watermark_filter])
                     cmd_frame.extend(['-q:v', '2', str(img_path)])
                     
-                    self._log_command(cmd_frame, debug_log_file)
-                    subprocess.run(cmd_frame, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                                  creationflags=creationflags)
-                    report_line += f" | 截图: {img_name}"
+                    # 执行FFmpeg命令
+                    success, output = self._execute_ffmpeg_command(cmd_frame, debug_log_file)
                     
-                    if self.debug and debug_log_file:
-                        with open(debug_log_file, "a", encoding="utf-8") as f:
-                            f.write(f"场景 {scene_idx}: 截图生成完成 -> {img_name}\n")
+                    # 验证输出文件是否存在
+                    if success and img_path.exists():
+                        report_line += f" | 截图: {img_name}"
+                        if self.debug and debug_log_file:
+                            with open(debug_log_file, "a", encoding="utf-8") as f:
+                                f.write(f"场景 {scene_idx}: 截图生成完成 -> {img_name} (大小: {img_path.stat().st_size} 字节)\n")
+                    else:
+                        report_line += f" | 截图生成失败: {img_name}"
+                        if self.debug and debug_log_file:
+                            with open(debug_log_file, "a", encoding="utf-8") as f:
+                                f.write(f"场景 {scene_idx}: 截图生成失败 -> {img_name}\n")
+                        logger.error(f"截图生成失败: {img_name}")
 
                 f.write(report_line + "\n")
 
