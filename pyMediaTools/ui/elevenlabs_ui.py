@@ -908,7 +908,7 @@ class SubtitleSettingsDialog(QDialog):
         max_chars_head_layout = QHBoxLayout()
         max_chars_head_layout.addWidget(QLabel("<b>每行最大字符数</b>"))
         max_chars_head_layout.addStretch()
-        self.lbl_max_chars_val = QLabel(str(self.video_settings.get('srt_max_chars', 35)))
+        self.lbl_max_chars_val = QLabel(str(self.video_settings.get('srt_max_chars', 40)))
         self.lbl_max_chars_val.setStyleSheet("color: #3b82f6; font-weight: bold;")
         max_chars_head_layout.addWidget(self.lbl_max_chars_val)
         max_chars_item_layout.addLayout(max_chars_head_layout)
@@ -916,7 +916,7 @@ class SubtitleSettingsDialog(QDialog):
         max_chars_slider_layout = QHBoxLayout()
         self.max_chars_slider = QSlider(Qt.Horizontal)
         self.max_chars_slider.setRange(20, 50)
-        self.max_chars_slider.setValue(int(self.video_settings.get('srt_max_chars', 35)))
+        self.max_chars_slider.setValue(int(self.video_settings.get('srt_max_chars', 40)))
         max_chars_slider_layout.addWidget(self.max_chars_slider)
         max_chars_item_layout.addLayout(max_chars_slider_layout)
         
@@ -1077,7 +1077,7 @@ class ElevenLabsWidget(QWidget):
             'width': 1080,
             'height': 1920,
             'srt_pause_threshold': 0.2,  # 停顿阈值
-            'srt_max_chars': 35,         # 单行最大字符数
+            'srt_max_chars': 40,         # 单行最大字符数
         }
         
         # 语音设定 (默认值)

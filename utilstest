@@ -7,14 +7,18 @@ import pytest
 from pyMediaTools import utils
 
 
-print(utils.get_base_dir())
-print(utils.BIN_DIR)
-print(utils.ASSET_DIR)
+# print(utils.get_base_dir())
+# print(utils.BIN_DIR)
+# print(utils.ASSET_DIR)
 
-print(utils.get_ffmpeg_exe())
-print(utils.get_ffprobe_exe())
-print(utils.get_aria2c_exe())
-print(utils.get_aria2_rpc_port())
-print(utils.get_aria2_rpc_secret())
-print(utils.get_default_download_dir())
-print(utils.get_resource_path('logs'))
+# print(utils.get_ffmpeg_exe())
+# print(utils.get_ffprobe_exe())
+# print(utils.get_aria2c_exe())
+# print(utils.get_aria2_rpc_port())
+# print(utils.get_aria2_rpc_secret())
+# print(utils.get_default_download_dir())
+# print(utils.get_resource_path('logs'))
+
+
+abc= "उसने यह नहीं कहा कि विशालकाय कितना"
+print(len(abc)*1.8)
