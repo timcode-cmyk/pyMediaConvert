@@ -9,6 +9,7 @@ CJKTokenizer：CJK（汉字、日文、韩文）文本分词工具
 """
 
 import string
+import re
 
 
 class CJKTokenizer:
@@ -73,7 +74,7 @@ class CJKTokenizer:
         # 标点符号集合（用于分离，而非累积到词中）
         punctuation_chars = (
             set(string.punctuation)
-            | set(["。", "，", "！", "？", "、", "；", "：", """, """, "'", "'", "（", "）", "…", "—", "·", "《", "》", "〈", "〉"])
+            | set(["。", "，", "！", "？", "、", "；", "：", "“", "”", "‘", "’", "（", "）", "…", "—", "～", "·", "《", "》", "〈", "〉"])
         )
 
         words = []
@@ -133,9 +134,13 @@ class CJKTokenizer:
         """
         智能拼接词对象列表，返回拼接后的文本
 
+        与旧版本不同，此实现**保留**独立的标点符号（包括括号、冒号等），
+        仅在必要时插入空格。之前的逻辑会删除所有标点，导致词级模式下
+        引号、括号和数字间隔丢失。
+
         规则：
-        - 清理所有标点符号
-        - 清理前后空格和多余内部空格
+        - 保留每个词对象中的标点符号；标点作为独立词时直接附加
+        - 清理前后空格与多余内部空格
         - CJK 字符之间不加空格
         - 非 CJK 字符之间加单个空格
 
@@ -145,57 +150,52 @@ class CJKTokenizer:
 
         Returns:
             str: 拼接后的文本
-
-        Examples:
-            >>> words = [
-            ...     {"text": "中", "start": 0, "end": 0.5},
-            ...     {"text": "文", "start": 0.5, "end": 1.0},
-            ...     {"text": "hello", "start": 1.0, "end": 2.0}
-            ... ]
-            >>> CJKTokenizer.smart_join(words)
-            '中文 hello'
         """
         if not word_objects:
             return ""
 
-        # 标点符号集（中英文）
+        # 标点符号集（中英文）用于识别独立标点词
         punctuation_chars = (
             set(string.punctuation)
-            | set(["。", "，", "！", "？", "、", "；", "：", """, """, "'", "'", "（", "）", "…", "—", "·", "《", "》", "〈", "〉"])
+            | set(["。", "，", "！", "？", "、", "；", "：", "“", "”", "‘", "’", "（", "）", "…", "—", "～", "·", "《", "》", "〈", "〉"])
         )
 
-        # 清理每个词（移除标点），并过滤掉空的词
-        cleaned_parts = []
+        # 先清理每个词的空格
+        parts = []
         for word_obj in word_objects:
-            txt = "".join(c for c in word_obj["text"] if c not in punctuation_chars)
-            # 清理每个词内的多余空格，保留单个空格
+            txt = word_obj["text"]
+            # collapse internal whitespace
             txt = " ".join(txt.split())
             if txt:
-                cleaned_parts.append(txt)
+                parts.append(txt)
 
-        if not cleaned_parts:
+        if not parts:
             return ""
 
-        # 拼接逻辑
-        result = cleaned_parts[0]
-        for i in range(1, len(cleaned_parts)):
-            prev_text = cleaned_parts[i - 1]
-            current_text = cleaned_parts[i]
-            # 先检查单词的最后和第一个字符
-            # CJK 相邻时不加空格，否则加单个空格
-            last_char = prev_text[-1] if prev_text else ""
-            first_char = current_text[0] if current_text else ""
-            
-            # 如果末尾和开头都是 CJK，或都是非 CJK，判断是否加空格
-            is_prev_cjk = CJKTokenizer.is_cjk(last_char)
-            is_curr_cjk = CJKTokenizer.is_cjk(first_char)
-            
-            # 只有在两个都不是 CJK 时才加空格（即两个英文词相连）
-            if not is_prev_cjk and not is_curr_cjk:
-                result += " " + current_text
+        result = parts[0]
+        for txt in parts[1:]:
+            prev_char = result[-1] if result else ""
+            curr_char = txt[0]
+            # 如果当前词是纯标点，则直接附加，无需空格
+            if all(c in punctuation_chars for c in txt):
+                result += txt
             else:
-                result += current_text
+                is_prev_cjk = CJKTokenizer.is_cjk(prev_char)
+                is_curr_cjk = CJKTokenizer.is_cjk(curr_char)
+                if not is_prev_cjk and not is_curr_cjk and not (curr_char in punctuation_chars):
+                    result += " " + txt
+                else:
+                    result += txt
 
+        # 后处理：调整常见标点周围的空格
+        # 1. 在单词后且未有空格的情况下，在左括号前插入一个空格
+        result = re.sub(r"(?<=[^\s\(])\(", r" (", result)
+        # 2. 删除左括号后的空格
+        result = re.sub(r"\( ", "(", result)
+        # 3. 删除数字与冒号之间的空格（保持 "6:14" 形式）
+        result = re.sub(r"(\d)\s*:\s*(\d)", r"\1:\2", result)
+        # 4. 删除闭合括号前多余空格
+        result = re.sub(r"\s+\)", ")", result)
         return result
 
     @staticmethod

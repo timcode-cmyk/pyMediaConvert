@@ -89,6 +89,49 @@ font_size = "24"
 font_color = "white"
 text = "AI Created"
 
+[modes.image1]
+class = "AddCustomLogo"
+description = "6. 添加 AI-जनित"
+output_ext = ""
+support_exts = [".mp4", ".png", ".jpg", ".jpeg"]
+ 
+[modes.image1.params]
+x = "W-tw-10"
+y = 40
+font_path = "assets/Hind-Bold.ttf"
+font_size = "24"
+font_color = "white"
+text = "AI-जनित"
+ 
+[modes.image2]
+class = "AddCustomLogo"
+description = "6. 添加 AI से छवि"
+output_ext = ""
+support_exts = [".mp4", ".png", ".jpg", ".jpeg"]
+ 
+[modes.image2.params]
+x = "W-tw-10"
+y = 40
+font_path = "assets/Hind-Bold.ttf"
+font_size = "24"
+font_color = "white"
+text = "AI से छवि"
+
+[modes.image3]
+class = "AddCustomLogo"
+description = "6. 添加 Dibuat dengan Al"
+output_ext = ""
+support_exts = [".mp4", ".png", ".jpg", ".jpeg"]
+ 
+[modes.image3.params]
+x = "W-tw-10"
+y = 40
+font_path = "assets/Roboto-Bold.ttf"
+font_size = "24"
+font_color = "white"
+text = "Dibuat dengan Al"
+ 
+
 [modes.h264]
 class = "H264Converter"
 description = "7. 转换为 H.264 (MP4)"
@@ -150,24 +193,37 @@ support_exts = [".mp3", ".wav", ".flac", ".ogg", ".mpeg", ".m4a", ".aiff", ".mp4
 
 [modes.wav.params]
 
+[modes.videotoolbox]
+class = "VideoTooboxConverter"
+description = "14. 使用 VideoToolbox 转码为 H.264 (Mac 专用)"
+output_ext = "_vtb.mp4"
+support_exts = [".mov", ".avi", ".mkv", ".mp4", ".webm"]
+
+[modes.videotoolbox.params]
+
+
+
 # ElevenLabs 配置
 
 [elevenlabs]
 api_key = ""
 default_output_format = "mp3_44100_128"
 supported_output_formats = ["mp3_44100_128", "mp3_44100_192", "pcm_44100", "pcm_48000"]
+# ⭐ 模型、语言、情绪配置
+default_model_id = "eleven_multilingual_v2"  # 默认模型：multilingual v2
+default_language_code = ""  # 语言代码，留空则自动检测
+default_emotion = ""  # 留空，情绪现在通过文本中的 [emotion] 标签指定
 srt_max_chars = 35
 srt_pause_threshold = 0.2
-srt_delimiters = [" ", "\n", "।", "？", "?", "!", "！", ",", "，", "\"", "“", "”"]
-srt_sentence_enders = [".", "\n", "।", "？", "?", "!", "！"]
-debug_save_response = false    #是否保存 ElevenLabs API 的原始响应以供调试
+srt_delimiters = [" ", "\n", "।", ":", "：", "？", "?", "!", "！", ",", "，"]
+srt_sentence_enders = [".", "\n", "।", ",", "，", ":", "：", "？", "?", "!", "！", "…"]  
+debug_save_response = true    #是否保存 ElevenLabs API 的原始响应以供调试
 
 # Groq 配置
 [groq]
 api_key = "" 
 model = "openai/gpt-oss-120b"
 timeout_seconds = 300
-
 # XML 配置
 [xml_styles]
 # 字体样式配置

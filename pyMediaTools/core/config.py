@@ -15,7 +15,8 @@ except Exception:
         DnxhrConverter,
         PngConverter,
         Mp3Converter,
-        WavConverter
+        WavConverter,
+        VideoTooboxConverter,
     )
 
     # 模式配置
@@ -151,5 +152,14 @@ except Exception:
             'output_ext': "_processed.wav",
             'support_exts': ['.mp3', '.wav', '.flac', '.ogg', '.mpeg', '.m4a', '.aiff', '.mp4', '.avi', '.mkv', '.mov', '.webm'], 
             'params': {}
-            }
+            },
+        'videotoolbox': {
+            'class': VideoTooboxConverter,
+            'description': "使用 VideoToolbox 转换为 H.264 (Mac 专用)",
+            'output_ext': "_videotoolbox.mp4",
+            'support_exts': [".mp4", ".avi", ".mkv", ".mov", ".webm"], 
+            'params': {}
+            },
+        
         }
+    

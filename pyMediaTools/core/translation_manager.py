@@ -9,6 +9,7 @@ TranslationManager：翻译服务管理器
 """
 
 import os
+import time
 import requests
 from ..logging_config import get_logger
 
@@ -35,7 +36,9 @@ class TranslationManager:
         self.api_key = api_key or os.getenv("GROQ_API_KEY", "")
         self.model = model
         self.base_url = "https://api.groq.com/openai/v1/chat/completions"
-        self.timeout = 30  # 单次请求超时（秒）
+        self.timeout = 45  # Increased timeout for batches
+        self.batch_size = 20  # Number of segments per request
+        self.max_retries = 3  # Max retries for rate limits
 
     def is_available(self):
         """
@@ -76,80 +79,154 @@ class TranslationManager:
         if not segments:
             return segments
 
-        # logger.info(f"正在使用 Groq ({self.model}) 翻译 {len(segments)} 个片段...")
+        logger.info(f"正在进行智能分批处理: {len(segments)} 个片段 (模型: {self.model})")
 
         translated_segments = []
-        for idx, segment in enumerate(segments):
+        for i in range(0, len(segments), self.batch_size):
+            batch = segments[i : i + self.batch_size]
+            # add numbering prefix to each segment text to help maintain alignment after translation
+            batch_texts = [f"{idx+1}. {s.get('text', '')}" for idx, s in enumerate(batch)]
+            
             try:
-                original_text = segment.get("text", "")
-                translated_text = self._translate_single(original_text)
+                translated_texts = self._translate_batch(batch_texts)
+                # parsed_texts will be reordered according to detected prefixes
+                reordered = [None] * len(batch)
+                for t in translated_texts:
+                    if t is None:
+                        continue
+                    # try to extract leading index
+                    import re
+                    m = re.match(r"\s*(\d+)\s*[\.:]\s*(.*)", t, re.S)
+                    if m:
+                        idx = int(m.group(1)) - 1
+                        txt = m.group(2).strip()
+                        if 0 <= idx < len(batch):
+                            reordered[idx] = txt
+                        else:
+                            # out of range, push to next available slot later
+                            reordered.append(txt)
+                    else:
+                        # no index found; will place sequentially
+                        for j in range(len(reordered)):
+                            if reordered[j] is None:
+                                reordered[j] = t.strip()
+                                break
+                # fill any missing translations with original text or empty string
+                for j in range(len(reordered)):
+                    if reordered[j] is None:
+                        reordered[j] = batch[j].get("text", "")
 
-                if translated_text:
-                    # 复制分段，更新文本
-                    updated_segment = segment.copy()
-                    updated_segment["text"] = translated_text
+                for original_seg, trans_text in zip(batch, reordered):
+                    updated_segment = original_seg.copy()
+                    if trans_text:
+                        updated_segment["text"] = trans_text
                     translated_segments.append(updated_segment)
-                    logger.debug(f"[{idx + 1}/{len(segments)}] {original_text[:20]}... -> {translated_text[:20]}...")
-                else:
-                    # 翻译失败，保持原文本
-                    translated_segments.append(segment)
-                    logger.warning(f"[{idx + 1}/{len(segments)}] 翻译失败，保持原文本")
+                
+                logger.debug(f"已处理批次: {i // self.batch_size + 1}, 集成 {len(batch)} 个片段")
             except Exception as e:
-                # 重新抛出异常，以便上层捕获并提示用户
-                raise e
+                logger.error(f"批次翻译失败: {e}")
+                # Fallback to original segments if entire batch fails
+                translated_segments.extend(batch)
 
         return translated_segments
 
-    def _translate_single(self, text):
+    def _translate_batch(self, texts):
         """
-        翻译单个文本片段（内部方法）
+        批量翻译文本列表
+        """
+        separator = "###SEG_SEP###"
+        combined_text = f"\n{separator}\n".join(texts)
+        
+        system_prompt = (
+            "You are a professional translator specializing in video subtitles. "
+            "Each segment provided to you is prefixed with its index number followed by a dot and a space (e.g. '1. Hello world'). "
+            f"Translate the following segments separated by '{separator}' into Simplified Chinese, preserving the original numbering at the beginning of each segment. "
+            "Maintain the exact number of segments. "
+            f"Output the translation for each segment separated by the same separator '{separator}'. "
+            "Do not remove or change the numeric prefixes. Output ONLY the translated segments, no preamble or extra text."
+        )
 
-        Args:
-            text (str): 要翻译的文本
+        try:
+            result_raw = self._request_with_retry(system_prompt, combined_text)
+            if not result_raw:
+                return [None] * len(texts)
+            
+            # Split by separator and clean up
+            translated_lines = [line.strip() for line in result_raw.split(separator)]
+            
+            # If the model added a trailing separator, the last element might be empty.
+            # We only remove it if we have more lines than expected.
+            if len(translated_lines) > len(texts) and not translated_lines[-1]:
+                translated_lines.pop()
+            
+            # If we still have a mismatch, log it
+            if len(translated_lines) != len(texts):
+                logger.warning(f"翻译数量不匹配: 期望 {len(texts)}, 实际 {len(translated_lines)}")
+                if len(translated_lines) > len(texts):
+                    translated_lines = translated_lines[:len(texts)]
+                else:
+                    translated_lines.extend([None] * (len(texts) - len(translated_lines)))
+            
+            return translated_lines
+        except Exception as e:
+            logger.error(f"批量请求异常: {e}")
+            return [None] * len(texts)
 
-        Returns:
-            str: 翻译后的文本；如果翻译失败返回 None
-
-        Raises:
-            Exception: 网络或 API 错误（调用者应捕获）
+    def _request_with_retry(self, system_content, user_content):
+        """
+        带重试逻辑的 API 请求
         """
         headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
         payload = {
             "messages": [
-                {
-                    "role": "system",
-                    "content": "You are a professional translator. Translate the following text into Simplified Chinese. Output ONLY the translated text, no explanations.",
-                },
-                {"role": "user", "content": text},
+                {"role": "system", "content": system_content},
+                {"role": "user", "content": user_content},
             ],
             "model": self.model,
             "temperature": 0.3,
         }
 
-        try:
-            response = requests.post(self.base_url, json=payload, headers=headers, timeout=self.timeout)
+        retry_count = 0
+        backoff_delay = 5  # Initial backoff in seconds
 
-            if response.status_code == 200:
-                res_json = response.json()
-                if "choices" in res_json and len(res_json["choices"]) > 0:
-                    return res_json["choices"][0]["message"]["content"].strip()
+        while retry_count <= self.max_retries:
+            try:
+                response = requests.post(self.base_url, json=payload, headers=headers, timeout=self.timeout)
+
+                if response.status_code == 200:
+                    res_json = response.json()
+                    if "choices" in res_json and len(res_json["choices"]) > 0:
+                        return res_json["choices"][0]["message"]["content"].strip()
+                    return None
+                elif response.status_code == 429:
+                    retry_count += 1
+                    if retry_count > self.max_retries:
+                        logger.error("已达最大重试次数，仍产生 429 错误")
+                        raise Exception("Rate limit exceeded and max retries reached")
+                    
+                    wait_time = backoff_delay * (2 ** (retry_count - 1))
+                    logger.warning(f"触发 Groq 速率限制 (429)，将在 {wait_time} 秒后重试 ({retry_count}/{self.max_retries})...")
+                    time.sleep(wait_time)
                 else:
-                    error_msg = f"Groq 响应格式不符：{res_json}"
+                    error_msg = f"Groq API Error: {response.status_code} - {response.text}"
                     logger.error(error_msg)
                     raise Exception(error_msg)
-            else:
-                error_msg = f"Groq API Error: {response.status_code} - {response.text}"
-                logger.error(error_msg)
-                raise Exception(error_msg)
 
-        except requests.Timeout:
-            error_msg = f"Groq 请求超时 ({self.timeout}s)"
-            logger.error(error_msg)
-            raise Exception(error_msg)
-        except requests.RequestException as e:
-            error_msg = f"Groq 请求异常：{e}"
-            logger.error(error_msg)
-            raise Exception(error_msg)
+            except (requests.Timeout, requests.RequestException) as e:
+                logger.error(f"请求网络异常: {e}")
+                retry_count += 1
+                if retry_count > self.max_retries:
+                    raise e
+                time.sleep(2)
+        
+        return None
+
+    def _translate_single(self, text):
+        """
+        翻译单个文本片段
+        """
+        system_content = "You are a professional translator. Translate the following text into Simplified Chinese. Output ONLY the translated text, no explanations."
+        return self._request_with_retry(system_content, text)
 
     def set_model(self, model):
         """

@@ -1,30 +1,17 @@
-"""
-SubtitleSegmentBuilder：字幕分段生成器
-
-职责：
-- 统一处理标准模式和 word-level 模式的分段逻辑
-- 提供灵活的配置参数（标点、停顿阈值等）
-- 返回标准的分段列表格式
-"""
+import re
+import string
 
 from .cjk_tokenizer import CJKTokenizer
 
-
 class SubtitleSegmentBuilder:
     """
-    字幕分段生成器，根据不同策略将字符级时间戳转换为句级/词级分段
+    字幕分段生成器：优化版
+    解决印尼语长文案不换行、印地语/中文标点过碎的问题。
     """
 
     def __init__(self, config=None):
         """
         初始化分段生成器
-
-        Args:
-            config (dict): 配置字典，支持以下键：
-                - srt_delimiters: 行分隔符集（默认 [" ", "\n", "।", "？", "?", "!", "！", ",", "，", '"', """, """]）
-                - srt_sentence_enders: 句末标点集（默认 [".", "\n", "。", "।", "？", "?", "!", "！", "…"]）
-                - srt_max_chars: 单行最大字符数（默认 35）
-                - srt_pause_threshold: 停顿阈值秒数（默认 0.2）
         """
         self.config = config or {}
 
@@ -32,7 +19,7 @@ class SubtitleSegmentBuilder:
         self.delimiters = set(
             self.config.get(
                 "srt_delimiters",
-                [" ", "\n", "।", "？", "?", "!", "！", ",", "，", '"', """, """],
+                [" ", "\n", "।", "？", "?", "!", "！", ",", "，", '"', "“", "”"],
             )
         )
         self.sentence_enders = set(
@@ -46,60 +33,24 @@ class SubtitleSegmentBuilder:
 
     def build_segments(self, chars, char_starts, char_ends, word_level=False, words_per_line=1, ignore_line_length=False):
         """
-        构建字幕分段
-
-        Args:
-            chars (list): 字符列表
-            char_starts (list): 各字符的开始时间（秒）
-            char_ends (list): 各字符的结束时间（秒）
-            word_level (bool): 是否使用逐词模式
-                - False（默认）: 按句末标点/停顿分段（标准模式）
-                - True: 按词数分组（word-level 模式）
-            words_per_line (int): 在 word_level=True 时，每行目标词数（默认 1）
-            ignore_line_length (bool): 在标准模式下，是否忽略行长度限制
-                - False（默认）: 考虑 max_chars_per_line（用于显示）
-                - True: 只按标点/停顿分割，不考虑行长度（用于翻译）
-
-        Returns:
-            list: 分段列表，每个分段为 dict:
-                  {
-                      "text": "分段文本",
-                      "start": 1.5,
-                      "end": 3.2
-                  }
+        构建字幕分段入口
         """
         if not chars:
             return []
 
         if word_level:
-            return self._build_segments_word_level(
+            segs = self._build_segments_word_level(
                 chars, char_starts, char_ends, words_per_line
             )
         else:
-            return self._build_segments_standard(chars, char_starts, char_ends, ignore_line_length)
+            segs = self._build_segments_standard(chars, char_starts, char_ends, ignore_line_length)
+
+        # 一致化后处理，修复括号、首位标点及超长兜底
+        return self._post_process_segments(segs)
 
     def _build_segments_standard(self, chars, char_starts, char_ends, ignore_line_length=False):
         """
-        标准分段模式：按句末标点和停顿分割
-
-        分段条件（优先级递增）：
-        1. 当前字符是句末标点
-        2. 当前字符后有明显停顿（时长 >= pause_threshold）
-        3. 行长已超过 max_chars_per_line 且当前字符是分隔符（仅当 ignore_line_length=False）
-        4. 这是最后一个字符
-
-        改进：
-        - 使用字符间隔（character gap）而非单个字符时长来检测停顿
-        - 停顿 = char_starts[i+1] - char_ends[i]（下一个字符的开始 - 当前字符的结束）
-        - 这样可以避免单个长字符（如标点）导致的误判
-
-        Args:
-            ignore_line_length (bool): 是否忽略行长度限制
-                - False（默认）: 考虑行长度（用于显示）
-                - True: 只按标点/停顿分割（用于翻译）
-
-        Returns:
-            list: 分段列表
+        标准分段模式：改进了长句合并逻辑
         """
         sentences = []
         current_line_text = ""
@@ -111,72 +62,96 @@ class SubtitleSegmentBuilder:
 
             current_line_text += char
 
-            # 判断分段条件
+            # 1. 句末标点
             is_sentence_end = char in self.sentence_enders
-            is_pause_after = (i < len(chars) - 1) and (char_ends[i] - char_starts[i] >= self.pause_threshold)
-            
-            # # 改进：检测字符间隔而非字符时长
-            # # 停顿 = 下一个字符的开始 - 当前字符的结束
-            # is_pause_after = False
-            # if i < len(chars) - 1:
-            #     gap_time = char_starts[i + 1] - char_ends[i]
-            #     is_pause_after = gap_time >= self.pause_threshold
-            
-            # 只有在不忽略行长度时才检查行长度限制
-            is_long_and_at_delimiter = False
+
+            # 2. 字符间隔停顿
+            is_pause_after = False
+            if i < len(chars) - 1:
+                gap_time = char_starts[i + 1] - char_ends[i]
+                is_pause_after = gap_time >= self.pause_threshold
+
+            # 3. 长度控制
+            is_long = False
             if not ignore_line_length:
-                is_long_and_at_delimiter = (len(current_line_text) > self.max_chars_per_line) and (char in self.delimiters)
-            
+                # 逻辑：达到阈值且在分隔符处，或长度极其严重超标强制断开
+                is_long = (len(current_line_text) >= self.max_chars_per_line and char in self.delimiters) or \
+                          (len(current_line_text) >= self.max_chars_per_line * 1.5)
+
             is_last_char = i == len(chars) - 1
 
-            # 满足任意条件就结束当前分段
-            if is_sentence_end or is_pause_after or is_long_and_at_delimiter or is_last_char:
-                clean_text = current_line_text.strip()
-                # 清理多余空格
-                clean_text = " ".join(clean_text.split())
+            # 确定分段原因
+            reason = None
+            if is_sentence_end: reason = "punct"
+            elif is_pause_after: reason = "pause"
+            elif is_long: reason = "length"
+            elif is_last_char: reason = "last"
+
+            if reason:
+                clean_text = " ".join(current_line_text.strip().split())
                 if clean_text:
-                    sentences.append({"text": clean_text, "start": current_line_start, "end": char_ends[i]})
+                    sentences.append({
+                        "text": clean_text,
+                        "start": current_line_start,
+                        "end": char_ends[i],
+                        "reason": reason,
+                    })
                 current_line_text = ""
                 current_line_start = None
 
-        return sentences
+        # 合并处理：解决标点过碎
+        merged = []
+        for seg in sentences:
+            if not merged:
+                merged.append(seg)
+                continue
+
+            prev = merged[-1]
+            # 优化合并策略：针对印尼语等拉丁语系，提高字符长度阈值判断
+            is_current_very_short = self._should_merge_short(seg["text"])
+            
+            should_merge = False
+            # 如果上一句是以标点结束的硬断句，不合并
+            if prev["reason"] != "punct":
+                # 如果上一句是因为长度切断的，只有在当前片段极短（如只有标点或1个单词）时才合回
+                if prev["reason"] == "length":
+                    if len(seg["text"]) < 8: # 针对印尼语单词长度优化的阈值
+                        should_merge = True
+                else:
+                    # 停顿或自然末尾产生的碎块，若符合短句定义则合并
+                    if is_current_very_short:
+                        should_merge = True
+
+            if should_merge:
+                prev["text"] = " ".join((prev["text"] + " " + seg["text"]).split())
+                prev["end"] = seg["end"]
+                # 合并后更新 reason，如果包含了 punct，则标记为 punct 防止继续被后续合并
+                if seg["reason"] == "punct":
+                    prev["reason"] = "punct"
+            else:
+                merged.append(seg)
+
+        for seg in merged:
+            seg.pop("reason", None)
+        return merged
 
     def _build_segments_word_level(self, chars, char_starts, char_ends, words_per_line):
         """
-        逐词分段模式：先分词，再按词数分组，最后按语句分割
-
-        流程：
-        1. 使用 CJKTokenizer 分词（处理 CJK vs 非 CJK 的边界，标点分离）
-        2. 按 words_per_line 对词分组
-        3. 遇到句末标点/停顿时立即分段
-        4. 使用 smart_join 拼接词文本（CJK 不加空格，正确处理标点）
-
-        改进：
-        - 在词级而非字符级进行操作，避免单个字符的时长干扰
-        - 检查词间的停顿（word[i+1].start - word[i].end）而非词内部的时长
-        - 对标点词进行特殊处理（不独占一行，与前一词合并）
-
-        Returns:
-            list: 分段列表
+        词级分段模式
         """
-        # 第一步：分词
         words = CJKTokenizer.tokenize_by_cjk(chars, char_starts, char_ends)
-
-        # 预处理：标点词与前一词合并（避免标点单独成行）
+        words = self._merge_numeric_with_adjacent(words)
         processed_words = self._merge_punctuation_with_previous(words)
 
-        # 第二步：按词数和句末条件分组
         current_group = []
         segments = []
 
         for i, word_obj in enumerate(processed_words):
             current_group.append(word_obj)
 
-            # 检查分组条件
             is_limit_reached = len(current_group) >= words_per_line
             is_sentence_end = any(ender in word_obj["text"] for ender in self.sentence_enders)
             
-            # 检查词间停顿（而非词内时长）
             is_pause = False
             if i < len(processed_words) - 1:
                 gap_time = processed_words[i + 1]["start"] - word_obj["end"]
@@ -187,85 +162,120 @@ class SubtitleSegmentBuilder:
             if is_limit_reached or is_sentence_end or is_pause or is_last:
                 text_content = CJKTokenizer.smart_join(current_group)
                 if text_content:
-                    segments.append(
-                        {
-                            "text": text_content,
-                            "start": current_group[0]["start"],
-                            "end": current_group[-1]["end"],
-                        }
-                    )
+                    segments.append({
+                        "text": text_content,
+                        "start": current_group[0]["start"],
+                        "end": current_group[-1]["end"],
+                    })
                 current_group = []
-
         return segments
+
+    def _should_merge_short(self, text):
+        """
+        判断短句逻辑优化：增加字符长度维度
+        """
+        words = re.findall(r"\b\w+\b", text)
+        # 词数少于等于 2 且 字符数少于 12 时定义为短句
+        return len(words) <= 3 or len(text) < 16
 
     def _merge_punctuation_with_previous(self, words):
         """
-        将标点词与前一个词合并，避免标点独占一行
-        
-        Args:
-            words (list): 词对象列表
-            
-        Returns:
-            list: 合并后的词列表
+        标点不换行处理
         """
-        if not words:
-            return words
-        
-        punctuation_chars = set(
-            self.config.get(
-                "srt_delimiters",
-                [" ", "\n", "।", "？", "?", "!", "！", ",", "，", '"', """, """],
-            )
-        ) | set(
-            self.config.get(
-                "srt_sentence_enders",
-                [".", "\n", "。", "।", "？", "?", "!", "！", "…"],
-            )
-        )
-        
+        if not words: return words
+        punctuation_chars = self.delimiters | self.sentence_enders
+        result = []
+        for word in words:
+            is_punctuation = all(c in punctuation_chars for c in word["text"] if c.strip())
+            if is_punctuation and result:
+                result[-1]["text"] += word["text"]
+                result[-1]["end"] = word["end"]
+            else:
+                result.append(word)
+        return result
+
+    def _merge_numeric_with_adjacent(self, words):
+        """
+        数字不换行处理
+        """
+        if not words: return words
+        punctuation_chars = set(string.punctuation)
         result = []
         i = 0
         while i < len(words):
             word = words[i]
-            
-            # 检查是否是纯标点词
-            is_punctuation = all(c in punctuation_chars for c in word["text"] if c.strip())
-            
-            if is_punctuation and result:
-                # 将标点合并到前一个词
-                prev_word = result[-1]
-                prev_word["text"] += word["text"]
-                prev_word["end"] = word["end"]
-            else:
-                result.append(word)
-            
+            if word["text"].isdigit() and i + 1 < len(words):
+                nxt = words[i + 1]
+                if not all(c in punctuation_chars for c in nxt["text"] if c.strip()):
+                    word["text"] += " " + nxt["text"]
+                    word["end"] = nxt["end"]
+                    result.append(word)
+                    i += 2
+                    continue
+            result.append(word)
             i += 1
-        
         return result
 
+    def _post_process_segments(self, segments):
+        """
+        后处理：修复括号闭合、首位异常字符、以及超长兜底切分
+        """
+        if not segments: return []
+
+        # 1. 括号合并
+        merged_bracket = []
+        depth = 0
+        for seg in segments:
+            text = seg["text"]
+            if merged_bracket and depth > 0:
+                merged_bracket[-1]["text"] += " " + text
+                merged_bracket[-1]["end"] = seg["end"]
+            else:
+                merged_bracket.append(seg.copy())
+            depth += text.count("(") - text.count(")")
+
+        # 2. 首位字符规范化（首位不出现碎标点）
+        final = []
+        punctuation_chars = set(string.punctuation) | self.delimiters | self.sentence_enders
+        for seg in merged_bracket:
+            text = seg["text"]
+            if final:
+                first = text[0]
+                if (first in punctuation_chars or first.isdigit()) and first not in "([{“‘":
+                    prev = final[-1]
+                    prev["text"] = " ".join((prev["text"] + " " + text).split())
+                    prev["end"] = seg["end"]
+                    continue
+            final.append(seg)
+
+        # 3. 兜底切分：防止合并逻辑导致单行超出 max_chars_per_line 的 1.8 倍
+        ultimate_segments = []
+        for seg in final:
+            if len(seg["text"]) > self.max_chars_per_line * 1.8:
+                text = seg["text"]
+                mid = len(text) // 2
+                space_idx = text.find(" ", mid)
+                if space_idx == -1: space_idx = text.rfind(" ", 0, mid)
+                
+                if space_idx != -1:
+                    ratio = space_idx / len(text)
+                    split_time = seg["start"] + (seg["end"] - seg["start"]) * ratio
+                    ultimate_segments.append({"text": text[:space_idx].strip(), "start": seg["start"], "end": split_time})
+                    ultimate_segments.append({"text": text[space_idx:].strip(), "start": split_time, "end": seg["end"]})
+                    continue
+            ultimate_segments.append(seg)
+
+        # 4. 文本清洗
+        for seg in ultimate_segments:
+            t = seg["text"]
+            t = re.sub(r"\(\s+", "(", t)
+            t = re.sub(r"\s+\)", ")", t)
+            t = re.sub(r"(\d)\s*:\s*(\d)", r"\1:\2", t)
+            seg["text"] = t.strip()
+        
+        return ultimate_segments
+
     def reconfigure(self, **kwargs):
-        """
-        动态更新配置参数
-
-        Args:
-            **kwargs: 任何支持的配置参数，将覆盖现有值
-
-        Examples:
-            >>> builder = SubtitleSegmentBuilder()
-            >>> builder.reconfigure(srt_max_chars=50, srt_pause_threshold=0.5)
-        """
+        """ 动态配置更新 """
         self.config.update(kwargs)
-        self.delimiters = set(
-            self.config.get(
-                "srt_delimiters",
-                [" ", "\n", "।", "？", "?", "!", "！", ",", "，", '"', """, """],
-            )
-        )
-        self.sentence_enders = set(
-            self.config.get(
-                "srt_sentence_enders",
-                [".", "\n", "。", "।", "？", "?", "!", "！", "…"],
-            )
-        )
-        self.max_chars_per_line = self.config.get("srt_max_chars", 35)
-        self.pause_threshold = self.config.get("srt_pause_threshold", 0.2)
+        self.__init__(self.config)
