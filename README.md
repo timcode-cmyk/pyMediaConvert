@@ -93,8 +93,11 @@
 
 ## 📦 打包指南
 
-本项目支持使用 Nuitka 打包为独立可执行文件。
-
+本项目支持使用 Nuitka 和 Pyinstaller 打包为独立可执行文件。
+### Pyinstaller 打包
+```bash
+pyinstaller MediaTools.spec
+```
 ### macOS 打包
 ```bash
 nuitka --standalone \
@@ -111,13 +114,14 @@ nuitka --standalone \
        --include-data-dir=bin=bin \
        --include-data-dir=yt_dlp=yt_dlp \
        --include-data-files=config.toml=config.toml \
+       --include-data-files=MediaTools.ico=MediaTools.ico \
        --include-data-dir=assets=assets \
        MediaTools.py
 ```
 
 ### Windows 打包
 ```bash
-nuitka --standalone --windows-console-mode=disable --output-dir=dist-nuitka --windows-icon-from-ico=MediaTools.ico --nofollow-import-to=yt_dlp --no-deployment-flag=excluded-module-usage --include-module=optparse --include-module=asyncio --include-package=pyMediaTools --plugin-enable=pyside6 --include-qt-plugins=multimedia,platforms,styles,imageformats --include-data-dir=yt_dlp=yt_dlp --include-data-files=bin\aria2c.exe=bin\aria2c.exe --include-data-files=bin\ffmpeg.exe=bin\ffmpeg.exe --include-data-files=bin\ffprobe.exe=bin\ffprobe.exe --include-data-files=config.toml=config.toml --include-data-dir=assets=assets MediaTools.py
+nuitka --standalone --windows-console-mode=disable --output-dir=dist-nuitka --windows-icon-from-ico=MediaTools.ico --nofollow-import-to=yt_dlp --no-deployment-flag=excluded-module-usage --include-module=optparse --include-module=asyncio --include-package=pyMediaTools --plugin-enable=pyside6 --include-qt-plugins=multimedia,platforms,styles,imageformats --include-data-dir=yt_dlp=yt_dlp --include-data-files=bin\aria2c.exe=bin\aria2c.exe --include-data-files=MediaTools.ico=MediaTools.ico --include-data-files=bin\ffmpeg.exe=bin\ffmpeg.exe --include-data-files=bin\ffprobe.exe=bin\ffprobe.exe --include-data-files=config.toml=config.toml --include-data-dir=assets=assets MediaTools.py
 
 ```
 
