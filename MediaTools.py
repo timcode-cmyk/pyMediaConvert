@@ -2,42 +2,9 @@
 项目名称: pyMediaTools
 创建日期: 2025-12-20
 作者: TimCode
-版本: v1.13.1
+版本: v1.13.2
 许可证: GPL License
 """
-# --- 公共参数 (Windows & macOS 通用) ---
-# nuitka-project: --standalone
-# nuitka-project: --show-progress
-# nuitka-project: --include-data-dir=assets=assets
-# nuitka-project: --output-dir=dist-nuitka
-# nuitka-project: --plugin-enable=pyside6
-# nuitka-project: --nofollow-import-to=yt_dlp
-# nuitka-project: --no-deployment-flag=excluded-module-usage
-# nuitka-project: --include-qt-plugins=multimedia,platforms,styles,imageformats
-# nuitka-project: --include-package=pyMediaTools
-# nuitka-project: --include-module=optparse
-# nuitka-project: --include-module=asyncio
-# nuitka-project: --include-data-dir=yt_dlp=yt_dlp
-# nuitka-project: --include-data-files=config.toml=config.toml
-# nuitka-project: -include-data-files=MediaTools.ico=MediaTools.ico
-
-# --- Windows 专用配置 ---
-# nuitka-project-if: {OS} == "Windows":
-#    nuitka-project: --windows-icon-from-ico=MediaTools.ico 
-#    nuitka-project: --windows-disable-console
-#    nuitka-project: --include-data-files=bin\aria2c.exe=bin\aria2c.exe
-#    nuitka-project: --include-data-files=bin\ffmpeg.exe=bin\ffmpeg.exe
-#    nuitka-project: --include-data-files=bin\ffprobe.exe=bin\ffprobe.exe
-
-# --- macOS 专用配置 ---
-# nuitka-project-if: {OS} == "Darwin":
-#    nuitka-project: --macos-app-icon=Icon.icns
-#    nuitka-project: --macos-create-app-bundle
-#    nuitka-project: --include-data-dir=bin=bin
-#    nuitka-project: --macos-app-name=MediaTools
-#    nuitka-project: --macos-app-version=1.13.2
-
-
 
 __version__ = "1.13.2"
 __author__ = "TimCode"
