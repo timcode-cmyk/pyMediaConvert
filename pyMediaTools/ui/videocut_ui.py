@@ -371,6 +371,9 @@ class VideoCutWidget(QWidget):
         self.start_stop_button.style().polish(self.start_stop_button)
 
         if success:
+            # make sure bars reach full
+            self.overall_progress_bar.setValue(self.overall_progress_bar.maximum())
+            self.file_progress_bar.setValue(self.file_progress_bar.maximum())
             self.status_label.setText("处理完成！")
             QMessageBox.information(self, "完成", "所有任务已成功完成。")
         elif self.monitor and self.monitor.check_stop_flag():
@@ -381,8 +384,13 @@ class VideoCutWidget(QWidget):
 
     @Slot(int, int, str)
     def update_overall_progress(self, current, total, status):
+        # always update range first, then value
         self.overall_progress_bar.setRange(0, total)
-        self.overall_progress_bar.setValue(current)
+        # clamp current to [0,total]
+        if total > 0 and current >= total:
+            self.overall_progress_bar.setValue(total)
+        else:
+            self.overall_progress_bar.setValue(current)
         self.status_label.setText(status)
 
     @Slot(float, float, str)
