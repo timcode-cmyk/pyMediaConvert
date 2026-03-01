@@ -238,8 +238,15 @@ class SceneCutter:
             f"x={watermark_params['x']}:y={watermark_params['y']}"
         )
 
-    def process_video(self, video_path: Path, output_root: Path, threshold=0.3,
-                      export_frame=True, frame_offset=10,
+    def _align_to_frame(self, times: list[float], fps: float) -> list[float]:
+        """将一组时间戳四舍五入到最接近的帧边界。
+        若 fps<=0 或者 times 为空，原样返回。"""
+        if fps <= 0 or not times:
+            return times
+        return [round(t * fps) / fps for t in times]
+
+    def process_video(self, video_path: Path, output_root: Path, threshold=0.2,
+                      export_frame=True, frame_offset=0,
                       watermark_params=None, person_id: str = "", rename_lines: list = None):
         
         video_output_dir = output_root / video_path.stem
@@ -248,6 +255,8 @@ class SceneCutter:
         logger.info(f"开始处理: {video_path.name}")
         fps = get_video_fps(video_path, debug=self.debug)
         video_duration = _get_video_duration(video_path, debug=self.debug)
+        # offset_time 仅用于截图；视频片段的起止时间使用场景检测结果并且会对齐到最接近的帧，
+        # 以避免出现 "下一场景画面残留" 的情况。
         offset_time = frame_offset / fps
 
         # 调试日志文件路径
@@ -280,13 +289,16 @@ class SceneCutter:
         scene_times = [0.0]
         times = re.findall(r"pts_time:([\d\.]+)", stderr_output)
         scene_times.extend([float(t) for t in times])
-        logger.info(f"检测到 {len(scene_times)} 个场景分段。")
+        # 对检测结果进行帧对齐
+        scene_times = self._align_to_frame(scene_times, fps)
+        logger.info(f"检测到 {len(scene_times)} 个场景分段（已帧对齐）。")
         
         if self.debug and debug_log_file:
             with open(debug_log_file, "a", encoding="utf-8") as f:
                 f.write(f"场景检测结果:\n")
                 f.write(f"  检测到 {len(scene_times)} 个分段\n")
-                f.write(f"  场景时间点: {scene_times}\n\n")
+                f.write(f"  原始时间点: {times}\n")
+                f.write(f"  帧对齐后时间点: {scene_times}\n\n")
 
         rename_lines = rename_lines or []
         # 2. 生成报告和产物
@@ -333,15 +345,13 @@ class SceneCutter:
                     clip_name = f"{date_str}{person_id_str}{custom_name}_{scene_idx:03d}.mp4"
                     clip_path = video_output_dir / clip_name
 
-                    cmd_split = [get_ffmpeg_exe(), '-y', '-ss', str(start_t), '-i', str(video_path), '-t', str(duration)]
-                    
+                    # 为了保证帧级精度，把 -ss 放在输入之后，同时让 ffmpeg 进行精确寻帧。
+                    # 仅在不需要水印时才尝试直接复制流，否则重新编码。
+                    cmd_split = [get_ffmpeg_exe(), '-y', '-i', str(video_path), '-ss', str(start_t), '-t', str(duration)]
                     if watermark_filter:
-                        # 加水印需要重新编码
                         cmd_split.extend(['-vf', watermark_filter, '-c:v', 'libx264', '-preset', 'fast', '-crf', '22', '-c:a', 'aac'])
                     else:
-                        # 不加水印可直接复制流，速度快
-                        cmd_split.extend(['-c', 'copy'])
-                    
+                        cmd_split.extend(['-c:v', 'libx264', '-preset', 'fast', '-crf', '22', '-c:a', 'aac'])
                     cmd_split.append(str(clip_path))
                     
                     # 执行FFmpeg命令

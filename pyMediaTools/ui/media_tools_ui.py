@@ -362,12 +362,16 @@ class MediaConverterWidget(QWidget):
     @Slot(int, int, str)
     def updateOverallProgress(self, current: int, total: int, status: str):
         if total > 0:
-            overall_progress = (current / total) * 100.0
-            self.overall_progress_bar.setValue(int(overall_progress))
-            self.overall_progress_text.setText(f"{current}/{total}")
+            # clamp and compute percent
+            pct = int((current / total) * 100.0)
+            if current >= total:
+                pct = 100
+            self.overall_progress_bar.setValue(pct)
+            self.overall_progress_text.setText(f"{current}/{total} ({pct}%)")
         
-        if not self.is_converting: 
-             self.status_label.setText(status)
+        # if conversion already stopped, don't override status text
+        if not self.is_converting:
+            self.status_label.setText(status)
 
     @Slot(bool, str)
     def conversionFinished(self, is_successful, error_msg: str = ""):
@@ -381,6 +385,8 @@ class MediaConverterWidget(QWidget):
         if is_successful:
             self.overall_progress_bar.setValue(100)
             self.file_progress_bar.setValue(100)
+            self.overall_progress_text.setText(f"{self.last_total_files}/{self.last_total_files} (100%)")
+            self.file_progress_text.setText("100%")
             self.status_label.setText("所有任务已完成。")
             QMessageBox.information(self, "完成", "所有文件转换成功完成!")
         elif self.last_stop_requested:
