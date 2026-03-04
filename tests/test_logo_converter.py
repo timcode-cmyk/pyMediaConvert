@@ -60,6 +60,10 @@ def test_logoconverter_multiple(tmp_path, monkeypatch):
     # ensure blur only applied once: there should be exactly one "boxblur" in filter
     cmdstr = ' '.join(recorded['cmd'])
     assert cmdstr.count('boxblur') == 1
+    # verify scaling expression uses gt(iw/ih) so scaling always happens
+    assert 'gt(iw/ih' in cmdstr
+    # final crop to target should be present
+    assert 'crop=100:100' in cmdstr
 
 
 def test_factory_loads_dream_mode(tmp_path, monkeypatch):

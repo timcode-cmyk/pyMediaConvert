@@ -506,7 +506,18 @@ class LogoConverter(MediaConverter):
         # 构造 dynamic filter_complex 以支持多个 logo
         # 1. 缩放裁切基础画面
         parts = []
-        parts.append(f"[0:v]scale={self.target_w}:{self.target_h}:force_original_aspect_ratio=increase,crop={self.target_w}:{self.target_h},setsar=1[base];")
+        # compute an expression that scales the input to fill the target box
+        # while preserving aspect ratio.  The expression below scales the video
+        # so that at least one of the output dimensions equals the configured
+        # target.  Afterward a crop to the exact target size guarantees the
+        # final resolution.  This handles both up‑ and down‑scaling.
+        ratio = float(self.target_w) / float(self.target_h)
+        # the ffmpeg expression uses iw/ih compare to ratio; if wider, fix width
+        parts.append(
+            f"[0:v]scale='if(gt(iw/ih,{ratio}),{self.target_w},-2)':'"
+            f"if(gt(iw/ih,{ratio}),-2,{self.target_h})',setsar=1,"
+            f"crop={self.target_w}:{self.target_h}[base];"
+        )
         prev = 'base'
 
         # 为每个需要模糊的 logo 先模糊背景并叠加到上一层
