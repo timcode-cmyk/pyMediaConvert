@@ -13,8 +13,13 @@ __license__ = "GPL License"
 
 import sys
 import os
-from PySide6.QtWidgets import QApplication, QMainWindow, QTabWidget
-    
+from pathlib import Path
+
+from PySide6.QtGui import QGuiApplication, QIcon
+from PySide6.QtWidgets import QApplication
+from PySide6.QtQml import QQmlApplicationEngine
+from PySide6.QtCore import QUrl, Qt
+
 # 解决打包环境下 stdout/stderr 默认编码可能为 ascii 导致的 UnicodeEncodeError
 if sys.stdout and hasattr(sys.stdout, 'reconfigure'):
     try:
@@ -28,38 +33,19 @@ if sys.stderr and hasattr(sys.stderr, 'reconfigure'):
         pass
 
 from pyMediaTools import setup_logging
-from pyMediaTools.ui import MediaConverterWidget, ElevenLabsWidget, DownloadManagerWidget, VideoDownloadWidget, VideoCutWidget
-
-
+from pyMediaTools.bridges.media_converter_bridge import MediaConverterBridge
 
 # initialize logging early
 setup_logging()
 
-
-class MainWindow(QMainWindow):
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle("MediaTools")
-        self.resize(900, 700)
-        tabs = QTabWidget()
-        tabs.addTab(MediaConverterWidget(), "媒体转换")
-        tabs.addTab(ElevenLabsWidget(), "ElevenLabs")
-        tabs.addTab(VideoCutWidget(), "场景分割")
-        tabs.addTab(DownloadManagerWidget(), "云端同步")
-        tabs.addTab(VideoDownloadWidget(), "视频下载")
-        self.setCentralWidget(tabs)
-
-
-
-
 if __name__ == '__main__':
+    # Use QApplication to enable QtWidgets features like QFileDialog on some platforms
     app = QApplication(sys.argv)
     
     # 强制设置 Fusion 样式，确保在所有平台打包后都有统一美观的界面
     app.setStyle("Fusion")
     app.setApplicationName("Media Tools")
 
-    from PySide6.QtGui import QIcon
     import sys as _sys
     _icon_candidates = [
         os.path.join(os.path.dirname(os.path.abspath(__file__)), 'MediaTools.ico'),
@@ -73,9 +59,17 @@ if __name__ == '__main__':
             app.setWindowIcon(QIcon(_icon_path))
             break
 
+    engine = QQmlApplicationEngine()
+    
+    # 注册 QML Bridge
+    media_converter_bridge = MediaConverterBridge()
+    engine.rootContext().setContextProperty("mediaConverterBridge", media_converter_bridge)
 
+    # 加载主 QML
+    qml_file = Path(__file__).resolve().parent / "pyMediaTools" / "qml" / "main.qml"
+    engine.load(QUrl.fromLocalFile(os.fspath(qml_file)))
 
+    if not engine.rootObjects():
+        sys.exit(-1)
 
-    win = MainWindow()
-    win.show()
     sys.exit(app.exec())
