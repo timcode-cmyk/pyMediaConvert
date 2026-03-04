@@ -162,7 +162,6 @@ Item {
                 color: "white"
                 font.pixelSize: 28
                 font.bold: true
-                font.family: "Segoe UI"
             }
 
             // Task List Area
@@ -189,7 +188,7 @@ Item {
                             color: "white"
                             background: Rectangle {
                                 color: "#3c3c3c"
-                                radius: 4
+                                radius: 6
                                 implicitHeight: 40
                             }
                             font.pixelSize: 14
@@ -202,7 +201,7 @@ Item {
                             onClicked: root.analyzeUrl()
                             background: Rectangle {
                                 color: parent.hovered ? "#006bb3" : "#007acc"
-                                radius: 4
+                                radius: 6
                                 implicitHeight: 40
                                 implicitWidth: 120
                             }
@@ -247,7 +246,7 @@ Item {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 30
                         color: "#333333"
-                        radius: 4
+                        radius: 6
                         Rectangle {
                             anchors.bottom: parent.bottom
                             width: parent.width
@@ -387,7 +386,7 @@ Item {
                             model: chkAudioOnly.checked ? ["mp3", "m4a", "wav"] : ["mp4", "mkv", "webm"]
                             background: Rectangle {
                                 color: "#3c3c3c"
-                                radius: 4
+                                radius: 6
                             }
                             contentItem: Text {
                                 text: comboFormat.currentText
@@ -409,7 +408,7 @@ Item {
                             enabled: !chkAudioOnly.checked
                             background: Rectangle {
                                 color: "#3c3c3c"
-                                radius: 4
+                                radius: 6
                             }
                             contentItem: Text {
                                 text: comboQuality.currentText
@@ -454,7 +453,7 @@ Item {
                             enabled: !chkAudioOnly.checked
                             background: Rectangle {
                                 color: "#3c3c3c"
-                                radius: 4
+                                radius: 6
                             }
                             contentItem: TextInput {
                                 text: comboSubLang.currentText
@@ -476,7 +475,7 @@ Item {
                             value: 4
                             background: Rectangle {
                                 color: "#3c3c3c"
-                                radius: 4
+                                radius: 6
                             }
                             contentItem: TextInput {
                                 text: spinConcurrency.textFromValue(spinConcurrency.value, spinConcurrency.locale)
@@ -500,8 +499,8 @@ Item {
                             }
                             background: Rectangle {
                                 color: parent.hovered ? "#505050" : "#444444"
-                                radius: 4
-                                implicitHeight: 32
+                                radius: 6
+                                implicitHeight: 36
                                 implicitWidth: 80
                             }
                             contentItem: Text {
@@ -526,12 +525,14 @@ Item {
                             Layout.fillWidth: true
                             text: videoDownloaderBridge.defaultPath
                             onTextChanged: {
-                                videoDownloaderBridge.setDefaultPath(text);
+                                if (text !== videoDownloaderBridge.defaultPath) {
+                                    videoDownloaderBridge.setDefaultPath(text);
+                                }
                             }
                             color: "white"
                             background: Rectangle {
                                 color: "#3c3c3c"
-                                radius: 4
+                                radius: 6
                             }
                         }
                         Button {
@@ -539,8 +540,8 @@ Item {
                             onClicked: folderDialog.open()
                             background: Rectangle {
                                 color: parent.hovered ? "#505050" : "#444444"
-                                radius: 4
-                                implicitHeight: 32
+                                radius: 6
+                                implicitHeight: 36
                                 implicitWidth: 80
                             }
                             contentItem: Text {
@@ -576,13 +577,13 @@ Item {
                                 background: Rectangle {
                                     implicitHeight: 8
                                     color: "#3c3c3c"
-                                    radius: 4
+                                    radius: 6
                                 }
                                 contentItem: Item {
                                     Rectangle {
                                         width: parent.parent.visualPosition * parent.width
                                         height: parent.height
-                                        radius: 4
+                                        radius: 6
                                         color: "#007acc"
                                     }
                                 }
@@ -594,9 +595,9 @@ Item {
                             onClicked: root.toggleDownload()
                             background: Rectangle {
                                 color: root.isDownloading ? "#8B0000" : (parent.hovered ? "#006bb3" : "#007acc")
-                                radius: 4
-                                implicitHeight: 45
-                                implicitWidth: 140
+                                radius: 6
+                                implicitHeight: 46
+                                implicitWidth: 160
                             }
                             contentItem: Text {
                                 text: parent.text
@@ -660,7 +661,7 @@ Item {
                 Layout.preferredHeight: 80
                 color: "#1e1e1e"
                 border.color: "#3e3e42"
-                radius: 4
+                radius: 6
 
                 ColumnLayout {
                     anchors.fill: parent
@@ -706,7 +707,7 @@ Item {
                     }
                     background: Rectangle {
                         color: parent.enabled ? (parent.hovered ? "#006bb3" : "#007acc") : "#444"
-                        radius: 4
+                        radius: 6
                         implicitHeight: 35
                         implicitWidth: 100
                     }
@@ -729,7 +730,7 @@ Item {
                 Layout.fillHeight: true
                 color: "#1e1e1e"
                 border.color: "#3e3e42"
-                radius: 4
+                radius: 6
 
                 ScrollView {
                     anchors.fill: parent

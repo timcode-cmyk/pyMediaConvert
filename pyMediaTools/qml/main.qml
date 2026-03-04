@@ -14,7 +14,6 @@ ApplicationWindow {
     minimumHeight: 600
 
     // Font setting
-    font.family: "Segoe UI"
     font.pixelSize: 14
 
     RowLayout {
@@ -111,6 +110,43 @@ ApplicationWindow {
                         onClicked: {
                             navList.currentIndex = index;
                             stackView.replace(model.view);
+                        }
+                    }
+                }
+
+                Item {
+                    Layout.fillHeight: true
+                } // Spacer to push the next item to the bottom if ListView doesn't fill entirely
+
+                // Version & GitHub
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    Layout.alignment: Qt.AlignBottom
+                    Layout.bottomMargin: 20
+                    spacing: 5
+
+                    Text {
+                        text: "v3.0.0"
+                        color: "#555555"
+                        font.pixelSize: 11
+                        Layout.alignment: Qt.AlignHCenter
+                    }
+
+                    Button {
+                        text: "GitHub"
+                        Layout.alignment: Qt.AlignHCenter
+                        background: Rectangle {
+                            color: "transparent"
+                        }
+                        contentItem: Text {
+                            text: parent.text
+                            color: parent.hovered ? "#888888" : "#555555"
+                            font.pixelSize: 11
+                            font.underline: parent.hovered
+                            horizontalAlignment: Text.AlignHCenter
+                        }
+                        onClicked: {
+                            Qt.openUrlExternally("https://github.com/timcode-cmyk/pyMediaConvert");
                         }
                     }
                 }

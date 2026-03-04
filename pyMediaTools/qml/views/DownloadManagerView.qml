@@ -35,7 +35,6 @@ Item {
                 color: "white"
                 font.pixelSize: 28
                 font.bold: true
-                font.family: "Segoe UI"
             }
 
             // Top Settings Panel
@@ -74,7 +73,7 @@ Item {
                             color: "white"
                             background: Rectangle {
                                 color: "#3c3c3c"
-                                radius: 4
+                                radius: 6
                             }
                         }
                         Button {
@@ -82,8 +81,8 @@ Item {
                             onClicked: folderDialog.open()
                             background: Rectangle {
                                 color: parent.hovered ? "#505050" : "#444444"
-                                radius: 4
-                                implicitHeight: 32
+                                radius: 6
+                                implicitHeight: 36
                                 implicitWidth: 80
                             }
                             contentItem: Text {
@@ -110,7 +109,7 @@ Item {
                             onValueChanged: downloadManagerBridge.setConcurrentLimit(value)
                             background: Rectangle {
                                 color: "#3c3c3c"
-                                radius: 4
+                                radius: 6
                             }
                             contentItem: TextInput {
                                 text: spinConcurrent.textFromValue(spinConcurrent.value, spinConcurrent.locale)
@@ -149,8 +148,8 @@ Item {
                     onClicked: downloadManagerBridge.unpauseAll()
                     background: Rectangle {
                         color: parent.hovered ? "#3d8b40" : "#4caf50"
-                        radius: 4
-                        implicitHeight: 32
+                        radius: 6
+                        implicitHeight: 36
                         implicitWidth: 100
                     }
                     contentItem: Text {
@@ -166,8 +165,8 @@ Item {
                     onClicked: downloadManagerBridge.pauseAll()
                     background: Rectangle {
                         color: parent.hovered ? "#d3801a" : "#ff9800"
-                        radius: 4
-                        implicitHeight: 32
+                        radius: 6
+                        implicitHeight: 36
                         implicitWidth: 100
                     }
                     contentItem: Text {
@@ -183,8 +182,8 @@ Item {
                     onClicked: downloadManagerBridge.purgeDownloadResult()
                     background: Rectangle {
                         color: parent.hovered ? "#505050" : "#444444"
-                        radius: 4
-                        implicitHeight: 32
+                        radius: 6
+                        implicitHeight: 36
                         implicitWidth: 140
                     }
                     contentItem: Text {
@@ -212,13 +211,13 @@ Item {
                             background: Rectangle {
                                 implicitHeight: 8
                                 color: "#3c3c3c"
-                                radius: 4
+                                radius: 6
                             }
                             contentItem: Item {
                                 Rectangle {
                                     width: parent.parent.visualPosition * parent.width
                                     height: parent.height
-                                    radius: 4
+                                    radius: 6
                                     color: "#007acc"
                                 }
                             }
@@ -246,7 +245,7 @@ Item {
                     placeholderTextColor: "#777777"
                     background: Rectangle {
                         color: "#3c3c3c"
-                        radius: 4
+                        radius: 6
                         implicitHeight: 40
                     }
                     font.pixelSize: 14
@@ -260,9 +259,9 @@ Item {
                     onClicked: addTask()
                     background: Rectangle {
                         color: parent.hovered ? "#006bb3" : "#007acc"
-                        radius: 4
-                        implicitHeight: 40
-                        implicitWidth: 120
+                        radius: 6
+                        implicitHeight: 46
+                        implicitWidth: 140
                     }
                     contentItem: Text {
                         text: parent.text
@@ -292,7 +291,7 @@ Item {
                 Layout.fillHeight: true
                 color: "#252526"
                 border.color: "#3e3e42"
-                radius: 4
+                radius: 6
 
                 ColumnLayout {
                     anchors.fill: parent
@@ -303,7 +302,7 @@ Item {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 30
                         color: "#333333"
-                        radius: 4
+                        radius: 6
                         Rectangle {
                             anchors.bottom: parent.bottom
                             width: parent.width

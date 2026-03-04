@@ -25,6 +25,8 @@ class VideoDownloaderBridge(QObject):
     updateFinished = Signal(bool, str, str) # success, message, new_version
     updateError = Signal(str)
     
+    localVersionChanged = Signal()
+    remoteVersionChanged = Signal()
     defaultPathChanged = Signal()
 
     def __init__(self, parent=None):
@@ -47,18 +49,18 @@ class VideoDownloaderBridge(QObject):
     def defaultPath(self):
         return self._default_path
 
-    @Property(str)
+    @Property(str, notify=localVersionChanged)
     def localVersion(self):
         return self._local_version
 
-    @Property(str)
+    @Property(str, notify=remoteVersionChanged)
     def remoteVersion(self):
         return self._remote_version
 
     # --- Slots ---
     @Slot(str)
     def setDefaultPath(self, path):
-        if path:
+        if path and path != self._default_path:
             self._default_path = path
             self.settings.setValue("default_path", path)
             self.defaultPathChanged.emit()

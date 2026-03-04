@@ -127,7 +127,6 @@ Item {
                 color: "white"
                 font.pixelSize: 28
                 font.bold: true
-                font.family: "Segoe UI"
                 Layout.topMargin: 10
             }
 
@@ -161,7 +160,7 @@ Item {
                             color: "white"
                             background: Rectangle {
                                 color: "#3c3c3c"
-                                radius: 4
+                                radius: 6
                             }
                         }
 
@@ -170,7 +169,7 @@ Item {
                             onClicked: elevenLabsBridge.saveApiKey(apiKeyInput.text)
                             background: Rectangle {
                                 color: parent.hovered ? "#505050" : "#444444"
-                                radius: 4
+                                radius: 6
                             }
                             contentItem: Text {
                                 text: parent.text
@@ -185,7 +184,7 @@ Item {
                             onClicked: elevenLabsBridge.loadApiData(apiKeyInput.text)
                             background: Rectangle {
                                 color: parent.hovered ? "#006bb3" : "#007acc"
-                                radius: 4
+                                radius: 6
                             }
                             contentItem: Text {
                                 text: parent.text
@@ -210,13 +209,13 @@ Item {
                             background: Rectangle {
                                 implicitHeight: 8
                                 color: "#3c3c3c"
-                                radius: 4
+                                radius: 6
                             }
                             contentItem: Item {
                                 Rectangle {
                                     width: parent.parent.visualPosition * parent.width
                                     height: parent.height
-                                    radius: 4
+                                    radius: 6
                                     color: (parent.parent.value > 0.9) ? "#ef4444" : "#007acc"
                                 }
                             }
@@ -239,6 +238,7 @@ Item {
                 }
 
                 TabButton {
+                    id: ttsTab
                     text: "🗣️ 文本转语音 (TTS)"
                     width: Math.max(150, implicitWidth)
                     contentItem: Text {
@@ -250,19 +250,20 @@ Item {
                         font.bold: parent.checked
                     }
                     background: Rectangle {
-                        color: parent.checked ? "#252526" : "#2d2d30"
-                        border.color: parent.checked ? "#007acc" : "transparent"
-                        border.width: parent.checked ? 1 : 0
+                        color: ttsTab.checked ? "#252526" : "#2d2d30"
+                        border.color: ttsTab.checked ? "#007acc" : "transparent"
+                        border.width: ttsTab.checked ? 1 : 0
                         Rectangle {
                             height: 2
                             width: parent.width
                             color: "#007acc"
                             anchors.bottom: parent.bottom
-                            visible: parent.checked
+                            visible: ttsTab.checked
                         }
                     }
                 }
                 TabButton {
+                    id: sfxTab
                     text: "🎵 音效生成 (SFX)"
                     width: Math.max(150, implicitWidth)
                     contentItem: Text {
@@ -274,15 +275,15 @@ Item {
                         font.bold: parent.checked
                     }
                     background: Rectangle {
-                        color: parent.checked ? "#252526" : "#2d2d30"
-                        border.color: parent.checked ? "#007acc" : "transparent"
-                        border.width: parent.checked ? 1 : 0
+                        color: sfxTab.checked ? "#252526" : "#2d2d30"
+                        border.color: sfxTab.checked ? "#007acc" : "transparent"
+                        border.width: sfxTab.checked ? 1 : 0
                         Rectangle {
                             height: 2
                             width: parent.width
                             color: "#007acc"
                             anchors.bottom: parent.bottom
-                            visible: parent.checked
+                            visible: sfxTab.checked
                         }
                     }
                 }
@@ -318,7 +319,7 @@ Item {
                                 valueRole: "voice_id"
                                 background: Rectangle {
                                     color: "#3c3c3c"
-                                    radius: 4
+                                    radius: 6
                                     implicitHeight: 32
                                 }
                                 contentItem: Text {
@@ -335,7 +336,7 @@ Item {
                                 valueRole: "model_id"
                                 background: Rectangle {
                                     color: "#3c3c3c"
-                                    radius: 4
+                                    radius: 6
                                     implicitHeight: 32
                                 }
                                 contentItem: Text {
@@ -349,7 +350,7 @@ Item {
                                 text: "🔊 试听"
                                 background: Rectangle {
                                     color: parent.hovered ? "#505050" : "#444444"
-                                    radius: 4
+                                    radius: 6
                                     implicitHeight: 32
                                 }
                                 contentItem: Text {
@@ -451,7 +452,7 @@ Item {
                                 color: "white"
                                 background: Rectangle {
                                     color: "#3c3c3c"
-                                    radius: 4
+                                    radius: 6
                                 }
                             }
                             Button {
@@ -459,7 +460,7 @@ Item {
                                 onClicked: saveDialog.open()
                                 background: Rectangle {
                                     color: "#444"
-                                    radius: 4
+                                    radius: 6
                                     implicitWidth: 40
                                 }
                                 contentItem: Text {
@@ -474,7 +475,7 @@ Item {
                                 enabled: !elevenLabsBridge.isBusy
                                 background: Rectangle {
                                     color: parent.hovered ? "#006bb3" : "#007acc"
-                                    radius: 4
+                                    radius: 6
                                     implicitWidth: 100
                                 }
                                 contentItem: Text {
@@ -551,7 +552,7 @@ Item {
                                     value: 5
                                     background: Rectangle {
                                         color: "#3c3c3c"
-                                        radius: 4
+                                        radius: 6
                                     }
                                     // Make text white
                                     contentItem: TextInput {
@@ -578,7 +579,7 @@ Item {
                                 color: "white"
                                 background: Rectangle {
                                     color: "#3c3c3c"
-                                    radius: 4
+                                    radius: 6
                                 }
                             }
                             Button {
@@ -586,7 +587,7 @@ Item {
                                 onClicked: saveDialog.open()
                                 background: Rectangle {
                                     color: "#444"
-                                    radius: 4
+                                    radius: 6
                                     implicitWidth: 40
                                 }
                                 contentItem: Text {
@@ -601,7 +602,7 @@ Item {
                                 enabled: !elevenLabsBridge.isBusy
                                 background: Rectangle {
                                     color: parent.hovered ? "#006bb3" : "#007acc"
-                                    radius: 4
+                                    radius: 6
                                     implicitWidth: 100
                                 }
                                 contentItem: Text {
@@ -644,7 +645,7 @@ Item {
                         enabled: audioPlayer.source.toString() !== ""
                         background: Rectangle {
                             color: parent.enabled ? (parent.hovered ? "#505050" : "#444444") : "#333"
-                            radius: 4
+                            radius: 6
                             implicitWidth: 80
                         }
                         contentItem: Text {
