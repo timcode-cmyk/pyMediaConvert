@@ -5,7 +5,6 @@ import QtQuick.Dialogs
 
 Item {
     id: root
-    anchors.fill: parent
 
     property var modes: []
     property int selectedModeIndex: 0

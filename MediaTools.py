@@ -34,9 +34,16 @@ if sys.stderr and hasattr(sys.stderr, 'reconfigure'):
 
 from pyMediaTools import setup_logging
 from pyMediaTools.bridges.media_converter_bridge import MediaConverterBridge
+from pyMediaTools.bridges.elevenlabs_bridge import ElevenLabsBridge
+from pyMediaTools.bridges.video_cut_bridge import VideoCutBridge
+from pyMediaTools.bridges.download_manager_bridge import DownloadManagerBridge
+from pyMediaTools.bridges.video_downloader_bridge import VideoDownloaderBridge
 
 # initialize logging early
 setup_logging()
+
+# Fix QML styling warnings on macOS
+os.environ["QT_QUICK_CONTROLS_STYLE"] = "Basic"
 
 if __name__ == '__main__':
     # Use QApplication to enable QtWidgets features like QFileDialog on some platforms
@@ -64,6 +71,18 @@ if __name__ == '__main__':
     # 注册 QML Bridge
     media_converter_bridge = MediaConverterBridge()
     engine.rootContext().setContextProperty("mediaConverterBridge", media_converter_bridge)
+    
+    elevenlabs_bridge = ElevenLabsBridge()
+    engine.rootContext().setContextProperty("elevenLabsBridge", elevenlabs_bridge)
+
+    video_cut_bridge = VideoCutBridge()
+    engine.rootContext().setContextProperty("videoCutBridge", video_cut_bridge)
+
+    download_manager_bridge = DownloadManagerBridge()
+    engine.rootContext().setContextProperty("downloadManagerBridge", download_manager_bridge)
+
+    video_downloader_bridge = VideoDownloaderBridge()
+    engine.rootContext().setContextProperty("videoDownloaderBridge", video_downloader_bridge)
 
     # 加载主 QML
     qml_file = Path(__file__).resolve().parent / "pyMediaTools" / "qml" / "main.qml"
