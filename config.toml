@@ -7,13 +7,12 @@ output_ext = "_hailuo.mp4"
 support_exts = [".mp4"]
 
 [modes.hailuo.params]
-x = 590
-y = 1810
-logo_w = 475
-logo_h = 90
 target_w = 1080
 target_h = 1920
-logo_path = "assets/hailuo.png"
+logos = [
+  { x = 590, y = 1810, logo_w = 475, logo_h = 90, logo_path = "assets/hailuoDream.png" },
+  { x = 0, y = 0, logo_w = 100, logo_h = 100, logo_path = "assets/Dream_AI.png", blur = false }
+]
 
 [modes.vidu]
 class = "LogoConverter"
@@ -22,13 +21,12 @@ output_ext = "_vidu.mp4"
 support_exts = [".mp4"]
 
 [modes.vidu.params]
-x = 700
-y = 1810
-logo_w = 360
-logo_h = 90
 target_w = 1080
 target_h = 1920
-logo_path = "assets/vidu.png"
+logos = [
+  { x = 700, y = 1810, logo_w = 360, logo_h = 90, logo_path = "assets/viduDream.png" },
+  { x = 0, y = 0, logo_w = 100, logo_h = 100, logo_path = "assets/Dream_AI.png", blur = false }
+]
 
 [modes.veo]
 class = "LogoConverter"
@@ -37,13 +35,12 @@ output_ext = "_veo.mp4"
 support_exts = [".mp4"]
 
 [modes.veo.params]
-x = 700
-y = 1810
-logo_w = 360
-logo_h = 90
 target_w = 1080
 target_h = 1920
-logo_path = "assets/Veo.png"
+logos = [
+  { x = 700, y = 1810, logo_w = 360, logo_h = 90, logo_path = "assets/VeoDream.png" },
+  { x = 0, y = 0, logo_w = 100, logo_h = 100, logo_path = "assets/Dream_AI.png", blur = false }
+]
 
 [modes.heygen]
 class = "LogoConverter"
@@ -52,13 +49,12 @@ output_ext = "_veo.mp4"
 support_exts = [".mp4"]
 
 [modes.heygen.params]
-x = 700
-y = 1810
-logo_w = 360
-logo_h = 90
 target_w = 1080
 target_h = 1920
-logo_path = "assets/HeyGen.png"
+logos = [
+  { x = 700, y = 1810, logo_w = 360, logo_h = 90, logo_path = "assets/HeyGenDream.png" },
+  { x = 0, y = 0, logo_w = 100, logo_h = 100, logo_path = "assets/Dream_AI.png", blur = false }
+]
 
 [modes.dream]
 class = "LogoConverter"
@@ -67,13 +63,12 @@ output_ext = "_veo.mp4"
 support_exts = [".mp4"]
 
 [modes.dream.params]
-x = 700
-y = 1810
-logo_w = 360
-logo_h = 90
 target_w = 1080
 target_h = 1920
-logo_path = "assets/Dream.png"
+logos = [
+  { x = 700, y = 1810, logo_w = 360, logo_h = 90, logo_path = "assets/Dream.png" },
+  { x = 0, y = 0, logo_w = 100, logo_h = 100, logo_path = "assets/Dream_AI.png", blur = false }
+]
 
 [modes.image]
 class = "AddCustomLogo"
