@@ -442,27 +442,17 @@ class MediaConverter(ABC):
             overall_pbar.close()
 
 class LogoConverter(MediaConverter):
-    """
-    添加一个或多个logo并模糊背景
-
-    现在支持通过 `params["logos"]` 传入多个 logo 描述，每个描述包含
-    `logo_path`, `x`, `y`, `logo_w`, `logo_h` 等字段。为了兼容旧配置，
-    如果没有传 `logos`，依旧会从上层参数读取单个 logo 的配置信息。
-
-    构造方法还会检查所有 logo 文件是否存在。
-    """
     def __init__(self, params: dict, support_exts=None, output_ext: str = None, init_checks: bool = True):
-        # 兼容老参数
         self.target_w = params.get('target_w', 1080)
         self.target_h = params.get('target_h', 1920)
         self.force_codec = params.get('video_codec', None)
+        self.output_ext = output_ext or ".mp4"
 
         raw_logos = params.get('logos')
         if raw_logos:
-            # logos 应该是列表，每项为 dict
             self.logos = []
             for entry in raw_logos:
-                lp = get_resource_path(entry.get('logo_path'))
+                lp = Path(get_resource_path(entry.get('logo_path')))
                 self.logos.append({
                     'path': lp,
                     'x': entry.get('x', 0),
@@ -472,106 +462,87 @@ class LogoConverter(MediaConverter):
                     'blur': entry.get('blur', True),
                 })
         else:
-            # 兼容单 logo
-            self.x = params.get('x', 10)
-            self.y = params.get('y', 10)
-            self.logo_w = params.get('logo_w', 100)
-            self.logo_h = params.get('logo_h', 100)
-            lp = get_resource_path(params.get('logo_path'))
+            lp = Path(get_resource_path(params.get('logo_path')))
             self.logos = [{
                 'path': lp,
-                'x': self.x,
-                'y': self.y,
-                'w': self.logo_w,
-                'h': self.logo_h,
+                'x': params.get('x', 10),
+                'y': params.get('y', 10),
+                'w': params.get('logo_w', 100),
+                'h': params.get('logo_h', 100),
+                'blur': params.get('blur', True),
             }]
 
         super().__init__(support_exts=support_exts, output_ext=output_ext, init_checks=init_checks)
 
         for logo in self.logos:
             if not logo['path'].exists():
-                logger.critical(f"Logo 文件未找到: {logo['path']}")
                 raise FileNotFoundError(f"Logo not found: {logo['path']}")
 
     def process_file(self, input_path: Path, output_path: Path, duration: float, monitor=None):
-        """
-        添加logo
-        :param input_path: 输入路径
-        :param output_path: 输出基本路径 (不含后缀)
-        :param duration: 当前文件的总时长 (用于计算百分比)
-        """
         output_file_name = f"{output_path}{self.output_ext}" 
         video_codec, preset_key, preset_value = self._get_video_codec_params(self.force_codec)
 
-        # 构造 dynamic filter_complex 以支持多个 logo
-        # 1. 缩放裁切基础画面
+        # 核心修复点 1: 使用列表存储每一行 filter，最后用分号连接
         parts = []
-        # compute an expression that scales the input to fill the target box
-        # while preserving aspect ratio.  The expression below scales the video
-        # so that at least one of the output dimensions equals the configured
-        # target.  Afterward a crop to the exact target size guarantees the
-        # final resolution.  This handles both up‑ and down‑scaling.
         ratio = float(self.target_w) / float(self.target_h)
-        # the ffmpeg expression uses iw/ih compare to ratio; if wider, fix width
-        parts.append(
-            f"[0:v]scale='if(gt(iw/ih,{ratio}),{self.target_w},-2)':'"
-            f"if(gt(iw/ih,{ratio}),-2,{self.target_h})',setsar=1,"
-            f"crop={self.target_w}:{self.target_h}[base];"
-        )
-        prev = 'base'
 
-        # 为每个需要模糊的 logo 先模糊背景并叠加到上一层
+        # 基础画面缩放
+        # [0:v] 是主视频
+        parts.append(
+            f"[0:v]scale='if(gt(iw/ih,{ratio}),-2,{self.target_w})':'"
+            f"if(gt(iw/ih,{ratio}),{self.target_h},-2)',setsar=1,"
+            f"crop={self.target_w}:{self.target_h}[base]"
+        )
+        
+        current_link = 'base'
+
+        # 处理模糊层
         for idx, logo in enumerate(self.logos):
             if not logo.get('blur', True):
                 continue
-            w = logo['w'] if logo['w'] is not None else 'iw'
-            h = logo['h'] if logo['h'] is not None else 'ih'
-            x = logo['x']
-            y = logo['y']
-            # blur 区域
-            parts.append(f"[{prev}]crop={w}:{h}:{x}:{y},boxblur=10[blur{idx}];")
-            parts.append(f"[{prev}][blur{idx}]overlay={x}:{y}:format=auto[tmp{idx}];")
-            prev = f"tmp{idx}"
+            w, h, x, y = logo.get('w') or 'iw', logo.get('h') or 'ih', logo['x'], logo['y']
+            
+            blur_out = f"b{idx}"
+            overlay_out = f"l_blur_{idx}"
+            
+            # 注意：这里的 [current_link] 会被 split 分发
+            parts.append(f"[{current_link}]split[vsplit{idx}1][vsplit{idx}2]")
+            parts.append(f"[vsplit{idx}1]crop={w}:{h}:{x}:{y},boxblur=10[{blur_out}]")
+            parts.append(f"[vsplit{idx}2][{blur_out}]overlay={x}:{y}:format=auto[{overlay_out}]")
+            current_link = overlay_out
 
-        # 叠加 logo 本身
+        # 叠加 Logo 图片
         for idx, logo in enumerate(self.logos):
-            w = logo['w'] if logo['w'] is not None else 'iw'
-            h = logo['h'] if logo['h'] is not None else 'ih'
-            x = logo['x']
-            y = logo['y']
-            parts.append(f"[{idx+1}:v]scale={w}:{h}[logo{idx}];")
-            parts.append(f"[{prev}][logo{idx}]overlay={x}:{y}:format=auto[{prev}];")
+            w, h, x, y = logo.get('w') or 'iw', logo.get('h') or 'ih', logo['x'], logo['y']
+            
+            logo_in = f"{idx+1}:v"  # 图标输入流索引
+            logo_scaled = f"logo_img_{idx}"
+            final_out = f"layer_{idx}"
+            
+            parts.append(f"[{logo_in}]scale={w}:{h}[{logo_scaled}]")
+            parts.append(f"[{current_link}][{logo_scaled}]overlay={x}:{y}:format=auto[{final_out}]")
+            current_link = final_out
 
-        # 最终输出标签就是 prev
-        parts.append(f"[{prev}]null[outv]")
-        filter_complex = ''.join(parts)
+        # 核心修复点 2: 必须用分号分隔每个滤镜声明
+        filter_complex = ";".join(parts)
 
         cmd = [
-            "ffmpeg", "-y", "-hide_banner", "-nostats", "-loglevel", "error",
+            "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
             "-hwaccel", "auto",
             "-i", str(input_path)
         ]
-        # 添加所有 logo 作为额外输入
         for logo in self.logos:
             cmd.extend(["-i", str(logo['path'])])
 
         cmd.extend([
             "-filter_complex", filter_complex,
-            "-map", "[outv]", "-map", "0:a?", "-c:v", video_codec,
-        ])
-        # if preset_key == "-crf":
-        #      # 软件编码器参数
-        #      cmd.extend([preset_key, preset_value])
-        # elif preset_key:
-        #      # 硬件编码器参数 (如 -preset, -q:v)
-        #      cmd.extend([preset_key, preset_value])
-            
-        cmd.extend([
-            # "-c:a", "copy", "-movflags", "+faststart",
+            "-map", f"[{current_link}]", # 映射最后一个输出标签
+            "-map", "0:a?", 
+            "-c:v", video_codec,
             output_file_name
         ])
 
-        name = input_path.name # 确保获取到文件名
+        name = input_path.name
         self.process_ffmpeg(cmd, duration, monitor, name)
 
 class AddCustomLogo(MediaConverter):
