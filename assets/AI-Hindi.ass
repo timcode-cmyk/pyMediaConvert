@@ -5,7 +5,7 @@ PlayResY: 1920
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, Bold, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Label,Hind-Bold,150,&H00FFFFFF,-1,1,2,1,9,10,10,40,1
+Style: Label,Hind-Bold,48,&H00FFFFFF,-1,1,2,1,9,10,10,40,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text

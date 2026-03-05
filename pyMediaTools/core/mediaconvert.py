@@ -609,7 +609,7 @@ class AddAssText(MediaConverter):
         if not get_resource_path(self.ass).exists():
             logger.critical(f"ASS字幕文件未找到: {self.ass}")
             raise FileNotFoundError(f"ASS字幕文件未找到: {self.ass}")
-        self.ass = Path(get_resource_path(params.get('ass')))
+        # self.ass = Path(get_resource_path(params.get('ass')))
 
     def process_file(self, input_path: Path, output_path: Path, duration: float, monitor=None):
         """
