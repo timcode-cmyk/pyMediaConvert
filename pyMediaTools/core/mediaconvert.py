@@ -324,7 +324,7 @@ class MediaConverter(ABC):
         # 修改 2: 强制设置环境变量，确保在 GUI 启动时也生效
         env = self.process.processEnvironment()
         env.insert("PYTHONUNBUFFERED", "1")
-        # env.insert("FFREPORT", "file=ffmpeg_log.txt:level=32") # 可选：输出日志到文件辅助调试
+        env.insert("FFREPORT", "file=ffmpeg_log.txt:level=32") # 可选：输出日志到文件辅助调试
         self.process.setProcessEnvironment(env)
 
         # 混合输出模式，方便解析
@@ -580,7 +580,7 @@ class AddCustomLogo(MediaConverter):
         # 构造 filter_complex：
         filter_complex = (
             f"drawtext=fontfile='{self.font_path}':"
-            f"text='{self.text}':"
+            f"text='{self.text}':text_shaping=1:"
             f"fontcolor={self.font_color}:"
             f"fontsize={self.font_size}:"
             "box=1:boxcolor=black@0.5:boxborderw=10:"
@@ -591,6 +591,47 @@ class AddCustomLogo(MediaConverter):
             "ffmpeg", "-y", "-hide_banner", "-nostats", "-loglevel", "error",
             "-i", str(input_path),
             "-vf", filter_complex,
+            output_file_name
+        ]
+
+        name = input_path.name # 确保获取到文件名
+        self.process_ffmpeg(cmd, duration, monitor, name)
+
+class AddAssText(MediaConverter):
+    """
+    添加ASS字幕
+    """
+    def __init__(self, params: dict, support_exts=None, output_ext: str = None, init_checks: bool = True):
+        self.ass = params.get('ass')
+
+        super().__init__(support_exts=support_exts, output_ext=output_ext, init_checks=init_checks)
+
+        if not get_resource_path(self.ass).exists():
+            logger.critical(f"ASS字幕文件未找到: {self.ass}")
+            raise FileNotFoundError(f"ASS字幕文件未找到: {self.ass}")
+        self.ass = Path(get_resource_path(params.get('ass')))
+
+    def process_file(self, input_path: Path, output_path: Path, duration: float, monitor=None):
+        """
+        添加ASS字幕
+        :param input_path: 输入路径
+        :param output_path: 输出基本路径 (不含后缀)
+        :param duration: 当前文件的总时长 (用于计算百分比)
+        """
+        inpput_ext = input_path.suffix.lower()
+        if self.output_ext is None:
+            self.output_ext = f"_ai{inpput_ext}"
+
+        output_file_name = f"{output_path}{self.output_ext}" 
+
+        input_ass = (
+            f"ass='{self.ass}'"
+        )
+
+        cmd = [
+            "ffmpeg", "-y", "-hide_banner", "-nostats", "-loglevel", "error",
+            "-i", str(input_path),
+            "-vf", input_ass,
             output_file_name
         ]
 

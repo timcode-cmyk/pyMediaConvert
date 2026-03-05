@@ -11,6 +11,7 @@ except Exception:
     from ..core.mediaconvert import (
         LogoConverter,
         AddCustomLogo,
+        AddAssText,
         H264Converter,
         DnxhrConverter,
         PngConverter,
@@ -145,6 +146,15 @@ except Exception:
                 
                 }
             },
+        'image1': {
+            'class': AddAssText,
+            'description': "添加 AI-जनित",
+            'output_ext': None,
+            'support_exts': [".mp4", ".png", ".jpg", ".jpeg"],
+            'params': {
+                'ass': "assets/AI-Hindi.ass"
+            }
+        },
 
         'h264': {
             'class': H264Converter,
