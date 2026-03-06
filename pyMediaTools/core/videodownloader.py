@@ -11,6 +11,23 @@ from ..utils import get_ffmpeg_exe
 
 logger = logging.getLogger(__name__)
 
+class YtDlpLogger:
+    def debug(self, msg):
+        # For yt-dlp, debug messages can be very verbose
+        if msg.startswith('[debug] '):
+            pass
+        else:
+            self.info(msg)
+
+    def info(self, msg):
+        logger.info(f"[yt-dlp] {msg}")
+
+    def warning(self, msg):
+        logger.warning(f"[yt-dlp] {msg}")
+
+    def error(self, msg):
+        logger.error(f"[yt-dlp] {msg}")
+
 class YtDlpInfoWorker(QThread):
     """Worker to parse video/playlist info"""
     finished = Signal(dict)
@@ -26,6 +43,9 @@ class YtDlpInfoWorker(QThread):
             'extract_flat': 'in_playlist',
             'dump_single_json': True,
             'no_warnings': True,
+            'logger': YtDlpLogger(),
+            'restrictfilenames': True,
+            'windowsfilenames': True,
         }
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -129,12 +149,17 @@ class YtDlpDownloadWorker(QThread):
         ydl_opts = {
             'ffmpeg_location': ffmpeg_loc,
             'prefer_ffmpeg': True,
-            'outtmpl': os.path.join(self.output_dir, '%(title)s.%(ext)s'),
+            'outtmpl': os.path.join(self.output_dir, '%(title)s [%(id)s].%(ext)s'),
             # progress_hooks are attached per-item when running in parallel via _progress_hook_factory
             'progress_hooks': [],
-            'quiet': True,
-            'no_warnings': True,
-            'ignoreerrors': True,
+            'quiet': False,
+            'no_warnings': False,
+            'ignoreerrors': False,
+            'logger': YtDlpLogger(),
+            # Security and compatibility for filenames
+            'restrictfilenames': True,
+            'windowsfilenames': True,
+            'trim_file_name': 100,  # Limit filename length to 100 chars
             # 'cookiesfrombrowser': ('chrome',) # cookies选择问题
         }
 
@@ -211,16 +236,16 @@ class YtDlpDownloadWorker(QThread):
                 futures[future] = (i, ui_index, title)
 
             # wait for completions
-            completed_count = 0
+            processed_count = 0
             for future in as_completed(futures):
                 i, ui_index, title = futures[future]
+                processed_count += 1
                 try:
                     result = future.result()
-                    completed_count += 1
                     self.downloaded_files.append(result or title)
 
                     self.progress.emit({
-                        'overall_percent': (completed_count / self.total_files) * 100,
+                        'overall_percent': (processed_count / self.total_files) * 100,
                         'current_percent': 100,
                         'status': f"完成: {title}",
                         'ui_index': ui_index,
@@ -228,17 +253,21 @@ class YtDlpDownloadWorker(QThread):
                     })
                 except Exception as e:
                     if "Stopped by user" in str(e):
-                        logger.info("Download stopped by user.")
+                        logger.info(f"Download for {title} stopped by user.")
                     else:
                         # emit a per-file failure
                         self.progress.emit({
-                            'overall_percent': (completed_count / self.total_files) * 100,
+                            'overall_percent': (processed_count / self.total_files) * 100,
                             'current_percent': 0,
                             'status': f"失败: {title}",
                             'ui_index': ui_index,
                             'file_complete': False
                         })
-                        self.error.emit(f"下载失败 ({title}): {str(e)}")
+                        error_msg = str(e)
+                        # Avoid extremely long error messages from some extractors
+                        if len(error_msg) > 500:
+                            error_msg = error_msg[:500] + "..."
+                        self.error.emit(f"下载失败 ({title}): {error_msg}")
 
             executor.shutdown(wait=False, cancel_futures=True)
 
