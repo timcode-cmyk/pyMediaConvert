@@ -19,6 +19,7 @@ a = Analysis(
         ('assets', 'assets'),           # 图片、图标等资源
         ('config.toml', '.'),           # 配置文件
         ('yt_dlp', 'yt_dlp'),           # yt-dlp 源码（支持动态更新）
+        ('pyMediaTools/qml', 'pyMediaTools/qml'), # QML 资源文件
         *collect_data_files('PySide6'), # 自动收集 PySide6 的资源文件
     ],
     hiddenimports=[

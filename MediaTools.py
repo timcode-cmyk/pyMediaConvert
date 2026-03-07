@@ -33,6 +33,7 @@ if sys.stderr and hasattr(sys.stderr, 'reconfigure'):
         pass
 
 from pyMediaTools import setup_logging
+from pyMediaTools.utils import get_base_dir
 from pyMediaTools.bridges.media_converter_bridge import MediaConverterBridge
 from pyMediaTools.bridges.elevenlabs_bridge import ElevenLabsBridge
 from pyMediaTools.bridges.video_cut_bridge import VideoCutBridge
@@ -85,7 +86,7 @@ if __name__ == '__main__':
     engine.rootContext().setContextProperty("videoDownloaderBridge", video_downloader_bridge)
 
     # 加载主 QML
-    qml_file = Path(__file__).resolve().parent / "pyMediaTools" / "qml" / "main.qml"
+    qml_file = get_base_dir() / "pyMediaTools" / "qml" / "main.qml"
     engine.load(QUrl.fromLocalFile(os.fspath(qml_file)))
 
     if not engine.rootObjects():
