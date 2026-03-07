@@ -229,10 +229,26 @@ Item {
                                 root.videoListModel = temp;
                                 taskList.model = root.videoListModel;
                             }
+                            indicator: Rectangle {
+                                width: 18
+                                height: 18
+                                radius: 4
+                                color: chkSelectAll.checked ? "#007acc" : "#3c3c3c"
+                                border.color: chkSelectAll.checked ? "#007acc" : "#666666"
+                                border.width: 1
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "✓"
+                                    color: "white"
+                                    font.pixelSize: 12
+                                    font.bold: true
+                                    visible: chkSelectAll.checked
+                                }
+                            }
                             contentItem: Text {
                                 text: parent.text
                                 color: "white"
-                                leftPadding: parent.indicator.width + 5
+                                leftPadding: parent.indicator.width + 6
                                 verticalAlignment: Text.AlignVCenter
                             }
                         }
@@ -315,6 +331,22 @@ Item {
                                         root.videoListModel = temp;
                                     }
                                     Layout.preferredWidth: 30
+                                    indicator: Rectangle {
+                                        width: 16
+                                        height: 16
+                                        radius: 3
+                                        color: parent.checked ? "#007acc" : "#3c3c3c"
+                                        border.color: parent.checked ? "#007acc" : "#555555"
+                                        border.width: 1
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: "✓"
+                                            color: "white"
+                                            font.pixelSize: 11
+                                            font.bold: true
+                                            visible: parent.parent.checked
+                                        }
+                                    }
                                 }
 
                                 Text {
@@ -355,7 +387,7 @@ Item {
             // Downloader Settings & Status Area
             Rectangle {
                 Layout.fillWidth: true
-                Layout.preferredHeight: 180
+                Layout.preferredHeight: 240
                 color: "#252526"
                 radius: 8
                 border.color: "#3e3e42"
@@ -373,9 +405,10 @@ Item {
                         font.bold: true
                     }
 
-                    // Download Options
+                    // Download Options Row 1: Format / Quality / AudioOnly
                     RowLayout {
-                        spacing: 15
+                        spacing: 12
+                        Layout.fillWidth: true
 
                         Text {
                             text: "格式:"
@@ -412,7 +445,7 @@ Item {
                             }
                             contentItem: Text {
                                 text: comboQuality.currentText
-                                color: "white"
+                                color: comboQuality.enabled ? "white" : "#888"
                                 verticalAlignment: Text.AlignVCenter
                                 leftPadding: 10
                             }
@@ -422,27 +455,70 @@ Item {
                         CheckBox {
                             id: chkAudioOnly
                             text: "仅下载音频"
+                            indicator: Rectangle {
+                                width: 18
+                                height: 18
+                                radius: 4
+                                color: chkAudioOnly.checked ? "#007acc" : "#3c3c3c"
+                                border.color: chkAudioOnly.checked ? "#007acc" : "#666666"
+                                border.width: 1
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "✓"
+                                    color: "white"
+                                    font.pixelSize: 12
+                                    font.bold: true
+                                    visible: chkAudioOnly.checked
+                                }
+                            }
                             contentItem: Text {
                                 text: parent.text
                                 color: "white"
-                                leftPadding: parent.indicator.width + 5
+                                leftPadding: parent.indicator.width + 6
                                 verticalAlignment: Text.AlignVCenter
                             }
                         }
 
+                        Item {
+                            Layout.fillWidth: true
+                        }
+                    }
+
+                    // Download Options Row 2: Subtitles / Threads / Update
+                    RowLayout {
+                        spacing: 12
+                        Layout.fillWidth: true
+
                         Text {
-                            text: "字幕:"
+                            text: "字幕语言:"
                             color: "#bbbbbb"
                             opacity: chkAudioOnly.checked ? 0.5 : 1.0
                         }
                         CheckBox {
                             id: chkSubs
-                            text: "下载"
+                            text: "下载字幕"
                             enabled: !chkAudioOnly.checked
+                            indicator: Rectangle {
+                                width: 18
+                                height: 18
+                                radius: 4
+                                color: chkSubs.checked ? "#007acc" : "#3c3c3c"
+                                border.color: chkSubs.checked ? "#007acc" : "#666666"
+                                border.width: 1
+                                opacity: chkSubs.enabled ? 1.0 : 0.5
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "✓"
+                                    color: "white"
+                                    font.pixelSize: 12
+                                    font.bold: true
+                                    visible: chkSubs.checked
+                                }
+                            }
                             contentItem: Text {
                                 text: parent.text
-                                color: "white"
-                                leftPadding: parent.indicator.width + 5
+                                color: chkSubs.enabled ? "white" : "#888"
+                                leftPadding: parent.indicator.width + 6
                                 verticalAlignment: Text.AlignVCenter
                             }
                         }
@@ -457,15 +533,19 @@ Item {
                             }
                             contentItem: TextInput {
                                 text: comboSubLang.currentText
-                                color: "white"
+                                color: comboSubLang.enabled ? "white" : "#888"
                                 verticalAlignment: Text.AlignVCenter
                                 leftPadding: 10
                             }
-                            Layout.preferredWidth: 80
+                            Layout.preferredWidth: 90
+                        }
+
+                        Item {
+                            Layout.preferredWidth: 20
                         }
 
                         Text {
-                            text: "线程:"
+                            text: "并发线程:"
                             color: "#bbbbbb"
                         }
                         SpinBox {
@@ -483,7 +563,7 @@ Item {
                                 horizontalAlignment: Qt.AlignHCenter
                                 verticalAlignment: Qt.AlignVCenter
                             }
-                            Layout.preferredWidth: 100
+                            Layout.preferredWidth: 80
                         }
 
                         Item {
@@ -501,7 +581,7 @@ Item {
                                 color: parent.hovered ? "#505050" : "#444444"
                                 radius: 6
                                 implicitHeight: 36
-                                implicitWidth: 80
+                                implicitWidth: 90
                             }
                             contentItem: Text {
                                 text: parent.text

@@ -51,21 +51,21 @@ if __name__ == '__main__':
     app = QApplication(sys.argv)
     
     # 强制设置 Fusion 样式，确保在所有平台打包后都有统一美观的界面
-    app.setStyle("Fusion")
+    # app.setStyle("Fusion")
     app.setApplicationName("Media Tools")
 
-    import sys as _sys
-    _icon_candidates = [
-        os.path.join(os.path.dirname(os.path.abspath(__file__)), 'MediaTools.ico'),
-    ]
-    if getattr(_sys, 'frozen', False):
-        _icon_candidates.insert(0, os.path.join(os.path.dirname(_sys.executable), 'MediaTools.ico'))
-        if hasattr(_sys, '_MEIPASS'):
-            _icon_candidates.insert(0, os.path.join(_sys._MEIPASS, 'MediaTools.ico'))
-    for _icon_path in _icon_candidates:
-        if os.path.exists(_icon_path):
-            app.setWindowIcon(QIcon(_icon_path))
-            break
+    # import sys as _sys
+    # _icon_candidates = [
+    #     os.path.join(os.path.dirname(os.path.abspath(__file__)), 'MediaTools.ico'),
+    # ]
+    # if getattr(_sys, 'frozen', False):
+    #     _icon_candidates.insert(0, os.path.join(os.path.dirname(_sys.executable), 'MediaTools.ico'))
+    #     if hasattr(_sys, '_MEIPASS'):
+    #         _icon_candidates.insert(0, os.path.join(_sys._MEIPASS, 'MediaTools.ico'))
+    # for _icon_path in _icon_candidates:
+    #     if os.path.exists(_icon_path):
+    #         app.setWindowIcon(QIcon(_icon_path))
+    #         break
 
     engine = QQmlApplicationEngine()
     

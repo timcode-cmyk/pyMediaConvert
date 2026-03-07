@@ -205,7 +205,7 @@ Item {
                     // STEP 2: Parameters
                     Rectangle {
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 120
+                        Layout.preferredHeight: 170
                         color: "#252526"
                         radius: 8
                         border.color: "#3e3e42"
@@ -237,11 +237,38 @@ Item {
                                     to: 100
                                     value: 20
                                     Layout.preferredWidth: 150
+
+                                    background: Rectangle {
+                                        x: thresholdSlider.leftPadding
+                                        y: thresholdSlider.topPadding + thresholdSlider.availableHeight / 2 - height / 2
+                                        width: thresholdSlider.availableWidth
+                                        height: 6
+                                        radius: 3
+                                        color: "#3c3c3c"
+
+                                        Rectangle {
+                                            width: thresholdSlider.visualPosition * parent.width
+                                            height: parent.height
+                                            radius: 3
+                                            color: "#007acc"
+                                        }
+                                    }
+
+                                    handle: Rectangle {
+                                        x: thresholdSlider.leftPadding + thresholdSlider.visualPosition * (thresholdSlider.availableWidth - width)
+                                        y: thresholdSlider.topPadding + thresholdSlider.availableHeight / 2 - height / 2
+                                        width: 18
+                                        height: 18
+                                        radius: 9
+                                        color: thresholdSlider.pressed ? "#005f9e" : "#ffffff"
+                                        border.color: "#007acc"
+                                        border.width: 2
+                                    }
                                 }
                                 Text {
                                     text: Math.round(thresholdSlider.value) + "%"
                                     color: "white"
-                                    Layout.preferredWidth: 30
+                                    Layout.preferredWidth: 35
                                 }
 
                                 // Frame Export
@@ -249,10 +276,26 @@ Item {
                                     id: chkExportFrame
                                     text: "导出静帧"
                                     checked: true
+                                    indicator: Rectangle {
+                                        width: 18
+                                        height: 18
+                                        radius: 4
+                                        color: chkExportFrame.checked ? "#007acc" : "#3c3c3c"
+                                        border.color: chkExportFrame.checked ? "#007acc" : "#666666"
+                                        border.width: 1
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: "✓"
+                                            color: "white"
+                                            font.pixelSize: 12
+                                            font.bold: true
+                                            visible: chkExportFrame.checked
+                                        }
+                                    }
                                     contentItem: Text {
                                         text: parent.text
                                         color: "white"
-                                        leftPadding: parent.indicator.width + 5
+                                        leftPadding: parent.indicator.width + 6
                                         verticalAlignment: Text.AlignVCenter
                                     }
                                 }
@@ -290,10 +333,26 @@ Item {
                                     id: chkAddWatermark
                                     text: "添加水印"
                                     checked: false
+                                    indicator: Rectangle {
+                                        width: 18
+                                        height: 18
+                                        radius: 4
+                                        color: chkAddWatermark.checked ? "#007acc" : "#3c3c3c"
+                                        border.color: chkAddWatermark.checked ? "#007acc" : "#666666"
+                                        border.width: 1
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: "✓"
+                                            color: "white"
+                                            font.pixelSize: 12
+                                            font.bold: true
+                                            visible: chkAddWatermark.checked
+                                        }
+                                    }
                                     contentItem: Text {
                                         text: parent.text
                                         color: "white"
-                                        leftPadding: parent.indicator.width + 5
+                                        leftPadding: parent.indicator.width + 6
                                         verticalAlignment: Text.AlignVCenter
                                     }
                                 }
