@@ -1,13 +1,13 @@
 """
-视频场景切分、截图与分割工具 (FFmpeg 版)
+视频场景切分、截图与分割工具
 
-功能:
-- 使用 FFmpeg 的 scene 过滤器探测视频中的场景切换点。
-- 在每个切换点生成截图。
-- 将视频按场景分割成独立的视频文件。
+核心能力:
+- 使用 OpenCV+自适应阈值 的内容检测算法探测场景切换点，兼顾硬切与部分叠化/渐变转场。
+- 当运行环境缺少 OpenCV 时，自动回退到 FFmpeg 的 scene 过滤器以保持兼容性。
+- 在每个切换点生成截图，并按场景分割成独立视频文件。
 - 可选为输出的视频或图片添加自定义文字水印。
-- Windows 下隐藏 ffmpeg 进程窗口
-- 支持日志文件记录和调试模式
+- Windows 下隐藏 ffmpeg 进程窗口。
+- 支持日志文件记录和调试模式。
 """
 
 import subprocess
@@ -17,10 +17,18 @@ import argparse
 import sys
 from pathlib import Path
 from datetime import datetime
+
 from ..utils import get_ffmpeg_exe, get_ffprobe_exe, get_resource_path
 from ..logging_config import get_logger
 
 logger = get_logger(__name__)
+
+try:
+    import cv2
+    import numpy as np
+except Exception:  # OpenCV 是可选依赖，加载失败时回退到 FFmpeg 检测
+    cv2 = None
+    np = None
 
 
 def get_available_fonts() -> dict:
@@ -130,7 +138,6 @@ class SceneCutter:
             self.log_dir.mkdir(parents=True, exist_ok=True)
             logger.debug(f"调试模式已启用，日志将保存至: {self.log_dir}")
 
-    
     def _log_command(self, cmd: list, log_file: Path = None):
         """记录 FFmpeg 命令到日志文件（调试用）"""
         if not self.debug:
@@ -190,6 +197,205 @@ class SceneCutter:
                 with open(debug_log_file, "a", encoding="utf-8") as f:
                     f.write(f"[{datetime.now().isoformat()}] 异常: {str(e)}\n")
             return False, str(e)
+
+    # === 场景检测相关辅助方法 ===
+
+    def _detect_scenes_ffmpeg(
+        self,
+        video_path: Path,
+        threshold: float,
+        debug_log_file: Path | None = None,
+    ) -> list[float]:
+        """
+        使用 FFmpeg 的 scene 过滤器进行场景检测，作为 OpenCV 不可用时的回退方案。
+
+        返回值:
+            已包含 0.0 起始点的时间戳列表（单位: 秒），未做帧对齐。
+        """
+        cmd_detect = [
+            get_ffmpeg_exe(), '-i', str(video_path),
+            '-filter_complex', f"select='gt(scene,{threshold})',showinfo",
+            '-f', 'null', '-',
+        ]
+
+        logger.info(f"正在使用 FFmpeg scene 过滤器分析场景 (阈值: {threshold})...")
+        success, stderr_output = self._execute_ffmpeg_command(cmd_detect, debug_log_file)
+
+        if not success:
+            logger.error(f"FFmpeg 场景检测失败: {stderr_output[:200]}")
+            return [0.0]
+
+        scene_times = [0.0]
+        times = re.findall(r"pts_time:([\d\.]+)", stderr_output)
+        scene_times.extend([float(t) for t in times])
+
+        if self.debug and debug_log_file:
+            with open(debug_log_file, "a", encoding="utf-8") as f:
+                f.write("FFmpeg 场景检测结果 (未对齐):\n")
+                f.write(f"  检测到 {len(scene_times)} 个分段\n")
+                f.write(f"  原始时间点: {scene_times}\n\n")
+
+        return scene_times
+
+    def _detect_scenes_opencv(
+        self,
+        video_path: Path,
+        threshold: float,
+        fps: float,
+        debug_log_file: Path | None = None,
+    ) -> list[float]:
+        """
+        使用 OpenCV 基于帧内容的自适应检测算法进行场景切分。
+
+        设计要点:
+        - 采用帧间灰度均值差作为快速内容变化指标，兼顾性能和鲁棒性。
+        - 使用指数滑动平均 (EMA) 自适应基线，适应整段视频亮度/对比度变化。
+        - “敏感度”由 threshold 控制，输入区间 0~1，内部映射为倍数因子。
+          0.2 左右为较合适的默认值，与原 UI 含义保持一致。
+        - 对于叠化/渐变转场，虽然单帧差值不一定极高，但在一个短时间窗口内
+          会出现连续高值，算法通过聚合和去抖处理，将其合并为单一场景边界。
+        """
+        if cv2 is None or np is None:
+            raise RuntimeError("OpenCV 未安装，无法使用基于 OpenCV 的场景检测。")
+
+        cap = cv2.VideoCapture(str(video_path))
+        if not cap.isOpened():
+            raise RuntimeError(f"无法打开视频文件: {video_path}")
+
+        # 将 UI 中的 [0,1] 阈值映射到一个合理的灵敏度区间:
+        # 数值越小越敏感；这里将其映射到 [1.5, 4.0] 的倍数因子。
+        sensitivity = max(0.0, min(1.0, threshold))
+        factor_min, factor_max = 1.5, 4.0
+        factor = factor_max - (factor_max - factor_min) * sensitivity  # threshold 越大越不敏感
+
+        ema_score = None
+        alpha = 0.15  # EMA 衰减系数
+        frame_index = 0
+        prev_gray = None
+        raw_candidates: list[float] = [0.0]
+
+        # 用于处理渐变/叠化: 连续高分帧聚合
+        high_span_start = None
+        high_span_peak_score = 0.0
+        high_span_peak_frame = None
+
+        if self.debug and debug_log_file:
+            with open(debug_log_file, "a", encoding="utf-8") as f:
+                f.write("OpenCV 场景检测开始...\n")
+                f.write(f"  sensitivity(threshold): {threshold}\n")
+                f.write(f"  factor: {factor}\n")
+                f.write("\n")
+
+        try:
+            while True:
+                ret, frame = cap.read()
+                if not ret:
+                    break
+
+                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                # 下采样以加速计算
+                h, w = gray.shape
+                scale = 320.0 / max(w, h)
+                if scale < 1.0:
+                    gray = cv2.resize(gray, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
+
+                if prev_gray is None:
+                    prev_gray = gray
+                    frame_index += 1
+                    continue
+
+                diff = cv2.absdiff(gray, prev_gray)
+                score = float(diff.mean())
+
+                if ema_score is None:
+                    ema_score = score
+                else:
+                    ema_score = (1 - alpha) * ema_score + alpha * score
+
+                # 当前帧被视为“高变化”帧的条件
+                dynamic_threshold = ema_score * factor
+                is_high = score > dynamic_threshold
+
+                if is_high:
+                    if high_span_start is None:
+                        high_span_start = frame_index
+                        high_span_peak_score = score
+                        high_span_peak_frame = frame_index
+                    else:
+                        if score > high_span_peak_score:
+                            high_span_peak_score = score
+                            high_span_peak_frame = frame_index
+                else:
+                    # 一个高变化窗口结束，聚合为一个候选切点
+                    if high_span_start is not None and high_span_peak_frame is not None:
+                        cut_time = high_span_peak_frame / fps
+                        raw_candidates.append(cut_time)
+                        if self.debug and debug_log_file:
+                            with open(debug_log_file, "a", encoding="utf-8") as f:
+                                f.write(
+                                    f"[OpenCV] 高变化窗口: {high_span_start}->{frame_index}, "
+                                    f"peak_frame={high_span_peak_frame}, time={cut_time:.3f}s, "
+                                    f"score={high_span_peak_score:.3f}, ema={ema_score:.3f}, "
+                                    f"dyn_th={dynamic_threshold:.3f}\n"
+                                )
+                    high_span_start = None
+                    high_span_peak_score = 0.0
+                    high_span_peak_frame = None
+
+                prev_gray = gray
+                frame_index += 1
+        finally:
+            cap.release()
+
+        # 视频结尾仍在高变化窗口内时，也需要记一次切点
+        if high_span_start is not None and high_span_peak_frame is not None:
+            cut_time = high_span_peak_frame / fps
+            raw_candidates.append(cut_time)
+
+        # 对候选时间做去抖和去重: 同一秒内最多保留一个切点，避免连环检测
+        raw_candidates = sorted(set(raw_candidates))
+        merged: list[float] = []
+        min_gap = max(1.0 / fps, 0.4)  # 至少 0.4 秒间隔
+        for t in raw_candidates:
+            if not merged:
+                merged.append(t)
+                continue
+            if t - merged[-1] >= min_gap:
+                merged.append(t)
+
+        if self.debug and debug_log_file:
+            with open(debug_log_file, "a", encoding="utf-8") as f:
+                f.write("\nOpenCV 场景检测完成:\n")
+                f.write(f"  原始候选点: {raw_candidates}\n")
+                f.write(f"  合并后切点: {merged}\n\n")
+
+        # 确保起始点始终为 0.0
+        if not merged or merged[0] != 0.0:
+            merged = [0.0] + merged
+
+        return merged
+
+    def _detect_scenes(
+        self,
+        video_path: Path,
+        threshold: float,
+        fps: float,
+        debug_log_file: Path | None = None,
+    ) -> list[float]:
+        """
+        场景检测统一入口:
+        - 首选 OpenCV 算法，以提升对叠化/渐变等复杂转场的识别能力。
+        - 出现任何异常或 OpenCV 不可用时，自动回退到 FFmpeg 实现。
+        """
+        # 优先尝试 OpenCV
+        if cv2 is not None and np is not None:
+            try:
+                return self._detect_scenes_opencv(video_path, threshold, fps, debug_log_file)
+            except Exception as e:
+                logger.exception(f"OpenCV 场景检测失败，回退到 FFmpeg scene 过滤器: {e}")
+
+        # 回退到 FFmpeg 实现
+        return self._detect_scenes_ffmpeg(video_path, threshold, debug_log_file)
 
 
     def find_files(self, directory: Path):
@@ -272,23 +478,9 @@ class SceneCutter:
                 f.write(f"生成时间: {datetime.now().isoformat()}\n")
                 f.write("=" * 50 + "\n\n")
 
-        # 1. 场景检测
-        cmd_detect = [
-            get_ffmpeg_exe(), '-i', str(video_path),
-            '-filter_complex', f"select='gt(scene,{threshold})',showinfo",
-            '-f', 'null', '-'
-        ]
-        
+        # 1. 场景检测 (优先使用 OpenCV，自适应回退到 FFmpeg)
         logger.info(f"正在分析场景 (阈值: {threshold})...")
-        success, stderr_output = self._execute_ffmpeg_command(cmd_detect, debug_log_file)
-        
-        if not success:
-            logger.error(f"场景检测失败: {stderr_output[:200]}")
-            return
-        
-        scene_times = [0.0]
-        times = re.findall(r"pts_time:([\d\.]+)", stderr_output)
-        scene_times.extend([float(t) for t in times])
+        scene_times = self._detect_scenes(video_path, threshold, fps, debug_log_file)
         # 对检测结果进行帧对齐
         scene_times = self._align_to_frame(scene_times, fps)
         logger.info(f"检测到 {len(scene_times)} 个场景分段（已帧对齐）。")
@@ -297,7 +489,6 @@ class SceneCutter:
             with open(debug_log_file, "a", encoding="utf-8") as f:
                 f.write(f"场景检测结果:\n")
                 f.write(f"  检测到 {len(scene_times)} 个分段\n")
-                f.write(f"  原始时间点: {times}\n")
                 f.write(f"  帧对齐后时间点: {scene_times}\n\n")
 
         rename_lines = rename_lines or []

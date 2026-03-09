@@ -18,9 +18,7 @@ def test_process_video_command_order(monkeypatch, tmp_path):
 
     def fake_execute(self, cmd, debug_log_file=None):
         calls.append(cmd.copy())
-        # simulate successful detection with one scene change at 2.0s
-        if "select='gt(scene" in cmd:
-            return True, "pts_time:2.0\n"
+        # 模拟所有 FFmpeg 调用均成功，具体参数在断言中检查
         return True, ""
 
     monkeypatch.setattr(SceneCutter, '_execute_ffmpeg_command', fake_execute)
@@ -50,9 +48,7 @@ def test_frame_offset_not_affect_video(monkeypatch, tmp_path):
 
     def fake_exec(self, cmd, debug_log_file=None):
         calls.append(cmd.copy())
-        # return fake scene detection with a single scene
-        if 'select=' in cmd[1]:
-            return True, "pts_time:1.0\n"
+        # 所有 FFmpeg 命令都视为成功，真正的检测逻辑在 OpenCV/FFmpeg 内部完成
         return True, ""
 
     monkeypatch.setattr(SceneCutter, '_execute_ffmpeg_command', fake_exec)
