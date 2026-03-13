@@ -21,6 +21,7 @@ except Exception:  # pragma: no cover - fallback
 from .mediaconvert import (
     LogoConverter,
     AddCustomLogo,
+    AddAssText,
     H264Converter,
     DnxhrConverter,
     PngConverter,
@@ -32,6 +33,7 @@ from .mediaconvert import (
 CLASS_MAP = {
     'LogoConverter': LogoConverter,
     'AddCustomLogo': AddCustomLogo,
+    'AddAssText': AddAssText,
     'H264Converter': H264Converter,
     'DnxhrConverter': DnxhrConverter,
     'PngConverter': PngConverter,

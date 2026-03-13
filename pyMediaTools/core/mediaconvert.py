@@ -324,7 +324,7 @@ class MediaConverter(ABC):
         # 修改 2: 强制设置环境变量，确保在 GUI 启动时也生效
         env = self.process.processEnvironment()
         env.insert("PYTHONUNBUFFERED", "1")
-        # env.insert("FFREPORT", "file=ffmpeg_log.txt:level=32") # 可选：输出日志到文件辅助调试
+        env.insert("FFREPORT", "file=ffmpeg_log.txt:level=32") # 可选：输出日志到文件辅助调试
         self.process.setProcessEnvironment(env)
 
         # 混合输出模式，方便解析
@@ -442,66 +442,107 @@ class MediaConverter(ABC):
             overall_pbar.close()
 
 class LogoConverter(MediaConverter):
-    """
-    添加logo并模糊背景
-    """
     def __init__(self, params: dict, support_exts=None, output_ext: str = None, init_checks: bool = True):
-        self.x = params.get('x', 10)
-        self.y = params.get('y', 10)
-        self.logo_w = params.get('logo_w', 100)
-        self.logo_h = params.get('logo_h', 100)
         self.target_w = params.get('target_w', 1080)
         self.target_h = params.get('target_h', 1920)
-        self.logo_path = get_resource_path(params.get('logo_path'))
         self.force_codec = params.get('video_codec', None)
+        self.output_ext = output_ext or ".mp4"
 
+        raw_logos = params.get('logos')
+        if raw_logos:
+            self.logos = []
+            for entry in raw_logos:
+                lp = Path(get_resource_path(entry.get('logo_path')))
+                self.logos.append({
+                    'path': lp,
+                    'x': entry.get('x', 0),
+                    'y': entry.get('y', 0),
+                    'w': entry.get('logo_w', entry.get('w', None)),
+                    'h': entry.get('logo_h', entry.get('h', None)),
+                    'blur': entry.get('blur', True),
+                })
+        else:
+            lp = Path(get_resource_path(params.get('logo_path')))
+            self.logos = [{
+                'path': lp,
+                'x': params.get('x', 10),
+                'y': params.get('y', 10),
+                'w': params.get('logo_w', 100),
+                'h': params.get('logo_h', 100),
+                'blur': params.get('blur', True),
+            }]
 
         super().__init__(support_exts=support_exts, output_ext=output_ext, init_checks=init_checks)
 
-        if not self.logo_path.exists():
-            logger.critical(f"Logo 文件未找到: {self.logo_path}")
-            raise FileNotFoundError(f"Logo not found: {self.logo_path}")
+        for logo in self.logos:
+            if not logo['path'].exists():
+                raise FileNotFoundError(f"Logo not found: {logo['path']}")
 
     def process_file(self, input_path: Path, output_path: Path, duration: float, monitor=None):
-        """
-        添加logo
-        :param input_path: 输入路径
-        :param output_path: 输出基本路径 (不含后缀)
-        :param duration: 当前文件的总时长 (用于计算百分比)
-        """
         output_file_name = f"{output_path}{self.output_ext}" 
         video_codec, preset_key, preset_value = self._get_video_codec_params(self.force_codec)
 
-        # 构造 filter_complex：scale cover -> crop -> 模糊区域 -> overlay logo
-        filter_complex = (
-            f"[0:v]scale={self.target_w}:{self.target_h}:force_original_aspect_ratio=increase,crop={self.target_w}:{self.target_h},setsar=1[base];"
-            f"[base]split=2[bg][tmp];"
-            f"[tmp]crop={self.logo_w}:{self.logo_h}:{self.x}:{self.y},boxblur=10[blurred];"
-            f"[bg][blurred]overlay={self.x}:{self.y}:format=auto[tmp2];"
-            f"[1:v]scale={self.logo_w}:{self.logo_h}[logo];"
-            f"[tmp2][logo]overlay={self.x}:{self.y}:format=auto[outv]"
+        # 核心修复点 1: 使用列表存储每一行 filter，最后用分号连接
+        parts = []
+        ratio = float(self.target_w) / float(self.target_h)
+
+        # 基础画面缩放
+        # [0:v] 是主视频
+        parts.append(
+            f"[0:v]scale='if(gt(iw/ih,{ratio}),-2,{self.target_w})':'"
+            f"if(gt(iw/ih,{ratio}),{self.target_h},-2)',setsar=1,"
+            f"crop={self.target_w}:{self.target_h}[base]"
         )
+        
+        current_link = 'base'
+
+        # 处理模糊层
+        for idx, logo in enumerate(self.logos):
+            if not logo.get('blur', True):
+                continue
+            w, h, x, y = logo.get('w') or 'iw', logo.get('h') or 'ih', logo['x'], logo['y']
+            
+            blur_out = f"b{idx}"
+            overlay_out = f"l_blur_{idx}"
+            
+            # 注意：这里的 [current_link] 会被 split 分发
+            parts.append(f"[{current_link}]split[vsplit{idx}1][vsplit{idx}2]")
+            parts.append(f"[vsplit{idx}1]crop={w}:{h}:{x}:{y},boxblur=10[{blur_out}]")
+            parts.append(f"[vsplit{idx}2][{blur_out}]overlay={x}:{y}:format=auto[{overlay_out}]")
+            current_link = overlay_out
+
+        # 叠加 Logo 图片
+        for idx, logo in enumerate(self.logos):
+            w, h, x, y = logo.get('w') or 'iw', logo.get('h') or 'ih', logo['x'], logo['y']
+            
+            logo_in = f"{idx+1}:v"  # 图标输入流索引
+            logo_scaled = f"logo_img_{idx}"
+            final_out = f"layer_{idx}"
+            
+            parts.append(f"[{logo_in}]scale={w}:{h}[{logo_scaled}]")
+            parts.append(f"[{current_link}][{logo_scaled}]overlay={x}:{y}:format=auto[{final_out}]")
+            current_link = final_out
+
+        # 核心修复点 2: 必须用分号分隔每个滤镜声明
+        filter_complex = ";".join(parts)
 
         cmd = [
-            "ffmpeg", "-y", "-hide_banner", "-nostats", "-loglevel", "error",
+            "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
             "-hwaccel", "auto",
-            "-i", str(input_path), "-i", str(self.logo_path),
-            "-filter_complex", filter_complex,
-            "-map", "[outv]", "-map", "0:a?", "-c:v", video_codec,
+            "-i", str(input_path)
         ]
-        # if preset_key == "-crf":
-        #      # 软件编码器参数
-        #      cmd.extend([preset_key, preset_value])
-        # elif preset_key:
-        #      # 硬件编码器参数 (如 -preset, -q:v)
-        #      cmd.extend([preset_key, preset_value])
-            
+        for logo in self.logos:
+            cmd.extend(["-i", str(logo['path'])])
+
         cmd.extend([
-            # "-c:a", "copy", "-movflags", "+faststart",
+            "-filter_complex", filter_complex,
+            "-map", f"[{current_link}]", # 映射最后一个输出标签
+            "-map", "0:a?", 
+            "-c:v", video_codec,
             output_file_name
         ])
 
-        name = input_path.name # 确保获取到文件名
+        name = input_path.name
         self.process_ffmpeg(cmd, duration, monitor, name)
 
 class AddCustomLogo(MediaConverter):
@@ -539,7 +580,7 @@ class AddCustomLogo(MediaConverter):
         # 构造 filter_complex：
         filter_complex = (
             f"drawtext=fontfile='{self.font_path}':"
-            f"text='{self.text}':"
+            f"text='{self.text}':text_shaping=1:"
             f"fontcolor={self.font_color}:"
             f"fontsize={self.font_size}:"
             "box=1:boxcolor=black@0.5:boxborderw=10:"
@@ -550,6 +591,47 @@ class AddCustomLogo(MediaConverter):
             "ffmpeg", "-y", "-hide_banner", "-nostats", "-loglevel", "error",
             "-i", str(input_path),
             "-vf", filter_complex,
+            output_file_name
+        ]
+
+        name = input_path.name # 确保获取到文件名
+        self.process_ffmpeg(cmd, duration, monitor, name)
+
+class AddAssText(MediaConverter):
+    """
+    添加ASS字幕
+    """
+    def __init__(self, params: dict, support_exts=None, output_ext: str = None, init_checks: bool = True):
+        self.ass = params.get('ass')
+
+        super().__init__(support_exts=support_exts, output_ext=output_ext, init_checks=init_checks)
+
+        if not get_resource_path(self.ass).exists():
+            logger.critical(f"ASS字幕文件未找到: {self.ass}")
+            raise FileNotFoundError(f"ASS字幕文件未找到: {self.ass}")
+        # self.ass = Path(get_resource_path(params.get('ass')))
+
+    def process_file(self, input_path: Path, output_path: Path, duration: float, monitor=None):
+        """
+        添加ASS字幕
+        :param input_path: 输入路径
+        :param output_path: 输出基本路径 (不含后缀)
+        :param duration: 当前文件的总时长 (用于计算百分比)
+        """
+        inpput_ext = input_path.suffix.lower()
+        if self.output_ext is None:
+            self.output_ext = f"_ai{inpput_ext}"
+
+        output_file_name = f"{output_path}{self.output_ext}" 
+
+        input_ass = (
+            f"ass='{self.ass}'"
+        )
+
+        cmd = [
+            "ffmpeg", "-y", "-hide_banner", "-nostats", "-loglevel", "error",
+            "-i", str(input_path),
+            "-vf", input_ass,
             output_file_name
         ]
 

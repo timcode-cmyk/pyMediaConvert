@@ -18,13 +18,14 @@ def test_process_video_command_order(monkeypatch, tmp_path):
 
     def fake_execute(self, cmd, debug_log_file=None):
         calls.append(cmd.copy())
-        # simulate successful detection with one scene change at 2.0s
-        if "select='gt(scene" in cmd:
-            return True, "pts_time:2.0\n"
         return True, ""
 
+    def fake_detect_scenes(self, video_path, threshold, fps, debug_log_file=None):
+        return [0.0, 2.0]  # 2 个场景
+
     monkeypatch.setattr(SceneCutter, '_execute_ffmpeg_command', fake_execute)
-    
+    monkeypatch.setattr(SceneCutter, '_detect_scenes', fake_detect_scenes)
+
     cutter = SceneCutter(debug=True)
     # stub fps and duration to avoid calling ffmpeg/ffprobe
     monkeypatch.setattr('pyMediaTools.core.vidoecut.get_video_fps', lambda path, debug=False: 25.0)
@@ -50,12 +51,13 @@ def test_frame_offset_not_affect_video(monkeypatch, tmp_path):
 
     def fake_exec(self, cmd, debug_log_file=None):
         calls.append(cmd.copy())
-        # return fake scene detection with a single scene
-        if 'select=' in cmd[1]:
-            return True, "pts_time:1.0\n"
         return True, ""
 
+    def fake_detect_scenes(self, video_path, threshold, fps, debug_log_file=None):
+        return [0.0, 1.0]
+
     monkeypatch.setattr(SceneCutter, '_execute_ffmpeg_command', fake_exec)
+    monkeypatch.setattr(SceneCutter, '_detect_scenes', fake_detect_scenes)
     cutter = SceneCutter()
     # stub helpers to avoid external ffmpeg calls
     monkeypatch.setattr('pyMediaTools.core.vidoecut.get_video_fps', lambda path, debug=False: 25.0)

@@ -1,13 +1,12 @@
 """
-视频场景切分、截图与分割工具 (FFmpeg 版)
+视频场景切分、截图与分割工具
 
-功能:
-- 使用 FFmpeg 的 scene 过滤器探测视频中的场景切换点。
-- 在每个切换点生成截图。
-- 将视频按场景分割成独立的视频文件。
+核心能力:
+- 使用 OpenCV 基于帧间差异的内容检测算法探测场景切换点（硬切与叠化/渐变转场）。
+- 在每个切换点生成截图，并按场景分割成独立视频文件。
 - 可选为输出的视频或图片添加自定义文字水印。
-- Windows 下隐藏 ffmpeg 进程窗口
-- 支持日志文件记录和调试模式
+- Windows 下隐藏 ffmpeg 进程窗口。
+- 支持日志文件记录和调试模式。
 """
 
 import subprocess
@@ -17,10 +16,18 @@ import argparse
 import sys
 from pathlib import Path
 from datetime import datetime
+
 from ..utils import get_ffmpeg_exe, get_ffprobe_exe, get_resource_path
 from ..logging_config import get_logger
 
 logger = get_logger(__name__)
+
+try:
+    import cv2
+    import numpy as np
+except ImportError:
+    cv2 = None
+    np = None
 
 
 def get_available_fonts() -> dict:
@@ -130,7 +137,6 @@ class SceneCutter:
             self.log_dir.mkdir(parents=True, exist_ok=True)
             logger.debug(f"调试模式已启用，日志将保存至: {self.log_dir}")
 
-    
     def _log_command(self, cmd: list, log_file: Path = None):
         """记录 FFmpeg 命令到日志文件（调试用）"""
         if not self.debug:
@@ -190,6 +196,103 @@ class SceneCutter:
                 with open(debug_log_file, "a", encoding="utf-8") as f:
                     f.write(f"[{datetime.now().isoformat()}] 异常: {str(e)}\n")
             return False, str(e)
+
+    # === 场景检测 (OpenCV) ===
+
+    def _detect_scenes(
+        self,
+        video_path: Path,
+        threshold: float,
+        fps: float,
+        debug_log_file: Path | None = None,
+    ) -> list[float]:
+        """
+        使用 OpenCV 基于帧间差异进行场景切分。
+        - 帧间灰度差均值：硬切通常 20~50+，正常帧 2~10
+        - 固定阈值：UI threshold 0~1 映射为 12~35（越大越不敏感）
+        - 叠化：连续高分帧聚合为一个切点，取峰值帧
+        - 最小场景长度约 0.5 秒
+        """
+        if cv2 is None or np is None:
+            raise RuntimeError("场景检测需要 opencv-python，请执行: pip install opencv-python")
+
+        cap = cv2.VideoCapture(str(video_path))
+        if not cap.isOpened():
+            raise RuntimeError(f"无法打开视频文件: {video_path}")
+
+        # UI 0~1 -> 数值阈值 8~30（0=敏感/30, 1=严格/8，灰度差均值硬切约 20~50）
+        t = max(0.0, min(1.0, threshold))
+        thresh_val = 8.0 + t * 22.0
+
+        min_scene_frames = max(int(fps * 0.5), 5)
+        frame_idx = 0
+        prev_gray = None
+        raw_cuts: list[float] = []
+        last_cut_frame = -min_scene_frames * 2
+
+        in_high = False
+        peak_score = 0.0
+        peak_frame = -1
+
+        if self.debug and debug_log_file:
+            with open(debug_log_file, "a", encoding="utf-8") as f:
+                f.write("OpenCV 场景检测: thresh_val=%.1f, min_scene_frames=%d\n" % (thresh_val, min_scene_frames))
+
+        try:
+            while True:
+                ret, frame = cap.read()
+                if not ret:
+                    break
+
+                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                h, w = gray.shape
+                scale = 320.0 / max(w, h)
+                if scale < 1.0:
+                    gray = cv2.resize(gray, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
+
+                if prev_gray is None:
+                    prev_gray = gray
+                    frame_idx += 1
+                    continue
+
+                diff = cv2.absdiff(gray, prev_gray)
+                score = float(diff.mean())
+
+                if score > thresh_val:
+                    if not in_high:
+                        in_high = True
+                        peak_score = score
+                        peak_frame = frame_idx
+                    elif score > peak_score:
+                        peak_score = score
+                        peak_frame = frame_idx
+                else:
+                    if in_high and peak_frame >= 0 and (frame_idx - last_cut_frame) >= min_scene_frames:
+                        cut_time = peak_frame / fps
+                        raw_cuts.append(cut_time)
+                        last_cut_frame = peak_frame
+                        if self.debug and debug_log_file:
+                            with open(debug_log_file, "a", encoding="utf-8") as f:
+                                f.write("  cut @ frame %d, time %.3fs, score %.2f\n" % (peak_frame, cut_time, peak_score))
+                    in_high = False
+                    peak_score = 0.0
+                    peak_frame = -1
+
+                prev_gray = gray
+                frame_idx += 1
+        finally:
+            cap.release()
+
+        if in_high and peak_frame >= 0 and (frame_idx - last_cut_frame) >= min_scene_frames:
+            raw_cuts.append(peak_frame / fps)
+
+        scene_times = [0.0] + sorted(set(raw_cuts))
+
+        if self.debug and debug_log_file:
+            with open(debug_log_file, "a", encoding="utf-8") as f:
+                f.write("场景检测完成: %d 个分段\n" % len(scene_times))
+
+        return scene_times
 
 
     def find_files(self, directory: Path):
@@ -272,23 +375,9 @@ class SceneCutter:
                 f.write(f"生成时间: {datetime.now().isoformat()}\n")
                 f.write("=" * 50 + "\n\n")
 
-        # 1. 场景检测
-        cmd_detect = [
-            get_ffmpeg_exe(), '-i', str(video_path),
-            '-filter_complex', f"select='gt(scene,{threshold})',showinfo",
-            '-f', 'null', '-'
-        ]
-        
+        # 1. 场景检测 (优先使用 OpenCV，自适应回退到 FFmpeg)
         logger.info(f"正在分析场景 (阈值: {threshold})...")
-        success, stderr_output = self._execute_ffmpeg_command(cmd_detect, debug_log_file)
-        
-        if not success:
-            logger.error(f"场景检测失败: {stderr_output[:200]}")
-            return
-        
-        scene_times = [0.0]
-        times = re.findall(r"pts_time:([\d\.]+)", stderr_output)
-        scene_times.extend([float(t) for t in times])
+        scene_times = self._detect_scenes(video_path, threshold, fps, debug_log_file)
         # 对检测结果进行帧对齐
         scene_times = self._align_to_frame(scene_times, fps)
         logger.info(f"检测到 {len(scene_times)} 个场景分段（已帧对齐）。")
@@ -297,7 +386,6 @@ class SceneCutter:
             with open(debug_log_file, "a", encoding="utf-8") as f:
                 f.write(f"场景检测结果:\n")
                 f.write(f"  检测到 {len(scene_times)} 个分段\n")
-                f.write(f"  原始时间点: {times}\n")
                 f.write(f"  帧对齐后时间点: {scene_times}\n\n")
 
         rename_lines = rename_lines or []

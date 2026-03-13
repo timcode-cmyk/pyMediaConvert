@@ -4,3 +4,4 @@ yt_dlp
 PySide6
 pysrt
 toml
+opencv-python

@@ -11,6 +11,7 @@ except Exception:
     from ..core.mediaconvert import (
         LogoConverter,
         AddCustomLogo,
+        AddAssText,
         H264Converter,
         DnxhrConverter,
         PngConverter,
@@ -27,60 +28,110 @@ except Exception:
             'output_ext': "_hailuo.mp4",
             'support_exts': [".mp4"],
             'params': {
-                'x': 590, 'y': 1810,
-                'logo_w': 475, 'logo_h': 90,
                 'target_w': 1080, 'target_h': 1920,
-                'logo_path': "assets/hailuo.png"
-                }
-            },
+                'logos': [
+                    {
+                        'x': 590, 'y': 1810,
+                        'logo_w': 475, 'logo_h': 90,
+                        'logo_path': "assets/hailuoDream.png"
+                    },
+                    {
+                        'x': 0, 'y': 0,
+                        'logo_w': 100, 'logo_h': 100,
+                        'logo_path': "assets/Dream_AI.png",
+                        'blur': False
+                    }
+                ]
+            }
+        },
         'vidu': {
             'class': LogoConverter,
             'description': "添加 Dream+Vidu Logo (竖屏)",
             'output_ext': "_vidu.mp4",
             'support_exts': [".mp4"],
             'params': {
-                'x': 700, 'y': 1810,
-                'logo_w': 360, 'logo_h': 90,
                 'target_w': 1080, 'target_h': 1920,
-                'logo_path': "assets/vidu.png"
-                }
-            },
+                'logos': [
+                    {
+                        'x': 700, 'y': 1810,
+                        'logo_w': 360, 'logo_h': 90,
+                        'logo_path': "assets/viduDream.png"
+                    },
+                    {
+                        'x': 0, 'y': 0,
+                        'logo_w': 100, 'logo_h': 100,
+                        'logo_path': "assets/Dream_AI.png",
+                        'blur': False
+                    }
+                ]
+            }
+        },
         'veo': {
             'class': LogoConverter,
             'description': "添加 Dream+Veo Logo (竖屏)",
             'output_ext': "_veo.mp4",
             'support_exts': [".mp4"],
             'params': {
-                'x': 700, 'y': 1810,
-                'logo_w': 360, 'logo_h': 90,
                 'target_w': 1080, 'target_h': 1920,
-                'logo_path': "assets/Veo.png"
-                }
-            },
+                'logos': [
+                    {
+                        'x': 700, 'y': 1810,
+                        'logo_w': 360, 'logo_h': 90,
+                        'logo_path': "assets/VeoDream.png"
+                    },
+                    {
+                        'x': 0, 'y': 0,
+                        'logo_w': 100, 'logo_h': 100,
+                        'logo_path': "assets/Dream_AI.png",
+                        'blur': False
+                    }
+                ]
+            }
+        },
         'heygen': {
             'class': LogoConverter,
             'description': "添加 Dream+HegGen Logo (竖屏)",
             'output_ext': "_veo.mp4",
             'support_exts': [".mp4"],
             'params': {
-                'x': 700, 'y': 1810,
-                'logo_w': 360, 'logo_h': 90,
                 'target_w': 1080, 'target_h': 1920,
-                'logo_path': "assets/HeyGen.png"
-                }
-            },
+                'logos': [
+                    {
+                        'x': 700, 'y': 1810,
+                        'logo_w': 360, 'logo_h': 90,
+                        'logo_path': "assets/HeyGenDream.png"
+                    },
+                    {
+                        'x': 0, 'y': 0,
+                        'logo_w': 100, 'logo_h': 100,
+                        'logo_path': "assets/Dream_AI.png",
+                        'blur': False
+                    }
+                ]
+            }
+        },
         'dream': {
             'class': LogoConverter,
             'description': "添加 Dreamina Logo (竖屏)",
             'output_ext': "_veo.mp4",
             'support_exts': [".mp4"],
             'params': {
-                'x': 700, 'y': 1810,
-                'logo_w': 360, 'logo_h': 90,
                 'target_w': 1080, 'target_h': 1920,
-                'logo_path': "assets/Dream.png"
-                }
-            },
+                'logos': [
+                    {
+                        'x': 700, 'y': 1810,
+                        'logo_w': 360, 'logo_h': 90,
+                        'logo_path': "assets/Dream.png"
+                    },
+                    {
+                        'x': 0, 'y': 0,
+                        'logo_w': 100, 'logo_h': 100,
+                        'logo_path': "assets/Dream_AI.png",
+                        'blur': False
+                    }
+                ]
+            }
+        },
         'image': {
             'class': AddCustomLogo,
             'description': "添加 ImageFromAI",
@@ -95,6 +146,15 @@ except Exception:
                 
                 }
             },
+        'image1': {
+            'class': AddAssText,
+            'description': "添加 AI-जनित",
+            'output_ext': None,
+            'support_exts': [".mp4", ".png", ".jpg", ".jpeg"],
+            'params': {
+                'ass': "assets/AI-Hindi.ass"
+            }
+        },
 
         'h264': {
             'class': H264Converter,
