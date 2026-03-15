@@ -542,18 +542,18 @@ class LogoConverter(MediaConverter):
             extra_video_args.extend([
                 "-preset", "p4",          # 质量优先的预设，视显卡性能可改成 p5/p6
                 "-rc", "vbr_hq",
-                "-b:v", "5M",             # 目标码率
-                "-maxrate", "7M",
-                "-bufsize", "10M",
-                "-cq:v", "19",            # 质量档位，越小越清晰
+                "-b:v", "15M",             # 目标码率
+                "-maxrate", "25M",
+                "-bufsize", "25M",
+                "-cq:v", "17",            # 质量档位，越小越清晰
                 "-pix_fmt", "yuv420p",
             ])
         elif video_codec == "h264_videotoolbox":
             # macOS / VideoToolbox：建议使用目标码率模式，减小体积同时控制画质
             extra_video_args.extend([
-                "-b:v", "5M",
-                "-maxrate", "7M",
-                "-bufsize", "10M",
+                "-b:v", "15M",
+                "-maxrate", "25M",
+                "-bufsize", "25M",
                 "-profile:v", "high",
                 "-pix_fmt", "yuv420p",
             ])
@@ -697,19 +697,19 @@ class H264Converter(MediaConverter):
 
         if video_codec == "h264_nvenc":
             extra_video_args.extend([
-                "-preset", "p4",
+                "-preset", "p6",
                 "-rc", "vbr_hq",
-                "-b:v", "5M",
-                "-maxrate", "7M",
-                "-bufsize", "10M",
-                "-cq:v", "19",
+                "-b:v", "15M",
+                "-maxrate", "25M",
+                "-bufsize", "25M",
+                "-cq:v", "17",
                 "-pix_fmt", "yuv420p",
             ])
         elif video_codec == "h264_videotoolbox":
             extra_video_args.extend([
-                "-b:v", "5M",
-                "-maxrate", "7M",
-                "-bufsize", "10M",
+                "-b:v", "15M",
+                "-maxrate", "25M",
+                "-bufsize", "25M",
                 "-profile:v", "high",
                 "-pix_fmt", "yuv420p",
             ])
