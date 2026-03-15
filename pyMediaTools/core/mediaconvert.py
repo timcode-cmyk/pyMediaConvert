@@ -534,11 +534,47 @@ class LogoConverter(MediaConverter):
         for logo in self.logos:
             cmd.extend(["-i", str(logo['path'])])
 
+        # 根据实际使用的编码器，附加合适的质量 / 码率参数，避免依赖各平台默认值
+        extra_video_args: list[str] = []
+
+        if video_codec == "h264_nvenc":
+            # Windows / NVIDIA：高质量 VBR，控制在一个相对稳定的码率区间
+            extra_video_args.extend([
+                "-preset", "p4",          # 质量优先的预设，视显卡性能可改成 p5/p6
+                "-rc", "vbr_hq",
+                "-b:v", "5M",             # 目标码率
+                "-maxrate", "7M",
+                "-bufsize", "10M",
+                "-cq:v", "19",            # 质量档位，越小越清晰
+                "-pix_fmt", "yuv420p",
+            ])
+        elif video_codec == "h264_videotoolbox":
+            # macOS / VideoToolbox：建议使用目标码率模式，减小体积同时控制画质
+            extra_video_args.extend([
+                "-b:v", "5M",
+                "-maxrate", "7M",
+                "-bufsize", "10M",
+                "-profile:v", "high",
+                "-pix_fmt", "yuv420p",
+            ])
+        elif video_codec == "libx264":
+            # 纯 CPU：CRF 固定质量方案
+            extra_video_args.extend([
+                "-preset", "medium",
+                "-crf", "20",
+                "-pix_fmt", "yuv420p",
+            ])
+        else:
+            # 其他编码器：如果 _get_video_codec_params 返回了合法的 key/value，就原样拼进去
+            if preset_key and preset_value:
+                extra_video_args.extend([preset_key, preset_value])
+
         cmd.extend([
             "-filter_complex", filter_complex,
             "-map", f"[{current_link}]", # 映射最后一个输出标签
             "-map", "0:a?", 
             "-c:v", video_codec,
+            *extra_video_args,
             output_file_name
         ])
 
@@ -656,12 +692,39 @@ class H264Converter(MediaConverter):
             "-i", str(input_path),
             "-c:v", video_codec,
         ]
-        # if preset_key == "-crf":
-        #      cmd.extend([preset_key, preset_value])
-        # elif preset_key:
-        #      cmd.extend([preset_key, preset_value])
+        # 根据编码器类型，附加对应的质量 / 码率参数
+        extra_video_args: list[str] = []
+
+        if video_codec == "h264_nvenc":
+            extra_video_args.extend([
+                "-preset", "p4",
+                "-rc", "vbr_hq",
+                "-b:v", "5M",
+                "-maxrate", "7M",
+                "-bufsize", "10M",
+                "-cq:v", "19",
+                "-pix_fmt", "yuv420p",
+            ])
+        elif video_codec == "h264_videotoolbox":
+            extra_video_args.extend([
+                "-b:v", "5M",
+                "-maxrate", "7M",
+                "-bufsize", "10M",
+                "-profile:v", "high",
+                "-pix_fmt", "yuv420p",
+            ])
+        elif video_codec == "libx264":
+            extra_video_args.extend([
+                "-preset", "medium",
+                "-crf", "20",
+                "-pix_fmt", "yuv420p",
+            ])
+        else:
+            if preset_key and preset_value:
+                extra_video_args.extend([preset_key, preset_value])
         
         cmd.extend([
+            *extra_video_args,
             "-c:a", "copy", "-movflags", "+faststart",
             output_file_name
         ])
