@@ -11,7 +11,7 @@ target_w = 1080
 target_h = 1920
 logos = [
   { x = 590, y = 1810, logo_w = 475, logo_h = 90, logo_path = "assets/hailuoDream.png" },
-  { x = 0, y = 0, logo_w = 100, logo_h = 100, logo_path = "assets/Dream_AI.png", blur = false }
+  { x = 0, y = 0, logo_w = 100, logo_h = 100, logo_path = "assets/Dream_AI.png", blur = true }
 ]
 
 [modes.vidu]
@@ -25,7 +25,7 @@ target_w = 1080
 target_h = 1920
 logos = [
   { x = 700, y = 1810, logo_w = 360, logo_h = 90, logo_path = "assets/viduDream.png" },
-  { x = 0, y = 0, logo_w = 100, logo_h = 100, logo_path = "assets/Dream_AI.png", blur = false }
+  { x = 0, y = 0, logo_w = 100, logo_h = 100, logo_path = "assets/Dream_AI.png", blur = true }
 ]
 
 [modes.veo]
@@ -39,7 +39,7 @@ target_w = 1080
 target_h = 1920
 logos = [
   { x = 700, y = 1810, logo_w = 360, logo_h = 90, logo_path = "assets/VeoDream.png" },
-  { x = 0, y = 0, logo_w = 100, logo_h = 100, logo_path = "assets/Dream_AI.png", blur = false }
+  { x = 0, y = 0, logo_w = 100, logo_h = 100, logo_path = "assets/Dream_AI.png", blur = true }
 ]
 
 [modes.heygen]
@@ -53,13 +53,13 @@ target_w = 1080
 target_h = 1920
 logos = [
   { x = 700, y = 1810, logo_w = 360, logo_h = 90, logo_path = "assets/HeyGenDream.png" },
-  { x = 0, y = 0, logo_w = 100, logo_h = 100, logo_path = "assets/Dream_AI.png", blur = false }
+  { x = 0, y = 0, logo_w = 100, logo_h = 100, logo_path = "assets/Dream_AI.png", blur = true }
 ]
 
 [modes.dream]
 class = "LogoConverter"
 description = "5. 添加 Dreamina Logo (竖屏)"
-output_ext = "_veo.mp4"
+output_ext = "_Dream.mp4"
 support_exts = [".mp4"]
 
 [modes.dream.params]
@@ -67,7 +67,7 @@ target_w = 1080
 target_h = 1920
 logos = [
   { x = 700, y = 1810, logo_w = 360, logo_h = 90, logo_path = "assets/Dream.png" },
-  { x = 0, y = 0, logo_w = 100, logo_h = 100, logo_path = "assets/Dream_AI.png", blur = false }
+  { x = 0, y = 0, logo_w = 100, logo_h = 100, logo_path = "assets/Dream_AI.png", blur = true }
 ]
 
 [modes.image]
@@ -193,7 +193,7 @@ srt_max_chars = 35
 srt_pause_threshold = 0.2
 srt_delimiters = [" ", "\n", "।", ":", "：", "？", "?", "!", "！", ",", "，"]
 srt_sentence_enders = [".", "\n", "।", ",", "，", ":", "：", "？", "?", "!", "！", "…"]  
-debug_save_response = true    #是否保存 ElevenLabs API 的原始响应以供调试
+debug_save_response = false    #是否保存 ElevenLabs API 的原始响应以供调试
 
 # Groq 配置
 [groq]
