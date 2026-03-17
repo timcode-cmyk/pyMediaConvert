@@ -50,14 +50,14 @@ jobs:
         
     - name: Upload Artifact (Windows)
       if: matrix.os == 'windows-latest'
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: pyMediaTools-Windows
         path: pyMediaTools-Windows.zip
 
     - name: Upload Artifact (macOS)
       if: matrix.os == 'macos-latest'
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: pyMediaTools-macOS
         path: pyMediaTools-macOS.zip
