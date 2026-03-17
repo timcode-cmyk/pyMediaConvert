@@ -83,11 +83,11 @@ jobs:
         path: ./artifacts
         
     - name: Generate Source Provenance for Windows Artifact
-      uses: actions/attest-build-provenance@v2
+      uses: actions/attest-build-provenance@v4
       with:
         subject-path: "./artifacts/pyMediaTools-Windows.zip"
 
     - name: Generate Source Provenance for macOS Artifact
-      uses: actions/attest-build-provenance@v2
+      uses: actions/attest-build-provenance@v4
       with:
         subject-path: "./artifacts/pyMediaTools-macOS.zip"
