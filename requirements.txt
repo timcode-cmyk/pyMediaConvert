@@ -1,7 +1,7 @@
-aria2p
 Requests
 yt_dlp
 PySide6
 pysrt
-toml
+pyinstaller
+nuitka
 opencv-python

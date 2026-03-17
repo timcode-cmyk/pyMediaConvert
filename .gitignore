@@ -12,6 +12,7 @@ env/
 bin/
 yt_dlp/
 .yt_dlp_backups/
+temp——downloads/
 
 # ----------------------------------------------------
 # Python 相关文件
