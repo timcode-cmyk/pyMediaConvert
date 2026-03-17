@@ -28,7 +28,7 @@ if sys.stderr and hasattr(sys.stderr, 'reconfigure'):
         pass
 
 from pyMediaTools import setup_logging
-from pyMediaTools.ui import MediaConverterWidget, ElevenLabsWidget, DownloadManagerWidget, VideoDownloadWidget, VideoCutWidget
+from pyMediaTools.ui import MediaConverterWidget, ElevenLabsWidget, VideoDownloadWidget, VideoCutWidget
 
 
 
@@ -45,7 +45,6 @@ class MainWindow(QMainWindow):
         tabs.addTab(MediaConverterWidget(), "媒体转换")
         tabs.addTab(ElevenLabsWidget(), "ElevenLabs")
         tabs.addTab(VideoCutWidget(), "场景分割")
-        tabs.addTab(DownloadManagerWidget(), "云端同步")
         tabs.addTab(VideoDownloadWidget(), "视频下载")
         self.setCentralWidget(tabs)
 
