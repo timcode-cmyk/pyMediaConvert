@@ -71,13 +71,13 @@ jobs:
       attestations: write
     steps:
     - name: Download Windows Artifact
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v8
       with:
         name: pyMediaTools-Windows
         path: ./artifacts
         
     - name: Download macOS Artifact
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v8
       with:
         name: pyMediaTools-macOS
         path: ./artifacts
