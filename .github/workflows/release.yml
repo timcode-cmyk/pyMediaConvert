@@ -6,8 +6,8 @@ on:
       - 'v*'
 
 permissions:
-  id-token: write
   contents: write
+  id-token: write
   attestations: write
 
 env:
@@ -15,18 +15,31 @@ env:
 
 jobs:
   build:
-    runs-on: windows-latest
+    name: Build on ${{ matrix.platform }}
     strategy:
+      fail-fast: false
       matrix:
-        python-version: ["3.12"]
+        include:
+          - os: windows-latest
+            platform: windows-x86_64
+            artifact_zip: MediaTools-Windows.zip
+            artifact_exe: MediaTools-Installer.exe
+          - os: macos-13 # Intel Mac
+            platform: macos-x86_64
+            artifact_zip: MediaTools-macOS-Intel.zip
+          - os: macos-latest # Apple Silicon Mac
+            platform: macos-arm64
+            artifact_zip: MediaTools-macOS-AppleSilicon.zip
+
+    runs-on: ${{ matrix.os }}
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python ${{ matrix.python-version }}
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: "3.12"
           cache: "pip"
 
       - name: Install dependencies
@@ -34,31 +47,85 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install nuitka
-
-      - name: Download ffmpeg and aria2c
-        run: |
-          # 运行项目自带的构建脚本下载 ffmpeg 等二进制文件
           python build.py
-          # 单独下载并解压 Windows 版本的 aria2c.exe 到 bin 目录
-          if (!(Test-Path bin)) { mkdir bin }
-          curl -L "https://github.com/aria2/aria2/releases/download/release-1.37.0/aria2-1.37.0-win-64bit-build1.zip" -o aria2.zip
-          Expand-Archive -Path aria2.zip -DestinationPath aria2_extracted -Force
-          Move-Item -Path "aria2_extracted\aria2-1.37.0-win-64bit-build1\aria2c.exe" -Destination "bin\aria2c.exe" -Force
 
-      - name: Build with Nuitka
+      - name: Extract Version from Tag
+        shell: bash
         run: |
-          nuitka --standalone --windows-console-mode=disable --output-dir=dist-nuitka --windows-icon-from-ico=MediaTools.ico --nofollow-import-to=yt_dlp --no-deployment-flag=excluded-module-usage --include-module=optparse --include-module=asyncio --include-package=pyMediaTools --plugin-enable=pyside6 --include-qt-plugins=multimedia,platforms,styles,imageformats --include-data-dir=yt_dlp=yt_dlp --include-data-files=bin\aria2c.exe=bin\aria2c.exe --include-data-files=MediaTools.ico=MediaTools.ico --include-data-files=bin\ffmpeg.exe=bin\ffmpeg.exe --include-data-files=bin\ffprobe.exe=bin\ffprobe.exe --include-data-files=config.toml=config.toml --include-data-dir=assets=assets MediaTools.py
+          # 将 v1.13.5 转换为 1.13.5
+          VERSION=${GITHUB_REF_NAME#v}
+          echo "APP_VERSION=$VERSION" >> $GITHUB_ENV
+          echo "Current Version: $VERSION"
 
-      - name: Zip Build Release
+      # --- 平台差异化准备步骤 ---
+
+      - name: Prepare Binaries (macOS)
+        if: runner.os == 'macOS'
         run: |
-          if (!(Test-Path dist)) { mkdir dist }
-          Compress-Archive -Path dist-nuitka/MediaTools.dist/* -DestinationPath dist/MediaTools-Windows.zip -Force
+          chmod +x bin/ffmpeg bin/ffprobe || true
 
+      # --- Nuitka 构建步骤 ---
+
+      - name: Build with Nuitka (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          nuitka --standalone --windows-console-mode=disable --output-dir=dist-nuitka `
+          --windows-icon-from-ico=MediaTools.ico `
+          --windows-app-version=${{ env.APP_VERSION }} `
+          --product-version=${{ env.APP_VERSION }} `
+          --nofollow-import-to=yt_dlp --no-deployment-flag=excluded-module-usage `
+          --include-module=optparse --include-module=asyncio --include-package=pyMediaTools `
+          --plugin-enable=pyside6 --include-qt-plugins=multimedia,platforms,styles,imageformats `
+          --include-data-files=MediaTools.ico=MediaTools.ico --include-data-files=bin/ffmpeg.exe=bin/ffmpeg.exe `
+          --include-data-files=bin/ffprobe.exe=bin/ffprobe.exe --include-data-files=config.toml=config.toml `
+          --include-data-dir=assets=assets MediaTools.py
+
+      - name: Build with Nuitka (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          python -m nuitka --standalone --macos-create-app-bundle --output-dir=dist-nuitka \
+          --macos-app-version=${{ env.APP_VERSION }} \
+          --macos-product-version=${{ env.APP_VERSION }} \
+          --nofollow-import-to=yt_dlp --no-deployment-flag=excluded-module-usage \
+          --include-module=optparse --include-module=asyncio --include-package=pyMediaTools \
+          --plugin-enable=pyside6 --include-qt-plugins=multimedia,platforms,styles,imageformats \
+          --include-data-files=bin/ffmpeg=bin/ffmpeg --include-data-files=bin/ffprobe=bin/ffprobe \
+          --include-data-files=config.toml=config.toml --include-data-dir=assets=assets MediaTools.py
+
+      # --- 拷贝依赖库 ---
+      - name: Copy Dependencies (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          xcopy "yt_dlp" "dist-nuitka\MediaTools.dist\yt_dlp\" /E /I /H /Y
+
+      - name: Copy Dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          cp -R yt_dlp/ dist-nuitka/MediaTools.app/Contents/MacOS/yt_dlp/
+          
+      # --- 打包安装程序 ---
+      - name: Build Installer (Windows)
+        if: runner.os == 'Windows'
+        run: makensis /DVERSION=${{ env.APP_VERSION }} installer.nsi
+      
+      # --- 整理产物 ---
+      - name: Package Artifacts
+        shell: bash
+        run: |
+          mkdir out
+          if [ "${{ runner.os }}" == "Windows" ]; then
+            cd dist-nuitka/MediaTools.dist && zip -r ../../out/${{ matrix.artifact_zip }} * && cd ../..
+            [ -f "MediaTools-Installer.exe" ] && mv "MediaTools-Installer.exe" "out/${{ matrix.artifact_exe }}"
+          else
+            cd dist-nuitka && zip -r ../out/${{ matrix.artifact_zip }} MediaTools.app && cd ..
+          fi
+      
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: MediaTools-Windows
-          path: dist/MediaTools-Windows.zip
+          name: ${{ matrix.platform }}
+          path: out/*
+      
 
   release:
     needs: build
@@ -69,18 +136,23 @@ jobs:
       attestations: write
 
     steps:
-      - uses: actions/download-artifact@v4
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
         with:
-          path: dist
+          path: release-dist
           merge-multiple: true
 
-      - name: Attest Build Provenance
+      # --- Artifact Attestation 核心配置 ---
+      - name: Generate Artifact Attestation
         uses: actions/attest-build-provenance@v2
         with:
-          subject-path: 'dist/MediaTools-Windows.zip'
+          # 此路径包含所有下载的产物（ZIP 和 EXE）
+          subject-path: 'release-dist/*'
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/MediaTools-Windows.zip
+          files: |
+            release-dist/*.zip
+            release-dist/*.exe
           generate_release_notes: true
