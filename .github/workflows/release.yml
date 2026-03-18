@@ -10,12 +10,15 @@ permissions:
   contents: write
   attestations: write
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build:
     runs-on: windows-latest
     strategy:
       matrix:
-        python-version: ["3.11"]
+        python-version: ["3.12"]
 
     steps:
       - uses: actions/checkout@v4
@@ -30,15 +33,25 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pyinstaller
+          pip install nuitka
 
-      - name: Build with PyInstaller
+      - name: Download ffmpeg and aria2c
         run: |
-          pyinstaller MediaTools.spec
+          # 运行自带脚本下载 ffmpeg
+          python build.py
+          # 由于自带脚本把 aria2 注释了，我们在这里单独下载
+          mkdir -p bin
+          curl -L "https://github.com/aria2/aria2/releases/download/release-1.37.0/aria2-1.37.0-win-64bit-build1.zip" -o aria2.zip
+          Expand-Archive -Path aria2.zip -DestinationPath aria2_extracted
+          move aria2_extracted\aria2-1.37.0-win-64bit-build1\aria2c.exe bin\aria2c.exe
+
+      - name: Build with Nuitka
+        run: |
+          nuitka --standalone --windows-console-mode=disable --output-dir=dist-nuitka --windows-icon-from-ico=MediaTools.ico --nofollow-import-to=yt_dlp --no-deployment-flag=excluded-module-usage --include-module=optparse --include-module=asyncio --include-package=pyMediaTools --plugin-enable=pyside6 --include-qt-plugins=multimedia,platforms,styles,imageformats --include-data-dir=yt_dlp=yt_dlp --include-data-files=bin\aria2c.exe=bin\aria2c.exe --include-data-files=MediaTools.ico=MediaTools.ico --include-data-files=bin\ffmpeg.exe=bin\ffmpeg.exe --include-data-files=bin\ffprobe.exe=bin\ffprobe.exe --include-data-files=config.toml=config.toml --include-data-dir=assets=assets MediaTools.py
 
       - name: Zip Build Release
         run: |
-          Compress-Archive -Path dist/MediaTools/* -DestinationPath dist/MediaTools-Windows.zip
+          Compress-Archive -Path dist-nuitka/MediaTools.dist/* -DestinationPath dist/MediaTools-Windows.zip
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
