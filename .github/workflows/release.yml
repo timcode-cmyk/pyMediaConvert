@@ -15,21 +15,21 @@ env:
 
 jobs:
   build:
-    name: Build on ${{ matrix.platform }}
+    name: Build for ${{ matrix.platform_tag }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: windows-latest
             platform: windows-x86_64
-            artifact_zip: MediaTools-Windows.zip
-            artifact_exe: MediaTools-Installer.exe
+            platform_tag: win-x64
+            is_win: true
           - os: macos-13 # Intel Mac
             platform: macos-x86_64
-            artifact_zip: MediaTools-macOS-Intel.zip
+            platform_tag: mac-intel
           - os: macos-latest # Apple Silicon Mac
             platform: macos-arm64
-            artifact_zip: MediaTools-macOS-AppleSilicon.zip
+            platform_tag: mac-AppleSilicon
 
     runs-on: ${{ matrix.os }}
 
@@ -55,9 +55,12 @@ jobs:
           # 将 v1.13.5 转换为 1.13.5
           VERSION=${GITHUB_REF_NAME#v}
           echo "APP_VERSION=$VERSION" >> $GITHUB_ENV
-          echo "Current Version: $VERSION"
+          echo "BASENAME=MediaTools-v$VERSION-${{ matrix.platform_tag }}" >> $GITHUB_ENV
 
       # --- 平台差异化准备步骤 ---
+      - name: Set up NSIS (Windows)
+        if: matrix.is_win
+        run: choco install nsis -y
 
       - name: Prepare Binaries (macOS)
         if: runner.os == 'macOS'
@@ -81,7 +84,7 @@ jobs:
       - name: Build with Nuitka (macOS)
         if: runner.os == 'macOS'
         run: |
-          python -m nuitka --standalone --macos-create-app-bundle --output-dir=dist-nuitka \
+          python -m nuitka --standalone --macos-app-icon=Icon.icns --macos-create-app-bundle --macos-disable-signing --output-dir=dist-nuitka \
           --macos-app-version=${{ env.APP_VERSION }} \
           --nofollow-import-to=yt_dlp --no-deployment-flag=excluded-module-usage \
           --include-module=optparse --include-module=asyncio --include-package=pyMediaTools \
@@ -111,10 +114,10 @@ jobs:
         run: |
           mkdir out
           if [ "${{ runner.os }}" == "Windows" ]; then
-            cd dist-nuitka/MediaTools.dist && zip -r ../../out/${{ matrix.artifact_zip }} * && cd ../..
-            [ -f "MediaTools-Installer.exe" ] && mv "MediaTools-Installer.exe" "out/${{ matrix.artifact_exe }}"
+            cd dist-nuitka/MediaTools.dist && zip -r ../../out/${{ env.BASENAME }}.zip * && cd ../..
+            [ -f "${{ env.BASENAME }}.exe" ] && mv "${{ env.BASENAME }}.exe" out/
           else
-            cd dist-nuitka && zip -r ../out/${{ matrix.artifact_zip }} MediaTools.app && cd ..
+            cd dist-nuitka && zip -ry ../out/${{ env.BASENAME }}.zip MediaTools.app && cd ..
           fi
       
       - name: Upload Artifacts

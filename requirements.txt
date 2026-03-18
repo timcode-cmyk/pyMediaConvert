@@ -1,5 +1,3 @@
-pyinstaller
-nuitka
 Requests
 yt_dlp
 PySide6
