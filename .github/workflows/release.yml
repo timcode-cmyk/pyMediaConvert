@@ -71,8 +71,6 @@ jobs:
         run: |
           nuitka --standalone --windows-console-mode=disable --output-dir=dist-nuitka `
           --windows-icon-from-ico=MediaTools.ico `
-          --windows-app-version=${{ env.APP_VERSION }} `
-          --product-version=${{ env.APP_VERSION }} `
           --nofollow-import-to=yt_dlp --no-deployment-flag=excluded-module-usage `
           --include-module=optparse --include-module=asyncio --include-package=pyMediaTools `
           --plugin-enable=pyside6 --include-qt-plugins=multimedia,platforms,styles,imageformats `
@@ -85,7 +83,6 @@ jobs:
         run: |
           python -m nuitka --standalone --macos-create-app-bundle --output-dir=dist-nuitka \
           --macos-app-version=${{ env.APP_VERSION }} \
-          --macos-product-version=${{ env.APP_VERSION }} \
           --nofollow-import-to=yt_dlp --no-deployment-flag=excluded-module-usage \
           --include-module=optparse --include-module=asyncio --include-package=pyMediaTools \
           --plugin-enable=pyside6 --include-qt-plugins=multimedia,platforms,styles,imageformats \
