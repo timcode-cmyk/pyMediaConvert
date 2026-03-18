@@ -37,13 +37,13 @@ jobs:
 
       - name: Download ffmpeg and aria2c
         run: |
-          # 运行自带脚本下载 ffmpeg
+          # 运行项目自带的构建脚本下载 ffmpeg 等二进制文件
           python build.py
-          # 由于自带脚本把 aria2 注释了，我们在这里单独下载
-          mkdir -p bin
+          # 单独下载并解压 Windows 版本的 aria2c.exe 到 bin 目录
+          if (!(Test-Path bin)) { mkdir bin }
           curl -L "https://github.com/aria2/aria2/releases/download/release-1.37.0/aria2-1.37.0-win-64bit-build1.zip" -o aria2.zip
-          Expand-Archive -Path aria2.zip -DestinationPath aria2_extracted
-          move aria2_extracted\aria2-1.37.0-win-64bit-build1\aria2c.exe bin\aria2c.exe
+          Expand-Archive -Path aria2.zip -DestinationPath aria2_extracted -Force
+          Move-Item -Path "aria2_extracted\aria2-1.37.0-win-64bit-build1\aria2c.exe" -Destination "bin\aria2c.exe" -Force
 
       - name: Build with Nuitka
         run: |
@@ -51,7 +51,8 @@ jobs:
 
       - name: Zip Build Release
         run: |
-          Compress-Archive -Path dist-nuitka/MediaTools.dist/* -DestinationPath dist/MediaTools-Windows.zip
+          if (!(Test-Path dist)) { mkdir dist }
+          Compress-Archive -Path dist-nuitka/MediaTools.dist/* -DestinationPath dist/MediaTools-Windows.zip -Force
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
