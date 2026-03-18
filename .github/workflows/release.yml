@@ -141,34 +141,41 @@ jobs:
         run: |
           echo "Checking out directory content:"
           ls -R out/
-      
+
+      # --- 新增：上传产物 ---
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts-${{ matrix.platform_tag }}
+          path: out/*
 
   release:
     needs: build
     runs-on: ubuntu-latest
     permissions:
-      id-token: write
       contents: write
+      id-token: write
       attestations: write
 
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
+          # 不指定 name 会下载所有 artifact
           path: release-dist
           merge-multiple: true
 
-      # --- Artifact Attestation 核心配置 ---
       - name: Generate Artifact Attestation
         uses: actions/attest-build-provenance@v2
         with:
-          # 此路径包含所有下载的产物（ZIP 和 EXE）
           subject-path: 'release-dist/*'
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
+          # 修正：添加了 .dmg 并确保路径正确
           files: |
             release-dist/*.zip
             release-dist/*.exe
+            release-dist/*.dmg
           generate_release_notes: true
