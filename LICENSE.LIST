@@ -1,0 +1,27 @@
+# 依赖协议清单 (LICENSE.LIST)
+> 本文件由 AI 助手自动生成，记录项目所有直接依赖的协议信息。
+> 生成时间：2026-03-18
+> 审计工具：AI 依赖协议审计 (https://tpscsm-docs.pages.dev/license-audit/)
+
+## 统计摘要
+
+| 协议类型 | 数量 | 风险等级 |
+|---------|------|---------|
+| Apache-2.0 | 2 | ✅ 低风险 |
+| MIT | 1 | ✅ 低风险 |
+| Unlicense | 1 | ✅ 低风险 |
+| LGPL-3.0 OR GPL-2.0 OR GPL-3.0 | 1 | ⚠️ 需关注 |
+| GPL-3.0 | 1 | ⚠️ 需关注 |
+
+**总计：** 6 个直接依赖
+
+## 依赖详情
+
+| 序号 | 依赖名称 | 版本 | 协议 (SPDX) | 来源 | 风险 | 备注 |
+|------|---------|------|-------------|------|------|------|
+| 1 | Requests | (无版本限制) | Apache-2.0 | https://pypi.org/project/requests/ | ✅ | 需保留版权声明 |
+| 2 | yt_dlp | (无版本限制) | Unlicense | https://pypi.org/project/yt-dlp/ | ✅ | 公共领域，无限制 |
+| 3 | PySide6 | (无版本限制) | LGPL-3.0 OR GPL-2.0 OR GPL-3.0 | https://pypi.org/project/PySide6/ | ⚠️ | 三协议可选；以 LGPL-3.0 使用时须满足动态链接条件 |
+| 4 | pysrt | (无版本限制) | GPL-3.0-only | https://github.com/byroot/pysrt | ⚠️ | Copyleft；衍生作品须以 GPL-3.0 分发 |
+| 5 | toml | (无版本限制) | MIT | https://pypi.org/project/toml/ | ✅ | 需保留版权声明 |
+| 6 | opencv-python | (无版本限制) | Apache-2.0 | https://pypi.org/project/opencv-python/ | ✅ | 底层 OpenCV 库为 Apache-2.0；需保留版权声明 |
