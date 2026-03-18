@@ -84,7 +84,7 @@ jobs:
       - name: Build with Nuitka (macOS)
         if: runner.os == 'macOS'
         run: |
-          python -m nuitka --standalone --macos-app-icon=Icon.icns --macos-create-app-bundle --macos-sign-identity=disabled --output-dir=dist-nuitka \
+          python -m nuitka --standalone --macos-app-icon=Icon.icns --macos-create-app-bundle --output-dir=dist-nuitka \
           --macos-app-version=${{ env.APP_VERSION }} \
           --nofollow-import-to=yt_dlp --no-deployment-flag=excluded-module-usage \
           --include-module=optparse --include-module=asyncio --include-package=pyMediaTools \
@@ -115,20 +115,30 @@ jobs:
 
       # --- 修复 Windows 下的打包逻辑 (放弃在 Windows 用 bash zip) ---
       - name: Package Artifacts
-        shell: pwsh
+        shell: bash
         run: |
-          New-Item -ItemType Directory -Force -Path out
-          if ("${{ runner.os }}" -eq "Windows") {
-            Compress-Archive -Path "dist-nuitka/MediaTools.dist/*" -DestinationPath "out/${{ env.BASENAME }}.zip" -Force
-            if (Test-Path "${{ env.BASENAME }}.exe") {
-              Move-Item "${{ env.BASENAME }}.exe" "out/"
-            } else {
-              Write-Error "Installer executable not found!"
-              exit 1
-            }
-          } else {
-            bash -c "cd dist-nuitka && zip -ry ../out/${{ env.BASENAME }}.zip MediaTools.app"
-          }
+          # 使用 -p 确保目录存在且不报错
+          mkdir -p out
+          
+          if [ "${{ runner.os }}" == "Windows" ]; then
+            # 进入目录并打包（注意这里使用了相对路径）
+            cd dist-nuitka/MediaTools.dist
+            # 尝试使用 zip，如果 bash 环境下没有 zip，
+            # 建议参考我之前提供的 pwsh (PowerShell) 方案
+            zip -r ../../out/${{ env.BASENAME }}.zip *
+            cd ../..
+            
+            # 移动安装程序到 out 目录
+            if [ -f "${{ env.BASENAME }}.exe" ]; then
+              mv "${{ env.BASENAME }}.exe" out/
+            fi
+          else
+            # macOS 逻辑：清除属性后再打包
+            xattr -cr dist-nuitka/MediaTools.app
+            cd dist-nuitka
+            zip -ry ../out/${{ env.BASENAME }}.zip MediaTools.app
+            cd ..
+          fi
 
       # --- 整理产物 ---
       - name: Package Artifacts
