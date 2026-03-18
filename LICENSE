@@ -672,3 +672,108 @@ may consider it more useful to permit linking proprietary applications with
 the library.  If this is what you want to do, use the GNU Lesser General
 Public License instead of this License.  But first, please read
 <https://www.gnu.org/licenses/why-not-lgpl.html>.
+
+---
+
+# 项目协议合规报告
+> 本文件由 AI 助手自动生成，旨在帮助了解项目的协议合规情况。
+> 本文件为合规参考，不构成法律建议。如有疑问请咨询法律专业人士。
+> 生成时间：2026-03-18
+> 审计工具：AI 依赖协议审计 (https://tpscsm-docs.pages.dev/license-audit/)
+
+## 项目协议
+
+本项目采用 **GNU General Public License Version 3**（`GPL-3.0-only`）协议，完整协议文本见本文件上方部分。
+
+## 版权协议合规结论
+
+> 本结论基于项目协议与所有直接依赖协议的兼容性分析，以开源分发为前提。
+
+### ✅ 合规 — 可开源分发
+
+项目协议 `GPL-3.0-only` 与所有 6 个直接依赖的协议兼容，满足开源分发要求。
+
+分发时须满足以下义务：
+- 在分发时随附完整 GPL-3.0 协议文本（本文件）
+- 保留所有依赖的版权声明（Requests、yt_dlp、PySide6、pysrt、toml、opencv-python）
+- 以源代码形式或提供获取源代码的方式进行分发（GPL-3.0 要求）
+- 使用 PySide6 时，如以 LGPL-3.0 方式使用，须确保该库为动态链接且修改公开
+
+## 依赖协议摘要
+
+- 宽松协议 (Apache-2.0): 2 个 — ✅ 需保留版权声明和 NOTICE
+- 宽松协议 (MIT): 1 个 — ✅ 需保留版权声明
+- 公共领域 (Unlicense): 1 个 — ✅ 无限制
+- 弱 Copyleft (LGPL-3.0, via PySide6): 1 个 — ⚠️ 动态链接时修改须开源
+- 强 Copyleft (GPL-3.0): 1 个 — ⚠️ 与项目同协议，兼容
+
+## 协议兼容性详情
+
+基于项目协议 `GPL-3.0-only` 与各依赖协议的逐项判定结果：
+
+### ✅ 兼容的依赖
+
+| 依赖名称 | 依赖协议 | 兼容性 | 分发义务 |
+|---------|---------|--------|---------|
+| Requests | Apache-2.0 | ✅ 兼容 | 保留版权声明 |
+| yt_dlp | Unlicense | ✅ 兼容 | 无 |
+| PySide6 | LGPL-3.0 OR GPL-2.0 OR GPL-3.0 | ✅ 兼容 | 以 LGPL-3.0 使用时须动态链接；以 GPL-3.0 使用时须随附源码 |
+| pysrt | GPL-3.0-only | ✅ 兼容（同协议） | 与项目同协议，随项目一并分发 |
+| toml | MIT | ✅ 兼容 | 保留版权声明 |
+| opencv-python | Apache-2.0 | ✅ 兼容 | 保留版权声明；注意 wheels 中附带的 FFmpeg（LGPLv2.1）和 Qt5（LGPLv3）组件 |
+
+## 第三方协议声明
+
+### Apache License 2.0
+
+以下组件使用 Apache-2.0 协议：
+- **Requests** — Copyright 2023 Kenneth Reitz
+- **opencv-python** — Copyright (c) 2015, OpenCV team（底层 OpenCV 库）
+
+Apache 2.0 协议全文请参见：https://www.apache.org/licenses/LICENSE-2.0
+
+### MIT License
+
+以下组件使用 MIT 协议：
+- **toml** — Copyright (c) 2013–2019 William Pearson, Julien Enselme, et al.
+
+MIT 协议全文：
+```
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions: The above copyright
+notice and this permission notice shall be included in all copies or
+substantial portions of the Software.
+```
+
+### Unlicense (Public Domain)
+
+以下组件使用 Unlicense 协议：
+- **yt_dlp** — 公共领域，无版权限制
+
+Unlicense 全文请参见：https://unlicense.org/
+
+### LGPL-3.0 / GPL-2.0 / GPL-3.0（三选一）
+
+以下组件使用多协议（用户可选）：
+- **PySide6** — Copyright (C) The Qt Company Ltd.
+
+建议以 LGPL-3.0 方式使用（须动态链接），协议全文：https://www.gnu.org/licenses/lgpl-3.0.html
+
+### GPL-3.0-only
+
+以下组件使用 GPL-3.0 协议：
+- **pysrt** — Copyright (c) 2011–2023 byroot
+
+协议全文与本项目相同，见本文件上方部分。
+
+## 风险提示与建议
+
+1. **PySide6 链接方式**：使用 PySide6 时，为维持 LGPL-3.0 豁免条件，建议确保以动态链接（而非静态链接/捆绑）方式使用。
+2. **opencv-python 附带组件**：wheels 包中可能附带 FFmpeg（LGPLv2.1）和 Qt5（LGPLv3），分发时须一并遵守这些组件的协议要求。
+3. **源代码分发**：GPL-3.0 要求分发二进制时须提供对应源代码或提供获取渠道，请确保发布版本满足此要求。
+4. 建议定期重新审计依赖协议（可使用本审计工具的 Skill 功能自动检查）。
+5. 如有法律疑问，请咨询专业法律顾问。
