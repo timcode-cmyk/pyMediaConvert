@@ -24,9 +24,6 @@ jobs:
             platform: windows-x86_64
             platform_tag: win-x64
             is_win: true
-          - os: macos-13 # Intel Mac
-            platform: macos-x86_64
-            platform_tag: mac-intel
           - os: macos-latest # Apple Silicon Mac
             platform: macos-arm64
             platform_tag: mac-AppleSilicon
@@ -117,23 +114,17 @@ jobs:
       - name: Package Artifacts
         shell: bash
         run: |
-          # 使用 -p 确保目录存在且不报错
           mkdir -p out
           
           if [ "${{ runner.os }}" == "Windows" ]; then
-            # 进入目录并打包（注意这里使用了相对路径）
             cd dist-nuitka/MediaTools.dist
-            # 尝试使用 zip，如果 bash 环境下没有 zip，
-            # 建议参考我之前提供的 pwsh (PowerShell) 方案
             zip -r ../../out/${{ env.BASENAME }}.zip *
             cd ../..
             
-            # 移动安装程序到 out 目录
             if [ -f "${{ env.BASENAME }}.exe" ]; then
               mv "${{ env.BASENAME }}.exe" out/
             fi
           else
-            # macOS 逻辑：清除属性后再打包
             xattr -cr dist-nuitka/MediaTools.app
             cd dist-nuitka
             zip -ry ../out/${{ env.BASENAME }}.zip MediaTools.app
