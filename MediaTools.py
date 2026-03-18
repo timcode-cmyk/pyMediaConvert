@@ -13,24 +13,50 @@ __license__ = "GPL License"
 
 import sys
 import os
-from PySide6.QtWidgets import QApplication, QMainWindow, QTabWidget
-    
-# 解决打包环境下 stdout/stderr 默认编码可能为 ascii 导致的 UnicodeEncodeError
-if sys.stdout and hasattr(sys.stdout, 'reconfigure'):
-    try:
-        sys.stdout.reconfigure(encoding='utf-8')
-    except Exception:
-        pass
-if sys.stderr and hasattr(sys.stderr, 'reconfigure'):
-    try:
-        sys.stderr.reconfigure(encoding='utf-8')
-    except Exception:
-        pass
+from pathlib import Path
 
+# --- 1. 核心路径初始化 (必须放在最前面) ---
+def initialize_environment():
+    if getattr(sys, 'frozen', False):
+        # Nuitka 打包后 sys.executable 是 MediaTools.app/Contents/MacOS/MediaTools
+        base_dir = os.path.dirname(os.path.abspath(sys.executable))
+    else:
+        # 开发环境
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+    
+    # 强制切换工作目录，确保相对路径读取 bin/config.toml 正常
+    os.chdir(base_dir)
+    
+    # 将当前目录加入 sys.path，确保能 import 手动拷贝的 yt_dlp
+    if base_dir not in sys.path:
+        sys.path.insert(0, base_dir)
+    
+    return base_dir
+
+BASE_DIR = initialize_environment()
+
+# --- 2. 编码修复 ---
+if sys.stdout and hasattr(sys.stdout, 'reconfigure'):
+    try: sys.stdout.reconfigure(encoding='utf-8')
+    except: pass
+
+# --- 3. 导入业务组件 ---
+# 只有在路径初始化之后，import 内部包才安全
 from pyMediaTools import setup_logging
 from pyMediaTools.ui import MediaConverterWidget, ElevenLabsWidget, VideoDownloadWidget, VideoCutWidget
+from pyMediaTools.ui import styles  # 假设你的 styles.py 在这里
 
+from PySide6.QtWidgets import QApplication, QMainWindow, QTabWidget
+from PySide6.QtCore import QCoreApplication, Qt
+from PySide6.QtGui import QIcon
 
+# --- 4. Qt 插件路径修复 (解决颜色变浅的关键) ---
+if getattr(sys, 'frozen', False):
+    # 显式指向 Nuitka 打包的插件目录
+    # 通常在 PySide6/Qt/plugins
+    plugin_path = os.path.join(BASE_DIR, "PySide6", "Qt", "plugins")
+    if os.path.exists(plugin_path):
+        QCoreApplication.addLibraryPath(plugin_path)
 
 # initialize logging early
 setup_logging()
@@ -57,23 +83,6 @@ if __name__ == '__main__':
     # 强制设置 Fusion 样式，确保在所有平台打包后都有统一美观的界面
     app.setStyle("Fusion")
     app.setApplicationName("Media Tools")
-
-    from PySide6.QtGui import QIcon
-    import sys as _sys
-    _icon_candidates = [
-        os.path.join(os.path.dirname(os.path.abspath(__file__)), 'MediaTools.ico'),
-    ]
-    if getattr(_sys, 'frozen', False):
-        _icon_candidates.insert(0, os.path.join(os.path.dirname(_sys.executable), 'MediaTools.ico'))
-        if hasattr(_sys, '_MEIPASS'):
-            _icon_candidates.insert(0, os.path.join(_sys._MEIPASS, 'MediaTools.ico'))
-    for _icon_path in _icon_candidates:
-        if os.path.exists(_icon_path):
-            app.setWindowIcon(QIcon(_icon_path))
-            break
-
-
-
 
     win = MainWindow()
     win.show()

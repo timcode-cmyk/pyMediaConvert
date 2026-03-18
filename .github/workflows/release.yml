@@ -84,7 +84,7 @@ jobs:
       - name: Build with Nuitka (macOS)
         if: runner.os == 'macOS'
         run: |
-          python -m nuitka --standalone --macos-app-icon=Icon.icns --macos-create-app-bundle --disable-code-signing --output-dir=dist-nuitka \
+          python -m nuitka --standalone --macos-app-icon=Icon.icns --macos-create-app-bundle --macos-sign-identity=disabled --output-dir=dist-nuitka \
           --macos-app-version=${{ env.APP_VERSION }} \
           --nofollow-import-to=yt_dlp --no-deployment-flag=excluded-module-usage \
           --include-module=optparse --include-module=asyncio --include-package=pyMediaTools \
@@ -105,10 +105,31 @@ jobs:
           
       # --- 打包安装程序 ---
       - name: Build Installer (Windows)
-        if: runner.os == 'Windows'
+        if: matrix.is_win
         run: |
-          & "C:\Program Files (x86)\NSIS\makensis.exe" /DVERSION=${{ env.APP_VERSION }} installer.nsi
-      
+          ls dist-nuitka/MediaTools.dist
+          & "C:\Program Files (x86)\NSIS\makensis.exe" `
+            /DVERSION="${{ env.APP_VERSION }}" `
+            /DOUTFILE="${{ env.BASENAME }}.exe" `
+            installer.nsi
+
+      # --- 修复 Windows 下的打包逻辑 (放弃在 Windows 用 bash zip) ---
+      - name: Package Artifacts
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path out
+          if ("${{ runner.os }}" -eq "Windows") {
+            Compress-Archive -Path "dist-nuitka/MediaTools.dist/*" -DestinationPath "out/${{ env.BASENAME }}.zip" -Force
+            if (Test-Path "${{ env.BASENAME }}.exe") {
+              Move-Item "${{ env.BASENAME }}.exe" "out/"
+            } else {
+              Write-Error "Installer executable not found!"
+              exit 1
+            }
+          } else {
+            bash -c "cd dist-nuitka && zip -ry ../out/${{ env.BASENAME }}.zip MediaTools.app"
+          }
+
       # --- 整理产物 ---
       - name: Package Artifacts
         shell: bash
