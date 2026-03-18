@@ -114,25 +114,33 @@ jobs:
       - name: Final Package
         shell: bash
         run: |
-
           mkdir -p out
           
           if [ "${{ runner.os }}" == "Windows" ]; then
-            cd dist-nuitka/MediaTools.dist && zip -r ../../out/${{ env.BASENAME }}.zip * && cd ../..
+            powershell.exe -Command "Compress-Archive -Path 'dist-nuitka/MediaTools.dist/*' -DestinationPath 'out/${{ env.BASENAME }}.zip' -Force"
+            
             if [ -f "${{ env.BASENAME }}.exe" ]; then
               mv "${{ env.BASENAME }}.exe" out/
             fi
           else
             xattr -cr dist-nuitka/MediaTools.app
             chmod -R +x dist-nuitka/MediaTools.app/Contents/MacOS/
-            cd dist-nuitka && zip -ry ../out/${{ env.BASENAME }}.zip MediaTools.app && cd ..
+            codesign --force --deep --sign - dist-nuitka/MediaTools.app
+            mkdir -p dist-dmg
+            cp -R dist-nuitka/MediaTools.app dist-dmg/
+            ln -s /Applications dist-dmg/Applications
+            hdiutil create -srcfolder dist-dmg \
+                           -volname "MediaTools" \
+                           -format UDZO \
+                           -ov \
+                           "out/${{ env.BASENAME }}.dmg"
           fi
-      
-      - name: Upload Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.platform }}
-          path: out/*
+
+      - name: Debug Output
+        shell: bash
+        run: |
+          echo "Checking out directory content:"
+          ls -R out/
       
 
   release:
