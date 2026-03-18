@@ -31,6 +31,23 @@ def initialize_environment():
     if base_dir not in sys.path:
         sys.path.insert(0, base_dir)
     
+    # 修复打包环境下 SSL 证书验证失败导致无法检查更新的问题
+    if getattr(sys, 'frozen', False):
+        try:
+            # 尝试使用 certifi 获取证书路径并设置环境变量
+            import certifi
+            os.environ["SSL_CERT_FILE"] = certifi.where()
+            os.environ["REQUESTS_CA_BUNDLE"] = certifi.where()
+        except (ImportError, Exception):
+            # 备用方案：查找 base_dir 下可能存在的证书文件 (如 Nuitka/PyInstaller 可能会将 cacert.pem 放在根目录)
+            possible_certs = ["cacert.pem", os.path.join("certifi", "cacert.pem")]
+            for cert in possible_certs:
+                cert_path = os.path.join(base_dir, cert)
+                if os.path.exists(cert_path):
+                    os.environ["SSL_CERT_FILE"] = cert_path
+                    os.environ["REQUESTS_CA_BUNDLE"] = cert_path
+                    break
+
     return base_dir
 
 BASE_DIR = initialize_environment()
