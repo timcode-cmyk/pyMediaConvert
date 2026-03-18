@@ -109,37 +109,22 @@ jobs:
             /DVERSION="${{ env.APP_VERSION }}" `
             /DOUTFILE="${{ env.BASENAME }}.exe" `
             installer.nsi
-
-      # --- 修复 Windows 下的打包逻辑 (放弃在 Windows 用 bash zip) ---
-      - name: Package Artifacts
+  
+      # --- 统一打包逻辑 (已移除冗余，修复 mkdir) ---
+      - name: Final Package
         shell: bash
         run: |
+
           mkdir -p out
           
           if [ "${{ runner.os }}" == "Windows" ]; then
-            cd dist-nuitka/MediaTools.dist
-            zip -r ../../out/${{ env.BASENAME }}.zip *
-            cd ../..
-            
+            cd dist-nuitka/MediaTools.dist && zip -r ../../out/${{ env.BASENAME }}.zip * && cd ../..
             if [ -f "${{ env.BASENAME }}.exe" ]; then
               mv "${{ env.BASENAME }}.exe" out/
             fi
           else
             xattr -cr dist-nuitka/MediaTools.app
-            cd dist-nuitka
-            zip -ry ../out/${{ env.BASENAME }}.zip MediaTools.app
-            cd ..
-          fi
-
-      # --- 整理产物 ---
-      - name: Package Artifacts
-        shell: bash
-        run: |
-          mkdir out
-          if [ "${{ runner.os }}" == "Windows" ]; then
-            cd dist-nuitka/MediaTools.dist && zip -r ../../out/${{ env.BASENAME }}.zip * && cd ../..
-            [ -f "${{ env.BASENAME }}.exe" ] && mv "${{ env.BASENAME }}.exe" out/
-          else
+            chmod -R +x dist-nuitka/MediaTools.app/Contents/MacOS/
             cd dist-nuitka && zip -ry ../out/${{ env.BASENAME }}.zip MediaTools.app && cd ..
           fi
       
