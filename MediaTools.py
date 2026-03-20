@@ -60,7 +60,7 @@ if sys.stdout and hasattr(sys.stdout, 'reconfigure'):
 # --- 3. 导入业务组件 ---
 # 只有在路径初始化之后，import 内部包才安全
 from pyMediaTools import setup_logging
-from pyMediaTools.ui import MediaConverterWidget, ElevenLabsWidget, VideoDownloadWidget, VideoCutWidget
+from pyMediaTools.ui import MediaConverterWidget, ElevenLabsWidget, VideoDownloadWidget, VideoCutWidget, RembgWidget
 # from pyMediaTools.ui import styles  # 假设你的 styles.py 在这里
 
 from PySide6.QtWidgets import QApplication, QMainWindow, QTabWidget
@@ -89,6 +89,7 @@ class MainWindow(QMainWindow):
         tabs.addTab(ElevenLabsWidget(), "ElevenLabs")
         tabs.addTab(VideoCutWidget(), "场景分割")
         tabs.addTab(VideoDownloadWidget(), "视频下载")
+        tabs.addTab(RembgWidget(), "智能抠图")
         self.setCentralWidget(tabs)
 
 

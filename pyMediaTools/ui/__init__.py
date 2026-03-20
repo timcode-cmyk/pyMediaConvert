@@ -6,10 +6,12 @@ from .elevenlabs_ui import ElevenLabsWidget
 from .media_tools_ui import MediaConverterWidget
 from .video_downloader_ui import VideoDownloadWidget
 from .videocut_ui import VideoCutWidget
+from .rembg_ui import RembgWidget
 
 __all__ = [
     "ElevenLabsWidget",
     "MediaConverterWidget",
     "VideoDownloadWidget",
     "VideoCutWidget",
+    "RembgWidget",
 ]
