@@ -132,13 +132,10 @@ class VideoCutWidget(QWidget):
         self.worker_thread = None
         self.monitor = None
         self.is_processing = False
-        self.init_ui()
         
-        # 加载可用字体，初始化水印设置
+        # 加载可用资源，初始化水印设置 (必须在 init_ui 之前)
         available_fonts = get_available_fonts()
         default_font = list(available_fonts.keys())[0] if available_fonts else "Roboto-Bold"
-        
-        # 加载可用 ASS 文件
         self.available_ass_files = get_available_ass_files()
         
         self.watermark_settings = {
@@ -149,6 +146,8 @@ class VideoCutWidget(QWidget):
             'y': "40",
             'text': list(self.available_ass_files.keys())[0] if self.available_ass_files else ""
         }
+        
+        self.init_ui()
         self.apply_styles()
 
     def apply_styles(self):
