@@ -30,29 +30,40 @@ except ImportError:
     np = None
 
 
+def get_available_ass_files() -> dict:
+    """
+    扫描 assets 目录，获取所有可用的 .ass 字幕文件
+    返回字典: {文件名: 相对路径}
+    """
+    ass_files = {}
+    assets_dir = get_resource_path("assets")
+    
+    if not assets_dir.exists():
+        return ass_files
+    
+    try:
+        for f in assets_dir.glob("*.ass"):
+            ass_files[f.name] = f"assets/{f.name}"
+    except Exception as e:
+        logger.error(f"扫描 ASS 文件时发生错误: {e}")
+    
+    return ass_files
+
+
 def get_available_fonts() -> dict:
     """
     扫描 assets 目录，获取所有可用的 TTF 字体文件
     返回字典: {字体名称: 相对路径}
-    例如: {"Roboto-Bold": "assets/Roboto-Bold.ttf"}
     """
     fonts = {}
     assets_dir = get_resource_path("assets")
     
     if not assets_dir.exists():
-        logger.warning(f"assets 目录不存在: {assets_dir}")
         return fonts
     
     try:
         for font_file in assets_dir.glob("*.ttf"):
-            font_name = font_file.stem  # 获取不带扩展名的文件名
-            # 返回相对路径
-            fonts[font_name] = f"assets/{font_file.name}"
-        
-        if fonts:
-            logger.info(f"发现 {len(fonts)} 个字体: {', '.join(fonts.keys())}")
-        else:
-            logger.warning("assets 目录中未找到 TTF 字体文件")
+            fonts[font_file.stem] = f"assets/{font_file.name}"
     except Exception as e:
         logger.error(f"扫描字体文件时发生错误: {e}")
     
@@ -125,8 +136,13 @@ class SceneCutter:
         self.log_dir = log_dir
         self.font_name = font_name
         
-        # 加载可用的字体
+        # 硬件加速探测
+        self.available_encoders = {}
+        self._detect_hardware_encoders()
+        
+        # 加载可用的资源
         self.available_fonts = get_available_fonts()
+        self.available_ass_files = get_available_ass_files()
         
         # 验证选择的字体是否存在
         if self.font_name and self.font_name not in self.available_fonts:
@@ -136,6 +152,48 @@ class SceneCutter:
         if self.debug and self.log_dir:
             self.log_dir.mkdir(parents=True, exist_ok=True)
             logger.debug(f"调试模式已启用，日志将保存至: {self.log_dir}")
+
+    def _detect_hardware_encoders(self):
+        """探测可用的硬件编码器"""
+        cmd = [get_ffmpeg_exe(), "-encoders"]
+        creationflags = 0
+        if sys.platform == "win32":
+            creationflags = subprocess.CREATE_NO_WINDOW
+
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True, encoding='utf-8', errors='ignore', creationflags=creationflags)
+            encoder_regex = re.compile(r"([VASDEV.]{6})\s+(\S+)\s+(.*)")
+            for line in result.stdout.splitlines():
+                match = encoder_regex.search(line)
+                if match:
+                    flags = match.group(1)
+                    name = match.group(2)
+                    if ('V' in flags) and any(hw in name for hw in ['nvenc', 'qsv', 'amf', 'videotoolbox']):
+                        self.available_encoders[name] = match.group(3).strip()
+        except Exception as e:
+            logger.warning(f"硬件编码器探测失败: {e}")
+
+    def _get_video_codec_params(self) -> tuple[str, list]:
+        """获取最佳硬件编码器及参数"""
+        # 默认 CPU 方案
+        video_codec = "libx264"
+        extra_args = ["-preset", "fast", "-crf", "22"]
+
+        # 优先顺序: VideoToolbox -> NVENC -> QSV
+        if "h264_videotoolbox" in self.available_encoders:
+            # macOS
+            video_codec = "h264_videotoolbox"
+            extra_args = ["-b:v", "15M", "-maxrate", "25M", "-profile:v", "high", "-pix_fmt", "yuv420p"]
+        elif "h264_nvenc" in self.available_encoders:
+            # NVIDIA
+            video_codec = "h264_nvenc"
+            extra_args = ["-preset", "p4", "-rc", "vbr_hq", "-b:v", "15M", "-maxrate", "25M", "-cq:v", "19", "-pix_fmt", "yuv420p"]
+        elif "h264_qsv" in self.available_encoders:
+            # Intel
+            video_codec = "h264_qsv"
+            extra_args = ["-preset", "veryfast", "-b:v", "15M", "-pix_fmt", "yuv420p"]
+        
+        return video_codec, extra_args
 
     def _log_command(self, cmd: list, log_file: Path = None):
         """记录 FFmpeg 命令到日志文件（调试用）"""
@@ -312,29 +370,35 @@ class SceneCutter:
         """
         构建水印过滤器
         watermark_params 中应包含:
-        - font_name: 字体名称（从assets目录中选择）
-        - text: 水印文本
-        - font_color: 字体颜色
-        - font_size: 字体大小
-        - x: X 坐标
-        - y: Y 坐标
+        - text: 水印文本 或 .ass 文件名
+        - ... (其他参数用于 drawtext)
         """
         if not watermark_params:
             return None
         
-        # 获取字体名称并查找对应的相对路径
+        text = watermark_params.get('text', '')
+        
+        # 如果 text 是 .ass 文件，使用 ass 过滤器
+        if text.lower().endswith('.ass'):
+            ass_path = self.available_ass_files.get(text)
+            if ass_path:
+                # 转义路径中的特殊字符（特别是 Windows 下的反斜杠和冒号）
+                # FFmpeg ass 过滤器对路径格式很敏感
+                if sys.platform == "win32":
+                    # Windows 下需要处理盘符冒号和反斜杠
+                    escaped_path = ass_path.replace("\\", "/").replace(":", "\\:")
+                    return f"ass='{escaped_path}'"
+                return f"ass='{ass_path}'"
+        
+        # 否则回退到 drawtext 过滤器
         font_name = watermark_params.get('font_name')
         if not font_name or font_name not in self.available_fonts:
-            logger.warning(f"水印字体未指定或不存在: {font_name}")
             return None
         
-        # 获取相对路径（如 assets/Roboto-Bold.ttf）
         font_relative_path = self.available_fonts[font_name]
-        # print(f"使用水印字体: {font_name} -> {font_relative_path}")
-        # 构建 FFmpeg 过滤器，使用相对路径
         return (
             f"drawtext=fontfile='{font_relative_path}':"
-            f"text='{watermark_params['text']}':"
+            f"text='{text}':"
             f"fontcolor={watermark_params['font_color']}:"
             f"fontsize={watermark_params['font_size']}:"
             "box=1:boxcolor=black@0.5:boxborderw=10:"
@@ -433,14 +497,28 @@ class SceneCutter:
                     clip_name = f"{date_str}{person_id_str}{custom_name}_{scene_idx:03d}.mp4"
                     clip_path = video_output_dir / clip_name
 
-                    # 为了保证帧级精度，把 -ss 放在输入之后，同时让 ffmpeg 进行精确寻帧。
+                    # 硬件加速参数
+                    video_codec, extra_video_args = self._get_video_codec_params()
+
+                    # 为了保证帧级精度，把 -ss 放在输入之前，同时让 ffmpeg 进行精确寻帧。
                     # 仅在不需要水印时才尝试直接复制流，否则重新编码。
-                    cmd_split = [get_ffmpeg_exe(), '-y', '-i', str(video_path), '-ss', str(start_t), '-t', str(duration)]
+                    cmd_split = [
+                        get_ffmpeg_exe(), '-y', '-hide_banner', '-loglevel', 'error',
+                        '-hwaccel', 'auto',
+                        '-i', str(video_path),
+                        '-ss', str(start_t),
+                        '-t', str(duration)
+                    ]
+                    
                     if watermark_filter:
-                        cmd_split.extend(['-vf', watermark_filter, '-c:v', 'libx264', '-preset', 'fast', '-crf', '22', '-c:a', 'aac'])
-                    else:
-                        cmd_split.extend(['-c:v', 'libx264', '-preset', 'fast', '-crf', '22', '-c:a', 'aac'])
-                    cmd_split.append(str(clip_path))
+                        cmd_split.extend(['-vf', watermark_filter])
+                    
+                    cmd_split.extend([
+                        '-c:v', video_codec,
+                        *extra_video_args,
+                        '-c:a', 'aac',
+                        str(clip_path)
+                    ])
                     
                     # 执行FFmpeg命令
                     success, output = self._execute_ffmpeg_command(cmd_split, debug_log_file)

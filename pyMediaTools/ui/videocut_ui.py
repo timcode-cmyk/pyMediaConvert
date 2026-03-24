@@ -8,7 +8,7 @@ from PySide6.QtGui import QFont, QColor
 
 from .styles import apply_common_style
 from .media_tools_ui import DropLineEdit, ProgressMonitor
-from ..core.vidoecut import SceneCutter, get_available_fonts
+from ..core.vidoecut import SceneCutter, get_available_fonts, get_available_ass_files
 from ..utils import get_resource_path
 from pyMediaTools import get_logger
 
@@ -138,13 +138,16 @@ class VideoCutWidget(QWidget):
         available_fonts = get_available_fonts()
         default_font = list(available_fonts.keys())[0] if available_fonts else "Roboto-Bold"
         
+        # 加载可用 ASS 文件
+        self.available_ass_files = get_available_ass_files()
+        
         self.watermark_settings = {
             'font_name': default_font,
             'font_size': "24",
             'font_color': "white",
             'x': "W-tw-10",
             'y': "40",
-            'text': "AI Created"
+            'text': list(self.available_ass_files.keys())[0] if self.available_ass_files else ""
         }
         self.apply_styles()
 
@@ -207,17 +210,26 @@ class VideoCutWidget(QWidget):
         # 水印
         self.chk_add_watermark = QCheckBox("添加水印:")
         self.chk_add_watermark.setChecked(False)
-        self.txt_watermark_text = QLineEdit("AI Created")
+        
+        # 修改为下拉菜单，读取 assets 中的 .ass 字幕作为列表
+        self.combo_watermark_ass = QComboBox()
+        if self.available_ass_files:
+            self.combo_watermark_ass.addItems(self.available_ass_files.keys())
+        else:
+            self.combo_watermark_ass.addItem("无 .ass 文件")
+            self.combo_watermark_ass.setEnabled(False)
+
         self.btn_watermark_settings = QPushButton("水印设置")
         self.btn_watermark_settings.clicked.connect(self.open_watermark_settings)
+        # 暂时封存按钮
+        self.btn_watermark_settings.setVisible(False)
         
-        self.chk_add_watermark.toggled.connect(self.txt_watermark_text.setEnabled)
-        self.chk_add_watermark.toggled.connect(self.btn_watermark_settings.setEnabled)
-        self.txt_watermark_text.setEnabled(False)
-        self.btn_watermark_settings.setEnabled(False)
+        self.chk_add_watermark.toggled.connect(self.combo_watermark_ass.setEnabled)
+        # self.chk_add_watermark.toggled.connect(self.btn_watermark_settings.setEnabled)
+        self.combo_watermark_ass.setEnabled(False)
 
         options_layout.addWidget(self.chk_add_watermark, 1, 0)
-        options_layout.addWidget(self.txt_watermark_text, 1, 1, 1, 2)
+        options_layout.addWidget(self.combo_watermark_ass, 1, 1, 1, 2)
         options_layout.addWidget(self.btn_watermark_settings, 1, 3)
 
         options_layout.setColumnStretch(1, 1)
@@ -289,7 +301,7 @@ class VideoCutWidget(QWidget):
         if dialog.exec() == QDialog.Accepted:
             self.watermark_settings.update(dialog.get_settings())
             # Update text from main UI
-            self.watermark_settings['text'] = self.txt_watermark_text.text()
+            self.watermark_settings['text'] = self.combo_watermark_ass.currentText()
             logger.info(f"水印参数已更新: {self.watermark_settings}")
 
     def toggle_processing(self):
@@ -322,8 +334,8 @@ class VideoCutWidget(QWidget):
 
         if self.chk_add_watermark.isChecked():
             try:
-                # Update text from the main UI just before running
-                self.watermark_settings['text'] = self.txt_watermark_text.text()
+                # Update text from the main UI (selected .ass file)
+                self.watermark_settings['text'] = self.combo_watermark_ass.currentText()
                 
                 # 验证选择的字体是否存在
                 available_fonts = get_available_fonts()
