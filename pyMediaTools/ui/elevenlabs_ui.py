@@ -2,15 +2,16 @@ import os
 import datetime
 import uuid
 import re
-from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, 
-                               QTextEdit, QComboBox, QMessageBox, QProgressBar, QFileDialog, QSlider,
+from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, 
+                               QPushButton, QTextEdit, QComboBox, QMessageBox, QProgressBar, QFileDialog, QSlider,
                                QGroupBox, QSizePolicy, QSpinBox, QCheckBox, QTabWidget, QScrollArea, QFrame,
-                               QFontComboBox, QColorDialog, QDoubleSpinBox, QGridLayout, QDialog, QDialogButtonBox)
+                               QFontComboBox, QColorDialog, QDoubleSpinBox, QGridLayout, QDialog, QDialogButtonBox, QInputDialog)
 from PySide6.QtCore import Qt, QUrl, QSettings, QTimer, QSize, QRectF, QMimeData, QPoint
 from PySide6.QtGui import QFont, QColor, QPainter, QPainterPath, QPen, QBrush, QFontMetrics, QDrag, QTextCharFormat, QSyntaxHighlighter
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 
-from ..core.elevenlabs import QuotaWorker, TTSWorker, SFXWorker, VoiceListWorker, ModelListWorker
+from ..core.elevenlabs import (QuotaWorker, TTSWorker, SFXWorker, VoiceListWorker, 
+                               ModelListWorker, LibrarySearchWorker, LibraryAddWorker)
 from ..utils import load_project_config
 from .styles import apply_common_style
 from ..logging_config import get_logger
@@ -995,6 +996,229 @@ class SubtitleSettingsDialog(QDialog):
             'srt_max_chars': self.max_chars_slider.value()
         }
 
+
+class VoiceLibraryDialog(QDialog):
+    """声音库搜索与添加对话框"""
+    def __init__(self, parent=None, api_key=None):
+        super().__init__(parent)
+        self.setWindowTitle("探索 ElevenLabs 声音库")
+        self.setMinimumSize(850, 600)
+        self.api_key = api_key
+        self.next_page_token = None
+        
+        self.player = QMediaPlayer()
+        self.audio_output = QAudioOutput()
+        self.player.setAudioOutput(self.audio_output)
+        
+        self.setup_ui()
+        
+    def setup_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setSpacing(15)
+        
+        # 搜索栏
+        search_layout = QHBoxLayout()
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("搜索声音名称、标签或描述...")
+        self.search_input.returnPressed.connect(self.search_voices)
+        
+        self.btn_search = QPushButton("🔍 搜索")
+        self.btn_search.clicked.connect(self.search_voices)
+        
+        search_layout.addWidget(self.search_input, 1)
+        search_layout.addWidget(self.btn_search)
+        layout.addLayout(search_layout)
+        
+        # 结果区域 (使用 ScrollArea 包裹一个垂直布局)
+        self.scroll = QScrollArea()
+        self.scroll.setWidgetResizable(True)
+        self.scroll_content = QWidget()
+        self.results_layout = QVBoxLayout(self.scroll_content)
+        self.results_layout.setAlignment(Qt.AlignTop)
+        self.scroll.setWidget(self.scroll_content)
+        layout.addWidget(self.scroll)
+        
+        # 分页按钮 (加载更多)
+        self.btn_load_more = QPushButton("加载更多...")
+        self.btn_load_more.setVisible(False)
+        self.btn_load_more.clicked.connect(self.load_more)
+        layout.addWidget(self.btn_load_more)
+        
+        # 底部按钮
+        self.btn_close = QPushButton("关闭")
+        self.btn_close.clicked.connect(self.reject)
+        layout.addWidget(self.btn_close, 0, Qt.AlignRight)
+        
+        # 加载中覆盖层 (简单提示)
+        self.loading_label = QLabel("正在搜索声音库...")
+        self.loading_label.setAlignment(Qt.AlignCenter)
+        self.loading_label.setStyleSheet("background: rgba(255, 255, 255, 180); border-radius: 10px;")
+        self.loading_label.setVisible(False)
+        
+    def search_voices(self):
+        query = self.search_input.text().strip()
+        # 清空现有结果
+        self.clear_results()
+        self.next_page_token = None
+        self._perform_search(query)
+        
+    def load_more(self):
+        if self.next_page_token:
+            self._perform_search(self.search_input.text().strip(), self.next_page_token)
+            
+    def _perform_search(self, query, token=None):
+        self.btn_search.setEnabled(False)
+        self.btn_load_more.setEnabled(False)
+        
+        self.worker = LibrarySearchWorker(self.api_key, search_text=query, page_token=token)
+        self.worker.finished.connect(self.on_search_finished)
+        self.worker.error.connect(self.on_search_error)
+        self.worker.start()
+        
+    def on_search_finished(self, voices, next_token):
+        self.btn_search.setEnabled(True)
+        self.next_page_token = next_token
+        self.btn_load_more.setVisible(bool(next_token))
+        self.btn_load_more.setEnabled(True)
+        
+        if not voices and not self.results_layout.count():
+            self.results_layout.addWidget(QLabel("未找到匹配的声音。"))
+            return
+            
+        for voice_data in voices:
+            item = VoiceLibraryItem(voice_data, self.api_key, self.player, self)
+            self.results_layout.addWidget(item)
+            
+    def on_search_error(self, error_msg):
+        self.btn_search.setEnabled(True)
+        QMessageBox.warning(self, "搜索出错", error_msg)
+        
+    def clear_results(self):
+        while self.results_layout.count():
+            child = self.results_layout.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+
+class VoiceLibraryItem(QFrame):
+    """声音库中的单个项目"""
+    def __init__(self, data, api_key, player, parent=None):
+        super().__init__(parent)
+        self.data = data
+        self.api_key = api_key
+        self.player = player
+        self.parent_dialog = parent
+        self.voice_id = data.get("voice_id")
+        self.public_user_id = data.get("public_user_id")
+        self.preview_url = data.get("preview_url")
+        self.name = data.get("name", "Unknown")
+        
+        self.setFrameShape(QFrame.StyledPanel)
+        self.setStyleSheet("""
+            VoiceLibraryItem {
+                background-color: #f9fafb;
+                border: 1px solid #e5e7eb;
+                border-radius: 8px;
+                padding: 10px;
+                margin-bottom: 5px;
+            }
+            VoiceLibraryItem:hover {
+                background-color: #f3f4f6;
+            }
+        """)
+        self.setup_ui()
+        
+    def setup_ui(self):
+        layout = QHBoxLayout(self)
+        
+        # 信息列
+        info_layout = QVBoxLayout()
+        name_label = QLabel(f"<b>{self.name}</b>")
+        name_label.setStyleSheet("font-size: 14px;")
+        info_layout.addWidget(name_label)
+        
+        # 详情 (类别, 描述)
+        category = self.data.get("category", "generated")
+        display_category = category.capitalize()
+        
+        # 免费版 API 兼容性提示
+        # premade 或者是来自官方的通常在免费版 API 可用
+        is_free_usable = category == "premade"
+        free_badge = ""
+        if is_free_usable:
+            free_badge = " <span style='color: #10b981; font-weight: bold;'>[免费版 API 可用]</span>"
+        
+        desc = self.data.get("description", "")
+        if desc and len(desc) > 80:
+            desc = desc[:77] + "..."
+            
+        detail_label = QLabel(f"<small>类别: {display_category} | ID: {self.voice_id}{free_badge}</small>")
+        info_layout.addWidget(detail_label)
+        
+        if desc:
+            desc_label = QLabel(f"<span style='color: #6b7280;'>{desc}</span>")
+            desc_label.setWordWrap(True)
+            info_layout.addWidget(desc_label)
+            
+        # 标签展示
+        tags = self.data.get("labels", {})
+        if tags:
+            tag_text = " | ".join([f"{k}: {v}" for k, v in tags.items()])
+            tags_label = QLabel(f"<small style='color: #9ca3af;'>{tag_text}</small>")
+            info_layout.addWidget(tags_label)
+            
+        layout.addLayout(info_layout, 1)
+        
+        # 控制列
+        ctrl_layout = QHBoxLayout()
+        
+        self.btn_preview = QPushButton("🔊 试听")
+        self.btn_preview.setFixedWidth(80)
+        self.btn_preview.clicked.connect(self.preview)
+        if not self.preview_url:
+            self.btn_preview.setEnabled(False)
+            
+        self.btn_add = QPushButton("➕ 添加")
+        self.btn_add.setFixedWidth(80)
+        self.btn_add.setObjectName("PrimaryButton")
+        self.btn_add.clicked.connect(self.add_voice)
+        
+        ctrl_layout.addWidget(self.btn_preview)
+        ctrl_layout.addWidget(self.btn_add)
+        layout.addLayout(ctrl_layout)
+        
+    def preview(self):
+        if self.preview_url:
+            self.player.setSource(QUrl(self.preview_url))
+            self.player.play()
+            
+    def add_voice(self):
+        # 提示用户起个名字
+        name, ok = QInputDialog.getText(self, "添加声音", f"为声音 '{self.name}' 起一个名字:", QLineEdit.Normal, self.name)
+        if ok and name:
+            self.btn_add.setEnabled(False)
+            self.btn_add.setText("正在添加...")
+            
+            self.worker = LibraryAddWorker(
+                self.api_key, 
+                public_user_id=self.public_user_id, 
+                voice_id=self.voice_id,
+                new_name=name
+            )
+            self.worker.finished.connect(self.on_added)
+            self.worker.error.connect(self.on_error)
+            self.worker.start()
+            
+    def on_added(self, voice_id, name):
+        QMessageBox.information(self, "成功", f"声音 '{name}' 已成功添加到您的帐户。")
+        self.btn_add.setText("已添加")
+        # 通知对话框需要刷新主列表（在对话框关闭后）
+        self.parent_dialog.accept() # 简单处理：添加一个就关闭并刷新
+        
+    def on_error(self, msg):
+        self.btn_add.setEnabled(True)
+        self.btn_add.setText("➕ 添加")
+        QMessageBox.warning(self, "添加失败", msg)
+
 class ElevenLabsWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -1189,6 +1413,7 @@ class ElevenLabsWidget(QWidget):
         voice_layout.addWidget(QLabel("选择声音:"))
         self.combo_voices = QComboBox()
         self.combo_voices.setPlaceholderText("请先刷新配置...")
+        self.combo_voices.activated.connect(self.on_voice_combo_activated)
         voice_layout.addWidget(self.combo_voices, 1)
         # 模型选择
         self.combo_model = QComboBox()
@@ -1529,20 +1754,45 @@ class ElevenLabsWidget(QWidget):
 
     def on_voices_loaded(self, voices):
         self.voices_loaded = True
+        self.combo_voices.blockSignals(True)
         self.combo_voices.clear()
+        
         for item in voices:
-            # 兼容处理：解包 (name, vid, preview_url)
-            if len(item) >= 3:
-                name, vid, preview_url = item[:3]
+            # 兼容处理：解包 (name, vid, preview_url, category)
+            if len(item) >= 4:
+                name, vid, preview_url, category = item[:4]
+            elif len(item) == 3:
+                name, vid, preview_url = item
+                category = "unspecified"
             else:
                 name, vid = item
-                preview_url = None
+                preview_url = category = None
             
-            self.combo_voices.addItem(name, vid)
+            # 如果是 premade (官方自带且免费)，添加标识
+            display_name = name
+            if category == "premade":
+                display_name += " (Free)"
+            
+            self.combo_voices.addItem(display_name, vid)
             if preview_url:
                 self.combo_voices.setItemData(self.combo_voices.count() - 1, preview_url, Qt.UserRole + 1)
         
+        # 添加“更多声音”选项
+        self.combo_voices.insertSeparator(self.combo_voices.count())
+        self.combo_voices.addItem("✨ 更多声音 (探索声音库)...", "more_voices")
+        
+        self.combo_voices.blockSignals(False)
         self._check_all_loaded()
+    
+    def on_voice_combo_activated(self, index):
+        """当用户点击声音下拉列表项时"""
+        data = self.combo_voices.itemData(index)
+        if data == "more_voices":
+            # 重置选择到上一个，避免停留在“更多声音”项上
+            # 这里简单重置到第一项，稍后如果有更好的逻辑可以优化
+            if index > 0:
+                self.combo_voices.setCurrentIndex(0)
+            self.open_voice_library()
     
     def on_models_loaded(self, models):
         """当模型列表成功加载时的回调"""
@@ -1590,6 +1840,21 @@ class ElevenLabsWidget(QWidget):
         """检查两个 worker 是否都完成，如果完成则更新 UI 状态"""
         if self.models_loaded and self.voices_loaded:
             self.set_ui_busy(False, "加载完成")
+
+    def open_voice_library(self):
+        """打开声音库搜索对话框"""
+        api_key = self.get_current_api_key()
+        if not api_key:
+            QMessageBox.warning(self, "缺少 Key", "请输入 API Key 以访问声音库")
+            return
+            
+        dialog = VoiceLibraryDialog(self, api_key=api_key)
+        # Apply style to dialog
+        apply_common_style(dialog)
+        
+        if dialog.exec() == QDialog.Accepted:
+            # 如果在对话框中成功添加了声音，刷新本地声音列表
+            self.load_voices()
     
     def on_model_changed(self):
         """当选择的模型改变时，更新可用功能和语言列表"""

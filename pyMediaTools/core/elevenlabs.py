@@ -627,11 +627,94 @@ class VoiceListWorker(QThread):
                     vid = v.get("voice_id") or v.get("id") or v.get("uuid")
                     name = v.get("name") or v.get("label") or vid
                     preview_url = v.get("preview_url")
+                    category = v.get("category", "unspecified")
                     if vid and name:
-                        voices_list.append((name, vid, preview_url))
+                        voices_list.append((name, vid, preview_url, category))
 
                 self.finished.emit(voices_list)
             else:
                 self.error.emit(f"获取声音列表失败 ({response.status_code}): {response.text}")
+        except Exception as e:
+            self.error.emit(str(e))
+
+
+class LibrarySearchWorker(QThread):
+    """
+    从 ElevenLabs 共享库搜索声音
+    根据 API 文档: GET /v1/shared-voices
+    """
+    finished = Signal(list, str)  # (voices_list, next_page_token)
+    error = Signal(str)
+
+    def __init__(self, api_key=None, search_text="", page_size=30, page_token=None):
+        super().__init__()
+        cfg = load_project_config().get('elevenlabs', {})
+        self.api_key = api_key or cfg.get('api_key') or os.getenv("ELEVENLABS_API_KEY", "")
+        self.search_text = search_text
+        self.page_size = page_size
+        self.page_token = page_token
+
+    def run(self):
+        url = "https://api.elevenlabs.io/v1/shared-voices"
+        headers = {"xi-api-key": self.api_key, "Accept": "application/json"}
+        params = {
+            "search": self.search_text,
+            "page_size": self.page_size,
+        }
+        if self.page_token:
+            params["page_token"] = self.page_token
+
+        try:
+            response = requests.get(url, headers=headers, params=params, timeout=20)
+            if response.status_code == 200:
+                data = response.json()
+                voices_list = data.get("voices", [])
+                next_page_token = data.get("next_page_token")
+                self.finished.emit(voices_list, next_page_token)
+            else:
+                # 针对 403 错误（通常是免费版权限限制）提供更友好的提示
+                if response.status_code == 403:
+                    self.error.emit("访问被拒绝。ElevenLabs 共享库搜索可能需要付费订阅计划（Starter 及以上）。")
+                else:
+                    self.error.emit(f"搜索声音库失败 ({response.status_code}): {response.text}")
+        except Exception as e:
+            self.error.emit(str(e))
+
+
+class LibraryAddWorker(QThread):
+    """
+    将共享库中的声音添加到个人账户
+    根据 API 文档: POST /v1/voices/add/{public_user_id}/{voice_id}
+    """
+    finished = Signal(str, str)  # (voice_id, name)
+    error = Signal(str)
+
+    def __init__(self, api_key=None, public_user_id=None, voice_id=None, new_name=None):
+        super().__init__()
+        cfg = load_project_config().get('elevenlabs', {})
+        self.api_key = api_key or cfg.get('api_key') or os.getenv("ELEVENLABS_API_KEY", "")
+        self.public_user_id = public_user_id
+        self.voice_id = voice_id
+        self.new_name = new_name
+
+    def run(self):
+        if not self.public_user_id or not self.voice_id:
+            self.error.emit("缺少必要的参数 (public_user_id 或 voice_id)")
+            return
+
+        url = f"https://api.elevenlabs.io/v1/voices/add/{self.public_user_id}/{self.voice_id}"
+        headers = {"xi-api-key": self.api_key, "Accept": "application/json"}
+        # API 文档指出，此端点的参数通常在 URL 中，new_name 可以作为表单数据或 JSON 传递
+        # 这里尝试作为 JSON 发送（ElevenLabs 很多 add 端点支持 JSON）
+        data = {"new_name": self.new_name} if self.new_name else {}
+
+        try:
+            response = requests.post(url, headers=headers, json=data, timeout=20)
+            if response.status_code == 200:
+                resp_json = response.json()
+                new_voice_id = resp_json.get("voice_id", self.voice_id)
+                self.finished.emit(new_voice_id, self.new_name or "New Voice")
+            else:
+                self.error.emit(f"添加声音失败 ({response.status_code}): {response.text}")
         except Exception as e:
             self.error.emit(str(e))
