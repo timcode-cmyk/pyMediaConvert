@@ -20,25 +20,61 @@ from ..logging_config import get_logger
 
 logger = get_logger(__name__)
 
-# Try importing rembg, handle if not installed
+# Try importing rembg and onnxruntime
 try:
+    import onnxruntime as ort
     from rembg import remove, new_session
     HAS_REMBG = True
 except ImportError:
     HAS_REMBG = False
-    logger.warning("rembg module not found. Background removal features will not work.")
+    logger.warning("rembg or onnxruntime module not found. Background removal features will not work.")
+
+def get_best_providers():
+    """Detect and return the best available ONNX Runtime execution providers."""
+    if not HAS_REMBG:
+        return ['CPUExecutionProvider']
+    
+    try:
+        available = ort.get_available_providers()
+        logger.info(f"Available ONNX providers: {available}")
+        
+        # Preference order for hardware acceleration
+        preference = [
+            'CoreMLExecutionProvider',      # Apple Silicon (macOS)
+            'CUDAExecutionProvider',         # NVIDIA (Windows/Linux)
+            'OpenVINOExecutionProvider',     # Intel (Windows/Linux)
+            'DirectMLExecutionProvider',     # Windows (DirectX - supports many GPUs)
+            'CPUExecutionProvider'           # Standard fallback
+        ]
+        
+        selected = [p for p in preference if p in available]
+        if not selected:
+            selected = ['CPUExecutionProvider']
+            
+        logger.info(f"Selected ONNX providers: {selected}")
+        return selected
+    except Exception as e:
+        logger.error(f"Error detecting ONNX providers: {e}")
+        return ['CPUExecutionProvider']
 
 class RembgProcessor:
     def __init__(self, model_name="u2net", bgcolor=(0, 255, 0, 255), monitor=None):
         if not HAS_REMBG:
-            raise ImportError("Please install rembg first: pip install rembg[gpu] or pip install rembg")
+            raise ImportError("rembg 模块未找到或初始化失败。如果您是在运行打包后的程序，请检查 dependencies。")
         
-        # Initialize session once
+        # Initialize session with hardware acceleration
         try:
-            self.session = new_session(model_name)
+            providers = get_best_providers()
+            self.session = new_session(model_name, providers=providers)
         except Exception as e:
             logger.error(f"Failed to initialize rembg session: {e}")
-            raise e
+            # Fallback to CPU if something went wrong with GPU providers
+            try:
+                logger.info("Retrying with CPUExecutionProvider...")
+                self.session = new_session(model_name, providers=['CPUExecutionProvider'])
+            except Exception as e2:
+                logger.error(f"Fatal: Failed to initialize even with CPU: {e2}")
+                raise e2
             
         self.bgcolor = bgcolor # RGBA tuple
         self.monitor = monitor

@@ -74,9 +74,11 @@ class RembgWorker(QObject):
         except Exception as e:
             import traceback
             error_msg = traceback.format_exc()
-            # Summarize error for UI
-            if "rembg" in str(e) and "install" in str(e):
-                error_msg = "未检测到 rembg 库。\n请运行: pip install rembg[gpu]"
+            
+            # User-friendly error for missing rembg or onnxruntime
+            err_str = str(e).lower()
+            if "rembg" in err_str or "onnxruntime" in err_str or "module not found" in err_str:
+                error_msg = "无法初始化 AI 抠图引擎。\n\n可能原因：\n1. 缺少必要组件 (rembg/onnxruntime)\n2. 硬件加速驱动不兼容 (CUDA/Metal)\n3. 模型下载失败\n\n请尝试重新安装或检查网络连接。"
             
             logger.exception(f"RembgWorker exception: {e}")
             is_successful = False

@@ -73,6 +73,9 @@ jobs:
           --windows-icon-from-ico=MediaTools.ico `
           --nofollow-import-to=yt_dlp --no-deployment-flag=excluded-module-usage `
           --include-module=optparse --include-module=asyncio --include-package=pyMediaTools `
+          --include-package=rembg --include-package=onnxruntime --include-package=pymatting `
+          --include-package-data=onnxruntime `
+          --noinclude-numba-mode=nofollow --module-parameter=numba-disable-jit=yes `
           --plugin-enable=pyside6 --include-qt-plugins=multimedia,platforms,styles,imageformats `
           --include-data-files=MediaTools.ico=MediaTools.ico --include-data-files=bin/ffmpeg.exe=bin/ffmpeg.exe `
           --include-data-files=bin/ffprobe.exe=bin/ffprobe.exe --include-data-files=config.toml=config.toml `
@@ -85,6 +88,9 @@ jobs:
           --macos-app-version=${{ env.APP_VERSION }} \
           --nofollow-import-to=yt_dlp --no-deployment-flag=excluded-module-usage \
           --include-module=optparse --include-module=asyncio --include-package=pyMediaTools \
+          --include-package=rembg --include-package=onnxruntime --include-package=pymatting \
+          --include-package-data=onnxruntime \
+          --noinclude-numba-mode=nofollow --module-parameter=numba-disable-jit=yes \
           --plugin-enable=pyside6 --include-qt-plugins=multimedia,platforms,styles,imageformats \
           --include-data-files=bin/ffmpeg=bin/ffmpeg --include-data-files=bin/ffprobe=bin/ffprobe \
           --include-data-files=config.toml=config.toml --include-data-dir=assets=assets MediaTools.py
