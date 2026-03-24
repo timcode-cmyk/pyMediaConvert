@@ -1052,7 +1052,7 @@ class VoiceLibraryDialog(QDialog):
         # 加载中覆盖层 (简单提示)
         self.loading_label = QLabel("正在搜索声音库...")
         self.loading_label.setAlignment(Qt.AlignCenter)
-        self.loading_label.setStyleSheet("background: rgba(255, 255, 255, 180); border-radius: 10px;")
+        self.loading_label.setStyleSheet("background: palette(window); color: palette(text); border: 1px solid palette(mid); border-radius: 10px;")
         self.loading_label.setVisible(False)
         
     def search_voices(self):
@@ -1108,24 +1108,28 @@ class VoiceLibraryItem(QFrame):
         self.player = player
         self.parent_dialog = parent
         self.voice_id = data.get("voice_id")
-        self.public_user_id = data.get("public_user_id")
+        self.public_owner_id = data.get("public_owner_id") # 修改：库返回的是 public_owner_id
         self.preview_url = data.get("preview_url")
         self.name = data.get("name", "Unknown")
         
         self.setFrameShape(QFrame.StyledPanel)
+        self.init_style()
+        self.setup_ui()
+        
+    def init_style(self):
+        # 使用 QPalette 获取颜色，以支持深色/浅色模式切换
         self.setStyleSheet("""
             VoiceLibraryItem {
-                background-color: #f9fafb;
-                border: 1px solid #e5e7eb;
+                background-color: palette(alternate-base);
+                border: 1px solid palette(midlight);
                 border-radius: 8px;
                 padding: 10px;
                 margin-bottom: 5px;
             }
             VoiceLibraryItem:hover {
-                background-color: #f3f4f6;
+                background-color: palette(midlight);
             }
         """)
-        self.setup_ui()
         
     def setup_ui(self):
         layout = QHBoxLayout(self)
@@ -1133,7 +1137,7 @@ class VoiceLibraryItem(QFrame):
         # 信息列
         info_layout = QVBoxLayout()
         name_label = QLabel(f"<b>{self.name}</b>")
-        name_label.setStyleSheet("font-size: 14px;")
+        name_label.setStyleSheet("font-size: 14px; color: palette(text);")
         info_layout.addWidget(name_label)
         
         # 详情 (类别, 描述)
@@ -1141,7 +1145,6 @@ class VoiceLibraryItem(QFrame):
         display_category = category.capitalize()
         
         # 免费版 API 兼容性提示
-        # premade 或者是来自官方的通常在免费版 API 可用
         is_free_usable = category == "premade"
         free_badge = ""
         if is_free_usable:
@@ -1152,18 +1155,21 @@ class VoiceLibraryItem(QFrame):
             desc = desc[:77] + "..."
             
         detail_label = QLabel(f"<small>类别: {display_category} | ID: {self.voice_id}{free_badge}</small>")
+        detail_label.setStyleSheet("color: palette(mid);")
         info_layout.addWidget(detail_label)
         
         if desc:
-            desc_label = QLabel(f"<span style='color: #6b7280;'>{desc}</span>")
+            desc_label = QLabel(desc)
             desc_label.setWordWrap(True)
+            desc_label.setStyleSheet("color: palette(text);")
             info_layout.addWidget(desc_label)
             
         # 标签展示
         tags = self.data.get("labels", {})
         if tags:
             tag_text = " | ".join([f"{k}: {v}" for k, v in tags.items()])
-            tags_label = QLabel(f"<small style='color: #9ca3af;'>{tag_text}</small>")
+            tags_label = QLabel(f"<small>{tag_text}</small>")
+            tags_label.setStyleSheet("color: palette(mid);")
             info_layout.addWidget(tags_label)
             
         layout.addLayout(info_layout, 1)
@@ -1200,7 +1206,7 @@ class VoiceLibraryItem(QFrame):
             
             self.worker = LibraryAddWorker(
                 self.api_key, 
-                public_user_id=self.public_user_id, 
+                public_user_id=self.public_owner_id, # 修改：传入 public_owner_id
                 voice_id=self.voice_id,
                 new_name=name
             )
