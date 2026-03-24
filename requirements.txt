@@ -16,3 +16,4 @@ huggingface_hub>=0.20.0
 
 numpy>=1.24.0
 onnxruntime
+PySceneDetect
