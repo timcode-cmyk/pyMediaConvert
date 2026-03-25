@@ -72,8 +72,9 @@ jobs:
           nuitka --standalone --windows-console-mode=disable --assume-yes-for-downloads --output-dir=dist-nuitka `
           --windows-icon-from-ico=MediaTools.ico `
           --nofollow-import-to=yt_dlp --nofollow-import-to=sympy --nofollow-import-to=unittest --nofollow-import-to=pytest `
-          --no-deployment-flag=excluded-module-usage --include-module=optparse --include-module=asyncio `
+          --no-deployment-flag=excluded-module-usage --include-module=optparse --include-module=asyncio --include-module=requests `
           --include-package=pyMediaTools --include-package=rembg --include-package=onnxruntime --include-package=pymatting `
+          --include-package=pooch --include-package=scipy --include-package=tqdm `
           --include-package-data=onnxruntime --noinclude-numba-mode=nofollow --module-parameter=numba-disable-jit=yes `
           --plugin-enable=pyside6 --plugin-enable=anti-bloat --include-qt-plugins=multimedia,platforms,styles,imageformats `
           --include-data-files=MediaTools.ico=MediaTools.ico --include-data-files=bin/ffmpeg.exe=bin/ffmpeg.exe `
@@ -86,8 +87,9 @@ jobs:
           python -m nuitka --standalone --macos-app-icon=Icon.icns --assume-yes-for-downloads --macos-create-app-bundle --output-dir=dist-nuitka \
           --macos-app-version=${{ env.APP_VERSION }} \
           --nofollow-import-to=yt_dlp --nofollow-import-to=sympy --nofollow-import-to=unittest --nofollow-import-to=pytest \
-          --no-deployment-flag=excluded-module-usage --include-module=optparse --include-module=asyncio \
+          --no-deployment-flag=excluded-module-usage --include-module=optparse --include-module=asyncio --include-module=requests \
           --include-package=pyMediaTools --include-package=rembg --include-package=onnxruntime --include-package=pymatting \
+          --include-package=pooch --include-package=scipy --include-package=tqdm \
           --include-package-data=onnxruntime --noinclude-numba-mode=nofollow --module-parameter=numba-disable-jit=yes \
           --plugin-enable=pyside6 --plugin-enable=anti-bloat --include-qt-plugins=multimedia,platforms,styles,imageformats \
           --include-data-files=bin/ffmpeg=bin/ffmpeg --include-data-files=bin/ffprobe=bin/ffprobe \

@@ -33,7 +33,7 @@ except ImportError:
 def get_available_ass_files() -> dict:
     """
     扫描 assets 目录，获取所有可用的 .ass 字幕文件
-    返回字典: {文件名: 相对路径}
+    返回字典: {文件名: 绝对路径}
     """
     ass_files = {}
     assets_dir = get_resource_path("assets")
@@ -43,7 +43,8 @@ def get_available_ass_files() -> dict:
     
     try:
         for f in assets_dir.glob("*.ass"):
-            ass_files[f.name] = f"assets/{f.name}"
+            # 使用绝对路径以确保在打包后的程序中 ffmpeg 能找到文件
+            ass_files[f.name] = str(f.absolute())
     except Exception as e:
         logger.error(f"扫描 ASS 文件时发生错误: {e}")
     
@@ -53,7 +54,7 @@ def get_available_ass_files() -> dict:
 def get_available_fonts() -> dict:
     """
     扫描 assets 目录，获取所有可用的 TTF 字体文件
-    返回字典: {字体名称: 相对路径}
+    返回字典: {字体名称: 绝对路径}
     """
     fonts = {}
     assets_dir = get_resource_path("assets")
@@ -63,7 +64,8 @@ def get_available_fonts() -> dict:
     
     try:
         for font_file in assets_dir.glob("*.ttf"):
-            fonts[font_file.stem] = f"assets/{font_file.name}"
+            # 使用绝对路径
+            fonts[font_file.stem] = str(font_file.absolute())
     except Exception as e:
         logger.error(f"扫描字体文件时发生错误: {e}")
     
@@ -366,12 +368,21 @@ class SceneCutter:
         
         self.files = sorted(list(set(candidates)))
 
+    def _format_ffmpeg_path(self, path: str) -> str:
+        """
+        格式化路径以适配 FFmpeg 过滤器 (ass, drawtext)
+        - Windows 下需要将 \ 替换为 /，并将 C: 替换为 C\:
+        """
+        if sys.platform == "win32":
+            # 替换反斜杠为正斜杠，并转义冒号
+            return path.replace("\\", "/").replace(":", "\\:")
+        return path
+
     def _build_watermark_filter(self, watermark_params):
         """
         构建水印过滤器
         watermark_params 中应包含:
         - text: 水印文本 或 .ass 文件名
-        - ... (其他参数用于 drawtext)
         """
         if not watermark_params:
             return None
@@ -382,22 +393,18 @@ class SceneCutter:
         if text.lower().endswith('.ass'):
             ass_path = self.available_ass_files.get(text)
             if ass_path:
-                # 转义路径中的特殊字符（特别是 Windows 下的反斜杠和冒号）
-                # FFmpeg ass 过滤器对路径格式很敏感
-                if sys.platform == "win32":
-                    # Windows 下需要处理盘符冒号和反斜杠
-                    escaped_path = ass_path.replace("\\", "/").replace(":", "\\:")
-                    return f"ass='{escaped_path}'"
-                return f"ass='{ass_path}'"
+                escaped_path = self._format_ffmpeg_path(ass_path)
+                return f"ass='{escaped_path}'"
         
         # 否则回退到 drawtext 过滤器
         font_name = watermark_params.get('font_name')
         if not font_name or font_name not in self.available_fonts:
             return None
         
-        font_relative_path = self.available_fonts[font_name]
+        font_absolute_path = self.available_fonts[font_name]
+        escaped_font_path = self._format_ffmpeg_path(font_absolute_path)
         return (
-            f"drawtext=fontfile='{font_relative_path}':"
+            f"drawtext=fontfile='{escaped_font_path}':"
             f"text='{text}':"
             f"fontcolor={watermark_params['font_color']}:"
             f"fontsize={watermark_params['font_size']}:"

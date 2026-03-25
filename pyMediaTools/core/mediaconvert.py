@@ -73,6 +73,16 @@ class MediaConverter(ABC):
             logger.critical(f"绑定的 ffprobe 可执行文件未找到: {ffprobe_path}")
             raise FileNotFoundError(f"ffprobe not found: {ffprobe_path}")
 
+    def _format_ffmpeg_path(self, path: str) -> str:
+        """
+        格式化路径以适配 FFmpeg 过滤器 (ass, drawtext)
+        - Windows 下需要将 \ 替换为 /，并将 C: 替换为 C\:
+        """
+        if sys.platform == "win32":
+            # 替换反斜杠为正斜杠，并转义冒号
+            return path.replace("\\", "/").replace(":", "\\:")
+        return path
+
     def _detect_hardware_encoders(self):
         """
         运行 'ffmpeg -encoders' 并解析输出，找出可用的硬件加速编码器。
@@ -613,9 +623,12 @@ class AddCustomLogo(MediaConverter):
 
         output_file_name = f"{output_path}{self.output_ext}" 
 
+        abs_font_path = get_resource_path(self.font_path)
+        escaped_font_path = self._format_ffmpeg_path(str(abs_font_path.absolute()))
+
         # 构造 filter_complex：
         filter_complex = (
-            f"drawtext=fontfile='{self.font_path}':"
+            f"drawtext=fontfile='{escaped_font_path}':"
             f"text='{self.text}':text_shaping=1:"
             f"fontcolor={self.font_color}:"
             f"fontsize={self.font_size}:"
@@ -660,8 +673,11 @@ class AddAssText(MediaConverter):
 
         output_file_name = f"{output_path}{self.output_ext}" 
 
+        abs_ass_path = get_resource_path(self.ass)
+        escaped_ass_path = self._format_ffmpeg_path(str(abs_ass_path.absolute()))
+
         input_ass = (
-            f"ass='{self.ass}'"
+            f"ass='{escaped_ass_path}'"
         )
 
         cmd = [

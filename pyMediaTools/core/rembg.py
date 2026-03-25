@@ -25,9 +25,11 @@ try:
     import onnxruntime as ort
     from rembg import remove, new_session
     HAS_REMBG = True
-except ImportError:
+except Exception:
+    import traceback
     HAS_REMBG = False
-    logger.warning("rembg or onnxruntime module not found. Background removal features will not work.")
+    logger.error(f"rembg or onnxruntime module import failed:\n{traceback.format_exc()}")
+    logger.warning("Background removal features will not work.")
 
 def get_best_providers():
     """Detect and return the best available ONNX Runtime execution providers."""
