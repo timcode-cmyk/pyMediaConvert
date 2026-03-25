@@ -74,7 +74,7 @@ class MediaConverter(ABC):
             raise FileNotFoundError(f"ffprobe not found: {ffprobe_path}")
 
     def _format_ffmpeg_path(self, path: str) -> str:
-        """
+        r"""
         格式化路径以适配 FFmpeg 过滤器 (ass, drawtext)
         - Windows 下需要将 \ 替换为 /，并将 C: 替换为 C\:
         """
