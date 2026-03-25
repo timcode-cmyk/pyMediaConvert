@@ -497,7 +497,7 @@ class VideoDownloadWidget(QWidget):
     def on_check_update_error(self, error_msg: str):
         """版本检查错误的回调"""
         if self.update_dialog and self.update_dialog.isVisible():
-            self.update_dialog.update_status(self.local_version, f"检查失败: {error_msg}")
+            self.update_dialog.update_status(self.local_version, "❌ 检查失败")
 
         # 只显示警告，不影响用户操作
         import logging
@@ -641,7 +641,10 @@ class YtDlpUpdateDialog(QDialog):
 
     def update_status(self, local, remote):
         self.lbl_local.setText(str(local or "未知"))
-        self.lbl_remote.setText(str(remote or "正在检查..."))
+        if remote:
+            self.lbl_remote.setText(str(remote))
+        else:
+            self.lbl_remote.setText("获取失败")
 
     def set_update_enabled(self, enabled):
         self.btn_update.setEnabled(enabled)

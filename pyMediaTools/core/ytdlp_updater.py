@@ -10,8 +10,7 @@ import glob
 import logging
 import shutil
 import subprocess
-import urllib.request
-import urllib.error
+import requests
 from pathlib import Path
 from typing import Optional, Dict, Tuple
 from datetime import datetime
@@ -130,73 +129,43 @@ class YtDlpVersionManager:
     def get_remote_version_from_github(self, timeout: int = 10) -> Optional[str]:
         """
         从GitHub获取最新版本
-        
-        Args:
-            timeout: 请求超时时间（秒）
-            
-        Returns:
-            最新版本号，失败返回None
         """
         try:
-            # GitHub API: 获取最新release
             url = "https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest"
+            headers = {'User-Agent': 'Mozilla/5.0 (pyMediaTools)'}
+            response = requests.get(url, headers=headers, timeout=timeout)
+            response.raise_for_status()
+            data = response.json()
             
-            request = urllib.request.Request(
-                url,
-                headers={'User-Agent': 'Mozilla/5.0 (pyMediaTools)'}
-            )
+            # 提取版本号
+            version = data.get('tag_name', '').lstrip('v')
+            if not version:
+                version = data.get('name', '').lstrip('v')
             
-            with urllib.request.urlopen(request, timeout=timeout) as response:
-                data = json.loads(response.read().decode('utf-8'))
-                
-                # 提取版本号（从tag_name或version字段）
-                version = data.get('tag_name', '').lstrip('v')
-                if not version:
-                    version = data.get('name', '').lstrip('v')
-                
-                if version:
-                    logger.debug(f"GitHub最新版本: {version}")
-                    return version
-                    
-        except urllib.error.URLError as e:
-            logger.warning(f"无法连接GitHub API: {e}")
+            if version:
+                logger.debug(f"GitHub最新版本: {version}")
+                return version
         except Exception as e:
-            logger.error(f"获取GitHub版本失败: {e}")
-        
+            logger.warning(f"获取GitHub版本失败: {e}")
         return None
     
     def get_remote_version_from_pypi(self, timeout: int = 10) -> Optional[str]:
         """
         从PyPI获取最新版本
-        
-        Args:
-            timeout: 请求超时时间（秒）
-            
-        Returns:
-            最新版本号，失败返回None
         """
         try:
-            # PyPI JSON API
             url = "https://pypi.org/pypi/yt-dlp/json"
+            headers = {'User-Agent': 'Mozilla/5.0 (pyMediaTools)'}
+            response = requests.get(url, headers=headers, timeout=timeout)
+            response.raise_for_status()
+            data = response.json()
+            version = data.get('info', {}).get('version')
             
-            request = urllib.request.Request(
-                url,
-                headers={'User-Agent': 'Mozilla/5.0 (pyMediaTools)'}
-            )
-            
-            with urllib.request.urlopen(request, timeout=timeout) as response:
-                data = json.loads(response.read().decode('utf-8'))
-                version = data.get('info', {}).get('version')
-                
-                if version:
-                    logger.debug(f"PyPI最新版本: {version}")
-                    return version
-                    
-        except urllib.error.URLError as e:
-            logger.warning(f"无法连接PyPI: {e}")
+            if version:
+                logger.debug(f"PyPI最新版本: {version}")
+                return version
         except Exception as e:
-            logger.error(f"获取PyPI版本失败: {e}")
-        
+            logger.warning(f"获取PyPI版本失败: {e}")
         return None
     
     def get_remote_version(self, timeout: int = 10) -> Optional[str]:
@@ -505,7 +474,13 @@ class YtDlpUpdater(YtDlpVersionManager):
             download_url = f"https://github.com/yt-dlp/yt-dlp/archive/refs/tags/{remote_version}.zip"
             zip_path = os.path.join(self.backup_dir, f"yt_dlp_{remote_version}.zip")
             
-            urllib.request.urlretrieve(download_url, zip_path)
+            logger.info(f"正在从 {download_url} 下载...")
+            response = requests.get(download_url, stream=True, timeout=30)
+            response.raise_for_status()
+            with open(zip_path, 'wb') as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    f.write(chunk)
+            
             logger.info(f"下载完成: {zip_path}")
             
             # 解压并替换
