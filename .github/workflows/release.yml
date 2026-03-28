@@ -81,6 +81,14 @@ jobs:
           --include-data-files=bin/ffprobe.exe=bin/ffprobe.exe --include-data-files=config.toml=config.toml `
           --include-data-dir=assets=assets MediaTools.py
 
+
+      - name: Workaround OpenSSL scan bug (macOS Intel)
+        if: matrix.platform == 'macos-x86_64'
+        run: |
+          # Nuitka 4.0+ has a dependency scan bug with brew-installed openssl@3 on Intel Macs.
+          # Unlinking it forces Nuitka to use the OpenSSL bundled with the Python distribution.
+          brew unlink openssl@3 || true
+
       - name: Build with Nuitka (macOS)
         if: runner.os == 'macOS'
         run: |
