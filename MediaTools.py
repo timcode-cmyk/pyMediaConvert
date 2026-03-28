@@ -21,25 +21,20 @@ if sys.stdout and hasattr(sys.stdout, 'reconfigure'):
 # --- 3. 导入业务组件 ---
 # 只有在路径初始化之后，import 内部包才安全
 from pyMediaTools import setup_logging
-from pyMediaTools.ui import MediaConverterWidget, ElevenLabsWidget, VideoDownloadWidget, VideoCutWidget, ASSEditorWidget
-from PySide6.QtWidgets import QApplication, QMainWindow, QTabWidget
+from pyMediaTools.ui import MediaConverterWidget, ElevenLabsWidget, VideoDownloadWidget, VideoCutWidget, ASSEditorWidget, DashboardWindow
+from PySide6.QtWidgets import QApplication
 
 setup_logging()
 
-
-class MainWindow(QMainWindow):
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle("MediaTools")
-        self.resize(900, 700)
-        tabs = QTabWidget()
-        tabs.addTab(MediaConverterWidget(), "媒体转换")
-        tabs.addTab(ElevenLabsWidget(), "ElevenLabs")
-        tabs.addTab(VideoCutWidget(), "场景分割")
-        tabs.addTab(VideoDownloadWidget(), "视频下载")
-        # tabs.addTab(RembgWidget(), "智能抠图")
-        tabs.addTab(ASSEditorWidget(), "ASS样式编辑器")
-        self.setCentralWidget(tabs)
+def create_main_window():
+    modules = [
+        ("工作台", MediaConverterWidget()),
+        ("视频配音", ElevenLabsWidget()),
+        ("场景分割", VideoCutWidget()),
+        ("视频下载", VideoDownloadWidget()),
+        ("字幕编辑", ASSEditorWidget()),
+    ]
+    return DashboardWindow(modules)
 
 
 
@@ -51,6 +46,6 @@ if __name__ == '__main__':
     app.setStyle("Fusion")
     app.setApplicationName("Media Tools")
 
-    win = MainWindow()
+    win = create_main_window()
     win.show()
     sys.exit(app.exec())

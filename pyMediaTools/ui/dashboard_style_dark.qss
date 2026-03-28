@@ -1,0 +1,125 @@
+/* Main Application Background */
+QMainWindow {
+    background-color: #1A202C;
+}
+
+/* Sidebar Styling */
+#Sidebar {
+    background-color: #2D3748;
+    border-right: 1px solid #4A5568;
+}
+
+/* Sidebar Buttons */
+#SidebarButton {
+    text-align: left;
+    padding: 12px 20px;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    color: #A0AEC0;
+    background-color: transparent;
+    margin: 4px 10px;
+}
+
+#SidebarButton:hover {
+    background-color: #4A5568;
+    color: #E2E8F0;
+}
+
+#SidebarButton[active="true"] {
+    background-color: #2A4365;
+    color: #63B3ED;
+    font-weight: bold;
+    border-left: 4px solid #63B3ED;
+    border-radius: 4px;
+}
+
+/* Sidebar Title/Logo Area */
+#SidebarTitle {
+    font-size: 18px;
+    font-weight: bold;
+    color: #E2E8F0;
+    padding: 20px 10px;
+}
+
+/* Header Styling */
+#Header {
+    background-color: transparent;
+}
+
+#HeaderTitle {
+    color: #E2E8F0;
+}
+
+#HeaderIcons {
+    color: #A0AEC0;
+}
+
+#HeaderSearch {
+    background-color: #2D3748;
+    border: 1px solid #4A5568;
+    border-radius: 18px;
+    padding: 8px 15px;
+    font-size: 13px;
+    color: #E2E8F0;
+}
+
+#HeaderSearch:focus {
+    border: 1px solid #63B3ED;
+}
+
+/* Base Card Style for internal widgets */
+QWidget#MainContentArea > QWidget {
+    background-color: transparent;
+}
+
+/* Styling internal groupboxes/cards to look like dashboard panels */
+QGroupBox {
+    background-color: #2D3748;
+    border-radius: 12px;
+    border: 1px solid #4A5568;
+    margin-top: 2ex; /* space for title */
+    font-weight: bold;
+    color: #E2E8F0;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    left: 15px;
+    top: 5px;
+    padding: 0 5px;
+    color: #A0AEC0;
+}
+
+QTabWidget::pane {
+    border: 1px solid #4A5568;
+    background-color: #2D3748;
+    border-radius: 8px;
+}
+
+QTabBar::tab {
+    background: #1A202C;
+    border: 1px solid #4A5568;
+    padding: 8px 16px;
+    margin-right: 2px;
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+    color: #A0AEC0;
+}
+
+QTabBar::tab:selected {
+    background: #2D3748;
+    border-bottom-color: #2D3748;
+    color: #63B3ED;
+    font-weight: bold;
+}
+
+QScrollArea {
+    border: none;
+    background-color: transparent;
+}
+
+QScrollArea > QWidget > QWidget {
+    background-color: transparent;
+}

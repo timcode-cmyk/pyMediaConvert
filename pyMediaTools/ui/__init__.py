@@ -8,6 +8,7 @@ from .video_downloader_ui import VideoDownloadWidget
 from .videocut_ui import VideoCutWidget
 # from .rembg_ui import RembgWidget
 from .ass_editor_ui import ASSEditorWidget
+from .dashboard_shell import DashboardWindow
 
 __all__ = [
     "ElevenLabsWidget",
@@ -16,4 +17,5 @@ __all__ = [
     "VideoCutWidget",
     # "RembgWidget",
     "ASSEditorWidget",
+    "DashboardWindow",
 ]
