@@ -21,7 +21,7 @@ if sys.stdout and hasattr(sys.stdout, 'reconfigure'):
 # --- 3. 导入业务组件 ---
 # 只有在路径初始化之后，import 内部包才安全
 from pyMediaTools import setup_logging
-from pyMediaTools.ui import MediaConverterWidget, ElevenLabsWidget, VideoDownloadWidget, VideoCutWidget, RembgWidget, ASSEditorWidget
+from pyMediaTools.ui import MediaConverterWidget, ElevenLabsWidget, VideoDownloadWidget, VideoCutWidget, ASSEditorWidget
 from PySide6.QtWidgets import QApplication, QMainWindow, QTabWidget
 
 setup_logging()
@@ -37,7 +37,7 @@ class MainWindow(QMainWindow):
         tabs.addTab(ElevenLabsWidget(), "ElevenLabs")
         tabs.addTab(VideoCutWidget(), "场景分割")
         tabs.addTab(VideoDownloadWidget(), "视频下载")
-        tabs.addTab(RembgWidget(), "智能抠图")
+        # tabs.addTab(RembgWidget(), "智能抠图")
         tabs.addTab(ASSEditorWidget(), "ASS样式编辑器")
         self.setCentralWidget(tabs)
 

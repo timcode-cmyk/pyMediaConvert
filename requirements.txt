@@ -5,14 +5,8 @@ pysrt
 toml
 
 # 图片处理
-Pillow>=10.0.0
-rembg>=2.0.50
 
 # 视频处理
 opencv-python
 
 # 模型下载
-huggingface_hub>=0.20.0
-
-numpy>=1.24.0
-onnxruntime

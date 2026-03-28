@@ -2,13 +2,15 @@ import os
 from pathlib import Path
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel, 
                                QLineEdit, QPushButton, QComboBox, QProgressBar, QMessageBox, 
-                               QFileDialog, QSizePolicy, QGroupBox, QApplication)
-from PySide6.QtCore import QObject, QThread, Signal, Slot, Qt
+                               QFileDialog, QSizePolicy, QGroupBox, QApplication,
+                               QTabWidget, QScrollArea, QCheckBox, QSpinBox)
+from PySide6.QtCore import QObject, QThread, Signal, Slot, Qt, QSettings
 from PySide6.QtGui import QFont
 
 from ..core.config import MODES
 from .styles import apply_common_style
 from pyMediaTools import get_logger
+from ..utils import load_project_config
 
 logger = get_logger(__name__)
 
@@ -21,7 +23,7 @@ class DropLineEdit(QLineEdit):
         self.setDragEnabled(True)
         self.setAcceptDrops(True)
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.setReadOnly(True)  # 防止手动乱输，鼓励拖拽或点击按钮
+        self.setReadOnly(True)  # 防止手动乱输
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasUrls():
@@ -32,7 +34,6 @@ class DropLineEdit(QLineEdit):
     def dropEvent(self, event):
         if event.mimeData().hasUrls():
             local_path = event.mimeData().urls()[0].toLocalFile()
-            # 直接使用路径本身，无论是文件还是目录
             self.setText(local_path)
             self.pathDropped.emit(local_path)
             event.accept()
@@ -59,7 +60,6 @@ class ProgressMonitor(QObject):
 
 
 class ConversionWorker(QObject):
-    # Emit (success: bool, error_msg: str)
     finished = Signal(bool, str)
 
     def __init__(self, input_dir, output_dir, mode_config, monitor, parent=None):
@@ -74,7 +74,6 @@ class ConversionWorker(QObject):
         is_successful = False
         error_msg = ""
         try:
-            # pm_worker.GlobalProgressMonitor = self.monitor
             ConverterClass = self.mode_config['class']
             converter = ConverterClass(
                 params=self.mode_config.get('params', {}),
@@ -86,12 +85,73 @@ class ConversionWorker(QObject):
         except Exception as e:
             import traceback
             error_msg = traceback.format_exc()
-            logger.exception(f"Worker 线程中发生未捕获的异常: {e}")
+            logger.exception(f"Worker 线程异常: {e}")
             is_successful = False
         finally:
-            # pm_worker.GlobalProgressMonitor = 无
-            # 发出错误消息（如果没有则为空字符串）
             self.finished.emit(is_successful, error_msg)
+
+
+class LogoConfigWidget(QWidget):
+    def __init__(self, platform_name, default_path, x, y, default_scale, blur, parent=None):
+        super().__init__(parent)
+        self.platform_name = platform_name
+        self.default_path = default_path
+        
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(5, 5, 5, 5)
+        
+        self.chk_enable = QCheckBox(platform_name)
+        layout.addWidget(self.chk_enable)
+        
+        self.spin_x = QSpinBox()
+        self.spin_x.setRange(0, 9999)
+        self.spin_x.setValue(x)
+        layout.addWidget(QLabel("X:"))
+        layout.addWidget(self.spin_x)
+        
+        self.spin_y = QSpinBox()
+        self.spin_y.setRange(0, 9999)
+        self.spin_y.setValue(y)
+        layout.addWidget(QLabel("Y:"))
+        layout.addWidget(self.spin_y)
+        
+        self.spin_scale = QSpinBox()
+        self.spin_scale.setRange(1, 1000)
+        self.spin_scale.setSuffix("%")
+        self.spin_scale.setValue(default_scale)
+        layout.addWidget(QLabel("比例:"))
+        layout.addWidget(self.spin_scale)
+        
+        self.chk_blur = QCheckBox("背景模糊")
+        self.chk_blur.setChecked(blur)
+        layout.addWidget(self.chk_blur)
+        
+        # Disable/Enable based on checkbox
+        def on_toggle(checked):
+            for widget in [self.spin_x, self.spin_y, self.spin_scale, self.chk_blur]:
+                widget.setEnabled(checked)
+        self.chk_enable.toggled.connect(on_toggle)
+        on_toggle(self.chk_enable.isChecked())
+        
+    def get_config(self):
+        return {
+            "enabled": self.chk_enable.isChecked(),
+            "name": self.platform_name,
+            "path": self.default_path,
+            "x": self.spin_x.value(),
+            "y": self.spin_y.value(),
+            "scale": self.spin_scale.value(),
+            "blur": self.chk_blur.isChecked()
+        }
+        
+    def set_config(self, cfg):
+        if not isinstance(cfg, dict):
+            return
+        self.chk_enable.setChecked(bool(cfg.get("enabled", False)))
+        self.spin_x.setValue(int(cfg.get("x", 0)))
+        self.spin_y.setValue(int(cfg.get("y", 0)))
+        self.spin_scale.setValue(int(cfg.get("scale", 100)))
+        self.chk_blur.setChecked(bool(cfg.get("blur", False)))
 
 
 class MediaConverterWidget(QWidget):
@@ -102,50 +162,89 @@ class MediaConverterWidget(QWidget):
         self.is_converting = False
         self.last_total_files = 0
         self.last_stop_requested = False
+        self.logo_widgets = []
         self.init_ui()
         self.apply_styles()
+        self.load_project_settings()
 
     def apply_styles(self):
-        # 使用统一的样式并保留向后扩展的能力
         apply_common_style(self)
 
     def init_ui(self):
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(20, 20, 20, 20) # 增加边距
+        main_layout.setContentsMargins(20, 20, 20, 20)
         main_layout.setSpacing(15)
 
-        # 标题区域
         title = QLabel("媒体转换工具 v1.13.5")
         title.setFont(QFont("Segoe UI", 20, QFont.Bold))
         title.setAlignment(Qt.AlignmentFlag.AlignLeft)
         main_layout.addWidget(title)
 
-        # 1. 模式选择区
-        mode_group = QGroupBox("STEP 1: 选择转换模式")
-        mode_layout = QVBoxLayout(mode_group)
+        # Tabs for Modes
+        self.tabs = QTabWidget()
+        
+        # ---------------- Tab 1: Watermark ----------------
+        self.tab_watermark = QWidget()
+        wm_layout = QVBoxLayout(self.tab_watermark)
+        
+        wm_desc = QLabel("多选下方 Logo，程序会将其叠加到视频上。可独立设置位置、缩放比例、并应用底层模糊。")
+        wm_desc.setWordWrap(True)
+        wm_layout.addWidget(wm_desc)
+        
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll_content = QWidget()
+        self.logos_layout = QVBoxLayout(scroll_content)
+        
+        platforms = [
+            ("Dreamina AI", "assets/Dream.png"),
+            ("Gemini", "assets/Gemini.png"),
+            ("Vidu", "assets/vidu.png"),
+            ("HeyGen", "assets/HeyGen.png"),
+            ("Veo", "assets/Veo.png"),
+            ("Kling", "assets/Kling.png"),
+        ]
+        
+        for name, pth in platforms:
+            # name, path, x, y, scale(%), blur
+            lw = LogoConfigWidget(name, pth, 700, 1810, 100, True)
+            self.logos_layout.addWidget(lw)
+            self.logo_widgets.append(lw)
+            
+        self.logos_layout.addStretch()
+        scroll.setWidget(scroll_content)
+        wm_layout.addWidget(scroll)
+        self.tabs.addTab(self.tab_watermark, "水印添加")
+        
+        # ---------------- Tab 2: Transcode ----------------
+        self.tab_transcode = QWidget()
+        tc_layout = QVBoxLayout(self.tab_transcode)
         
         self.mode_combo = QComboBox()
         self.mode_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.mode_combo.currentIndexChanged.connect(self.updateModeDescription)
         
-        self.desc_label = QLabel("请选择一个转换模式以查看详情。")
+        self.desc_label = QLabel("请选择转码模式以查看详情。")
         self.desc_label.setWordWrap(True)
         self.desc_label.setStyleSheet("color: palette(mid); margin-top: 5px;")
         
-        mode_layout.addWidget(self.mode_combo)
-        mode_layout.addWidget(self.desc_label)
-        main_layout.addWidget(mode_group)
+        tc_layout.addWidget(QLabel("常规转码模式:"))
+        tc_layout.addWidget(self.mode_combo)
+        tc_layout.addWidget(self.desc_label)
+        tc_layout.addStretch()
+        self.tabs.addTab(self.tab_transcode, "格式转码")
+        
+        main_layout.addWidget(self.tabs)
 
         # 2. 路径设置区
-        path_group = QGroupBox("STEP 2: 文件路径")
+        path_group = QGroupBox("源文件与输出")
         path_layout = QVBoxLayout(path_group)
         path_layout.setSpacing(10)
 
-        # 输入
         input_label = QLabel("输入源 (拖拽文件夹到下方框中):")
         self.input_path_edit = DropLineEdit()
         self.input_path_edit.setPlaceholderText("📂 拖放文件夹/文件到此处，或点击右侧按钮")
-        self.input_path_edit.setMinimumHeight(50) # 增加高度方便拖拽
+        self.input_path_edit.setMinimumHeight(40)
         self.input_path_edit.pathDropped.connect(self.updateOutputPath)
         self.input_path_edit.textChanged.connect(self.updateOutputPath)
         
@@ -160,7 +259,6 @@ class MediaConverterWidget(QWidget):
         path_layout.addWidget(input_label)
         path_layout.addLayout(input_box)
 
-        # 输出
         output_label = QLabel("输出目录:")
         self.output_path_edit = QLineEdit()
         self.output_path_edit.setPlaceholderText("转换后的文件将保存在这里")
@@ -175,11 +273,10 @@ class MediaConverterWidget(QWidget):
         
         path_layout.addWidget(output_label)
         path_layout.addLayout(output_box)
-        
         main_layout.addWidget(path_group)
 
         # 3. 进度与操作区
-        progress_group = QGroupBox("STEP 3: 状态与控制")
+        progress_group = QGroupBox("状态与控制")
         progress_layout = QVBoxLayout(progress_group)
         progress_layout.setSpacing(8)
 
@@ -187,7 +284,6 @@ class MediaConverterWidget(QWidget):
         self.status_label.setObjectName("StatusLabel")
         self.status_label.setWordWrap(True)
         
-        # 进度条
         progress_layout.addWidget(QLabel("总进度:"))
         self.overall_progress_bar = QProgressBar()
         self.overall_progress_bar.setRange(0, 100)
@@ -213,7 +309,6 @@ class MediaConverterWidget(QWidget):
         progress_layout.addWidget(self.status_label)
         main_layout.addWidget(progress_group)
 
-        # 启动按钮
         self.start_stop_button = QPushButton("🚀 开始转换")
         self.start_stop_button.setObjectName('StartStopButton')
         self.start_stop_button.setCursor(Qt.PointingHandCursor)
@@ -225,11 +320,52 @@ class MediaConverterWidget(QWidget):
 
         self.loadModes()
 
+    def load_project_settings(self):
+        try:
+            settings = QSettings("pyMediaTools", "WatermarkSettings")
+            for lw in self.logo_widgets:
+                settings.beginGroup(lw.platform_name)
+                # Ensure something is actually saved here before calling set
+                if settings.contains("enabled"):
+                     cfg = {
+                         "enabled": str(settings.value("enabled", "false")).lower() in ('true', '1'),
+                         "x": int(settings.value("x", 0)),
+                         "y": int(settings.value("y", 0)),
+                         "scale": int(settings.value("scale", 100)),
+                         "blur": str(settings.value("blur", "false")).lower() in ('true', '1'),
+                     }
+                     lw.set_config(cfg)
+                settings.endGroup()
+        except Exception as e:
+            logger.error(f"Failed to load UI layout settings: {e}")
+            
+    def save_project_settings(self):
+        try:
+            settings = QSettings("pyMediaTools", "WatermarkSettings")
+            for lw in self.logo_widgets:
+                settings.beginGroup(lw.platform_name)
+                cfg = lw.get_config()
+                settings.setValue("enabled", cfg["enabled"])
+                settings.setValue("x", cfg["x"])
+                settings.setValue("y", cfg["y"])
+                settings.setValue("scale", cfg["scale"])
+                settings.setValue("blur", cfg["blur"])
+                settings.endGroup()
+            settings.sync()
+        except Exception as e:
+            logger.error(f"Failed to save UI layout settings: {e}")
+
     def loadModes(self):
         if not MODES:
             self.mode_combo.addItem("ERROR: Config file not loaded.", None)
             return
+        
+        # 只在转码 Tab 展示非 Logo 的转换模式
+        # 也就是不在模式里展示 LogoConverter，因为我们在水印tab原生支持
+        from ..core.mediaconvert import LogoConverter
         for key, config in MODES.items():
+            if config['class'] == LogoConverter:
+                continue
             display_text = f"{config['description']} [{key}]"
             self.mode_combo.addItem(display_text, key)
         self.updateModeDescription()
@@ -245,7 +381,6 @@ class MediaConverterWidget(QWidget):
             self.desc_label.setText("模式说明: 未知模式或配置未加载。")
 
     def selectInputPath(self):
-        # 允许用户选文件或目录，文件路径会直接作为输入
         path, _ = QFileDialog.getOpenFileName(self, "选择输入文件或目录", "", "All Files (*);;Videos (*.mp4 *.mkv *.mov *.avi *.m4v *.webm)")
         if not path:
             path = QFileDialog.getExistingDirectory(self, "选择输入目录")
@@ -275,14 +410,14 @@ class MediaConverterWidget(QWidget):
             self.startConversion()
 
     def startConversion(self):
+        # 1. 保存设置
+        self.save_project_settings()
+        
         input_dir = self.input_path_edit.text().strip()
         output_dir = self.output_path_edit.text().strip()
-        mode_key = self.mode_combo.currentData()
-        mode_config = MODES.get(mode_key)
         
-        # 输入可以是目录或单个文件，底层 converter.run() 会处理
-        if not (os.path.isdir(input_dir) or os.path.isfile(input_dir)) or not mode_config:
-            QMessageBox.critical(self, "配置错误", "请输入有效的文件或文件夹路径并选择转换模式。")
+        if not (os.path.isdir(input_dir) or os.path.isfile(input_dir)):
+            QMessageBox.critical(self, "配置错误", "请输入有效的文件或文件夹路径。")
             return
             
         if not os.path.exists(output_dir):
@@ -292,10 +427,58 @@ class MediaConverterWidget(QWidget):
                 QMessageBox.critical(self, "系统错误", f"无法创建输出目录: {e}")
                 return
 
+        current_tab_idx = self.tabs.currentIndex()
+        if current_tab_idx == 0:
+            # Watermark Tab Mode
+            active_logos = []
+
+            # 添加勾选的平台
+            for lw in self.logo_widgets:
+                c = lw.get_config()
+                if c["enabled"]:
+                    if c["name"] == "Dreamina AI":
+                        # Dream_AI 锁定在左上角
+                        active_logos.append({
+                            "logo_path": "assets/Dream_AI.png",
+                            "x": 0, "y": 0, "scale": 100, "blur": False
+                        })
+                    
+                    active_logos.append({
+                        "logo_path": c["path"],
+                        "x": c["x"],
+                        "y": c["y"],
+                        "scale": c["scale"],
+                        "blur": c["blur"]
+                    })
+            
+            if len(active_logos) == 0:
+                QMessageBox.warning(self, "参数错误", "请至少勾选一个平台徽标！")
+                return
+            
+            from ..core.mediaconvert import LogoConverter
+            # Dynamic mode config
+            mode_config = {
+                'class': LogoConverter,
+                'support_exts': [".mp4", ".mov", ".mkv", ".webm", ".avi"],
+                'output_ext': "_watermarked.mp4",
+                'params': {
+                    'target_w': 1080,  # 默认竖屏
+                    'target_h': 1920,
+                    'logos': active_logos
+                }
+            }
+        else:
+            # Transcode Mode
+            mode_key = self.mode_combo.currentData()
+            mode_config = MODES.get(mode_key)
+            if not mode_config:
+                QMessageBox.critical(self, "配置错误", "请选择有效的转换模式。")
+                return
+
         # 检查文件
         try:
             self.status_label.setText("正在扫描文件...")
-            QApplication.processEvents() # 刷新界面
+            QApplication.processEvents() 
             temp_worker = mode_config['class'](params=mode_config.get('params', {}), support_exts=mode_config.get('support_exts'), init_checks=False)
             temp_worker.find_files(Path(input_dir))
             files_to_process_count = len(temp_worker.files)
@@ -308,7 +491,6 @@ class MediaConverterWidget(QWidget):
             QMessageBox.warning(self, "无文件", f"在目录中未找到支持的文件类型。\n支持类型: {mode_config.get('support_exts')}")
             return
 
-        # UI 状态更新
         self.last_total_files = files_to_process_count
         self.last_stop_requested = False
         self.is_converting = True
@@ -324,7 +506,6 @@ class MediaConverterWidget(QWidget):
         self.file_progress_text.setText("准备中...")
         self.status_label.setText(f"正在初始化 Worker，共 {self.last_total_files} 个文件...")
 
-        # 线程启动
         self.worker_thread = QThread()
         self.conversion_monitor = ProgressMonitor()
         self.worker = ConversionWorker(input_dir, output_dir, mode_config, self.conversion_monitor)
@@ -355,21 +536,18 @@ class MediaConverterWidget(QWidget):
             self.file_progress_bar.setValue(0)
             self.file_progress_text.setText("计算中...")
         
-        # 在状态栏显示当前文件名，截断过长的名字
         display_name = (file_name[:40] + '..') if len(file_name) > 40 else file_name
         self.status_label.setText(f"正在处理: {display_name}")
 
     @Slot(int, int, str)
     def updateOverallProgress(self, current: int, total: int, status: str):
         if total > 0:
-            # clamp and compute percent
             pct = int((current / total) * 100.0)
             if current >= total:
                 pct = 100
             self.overall_progress_bar.setValue(pct)
             self.overall_progress_text.setText(f"{current}/{total} ({pct}%)")
         
-        # if conversion already stopped, don't override status text
         if not self.is_converting:
             self.status_label.setText(status)
 
@@ -394,11 +572,8 @@ class MediaConverterWidget(QWidget):
             QMessageBox.information(self, "已中断", "转换操作已停止。")
         else:
             self.status_label.setText("转换过程中遇到错误。")
-            # 显示更详细的错误信息到用户，方便诊断（如果有长堆栈则只显示首行摘要并记录完整堆栈到日志）
             if error_msg:
-                # 取首条异常消息作为摘要
                 first_line = error_msg.strip().splitlines()[0]
-                # 如果是资源缺失（如字体），给出更友好的提示
                 if "not found" in first_line.lower() or "未找到" in first_line:
                     QMessageBox.critical(self, "错误", f"资源未找到：{first_line}\n请检查 assets/ 目录并确保字体/资源存在。")
                 else:

@@ -89,6 +89,27 @@ def load_project_config() -> dict:
         _PROJECT_CONFIG = _toml.loads(data.decode())
     return _PROJECT_CONFIG
 
+def save_project_config(config_dict: dict):
+    """将配置字典保存回 config.toml"""
+    global _PROJECT_CONFIG
+    _PROJECT_CONFIG = config_dict
+    cfg_path = find_config_path()
+    if not cfg_path:
+        # 若没找到现有配置，默认写入基础目录
+        cfg_path = BASE_DIR / 'config.toml'
+        
+    if _toml is None:
+        import logging
+        logging.getLogger(__name__).error("TOML parser not available. Cannot save config.")
+        return
+        
+    try:
+        with open(cfg_path, 'w', encoding='utf-8') as f:
+            _toml.dump(config_dict, f)
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception(f"配置保存失败: {e}")
+
 
 def get_elevenlabs_config() -> dict:
     return load_project_config().get('elevenlabs', {}) or {}

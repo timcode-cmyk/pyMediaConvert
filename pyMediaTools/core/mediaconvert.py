@@ -462,17 +462,43 @@ class LogoConverter(MediaConverter):
         if raw_logos:
             self.logos = []
             for entry in raw_logos:
-                lp = Path(get_resource_path(entry.get('logo_path')))
+                lp = str(get_resource_path(entry.get('logo_path')))
+                
+                # Resolve actual path for finding size
+                test_path = Path(lp)
+                if "%" in lp:
+                    test_path = Path(lp % 1)
+                    if not test_path.exists():
+                         test_path = Path(lp % 0)
+
+                if not test_path.exists():
+                    raise FileNotFoundError(f"Logo not found: {test_path}")
+
+                from PySide6.QtGui import QImage
+                img = QImage(str(test_path))
+                orig_w, orig_h = img.width(), img.height()
+                if orig_w == 0 or orig_h == 0:
+                     orig_w, orig_h = 100, 100
+                
+                # If explicit w/h provided, use them, otherwise use scale
+                if 'w' in entry and 'h' in entry:
+                    final_w = entry['w']
+                    final_h = entry['h']
+                else:
+                    scale = entry.get('scale', 100)
+                    final_w = int(orig_w * scale / 100)
+                    final_h = int(orig_h * scale / 100)
+
                 self.logos.append({
                     'path': lp,
                     'x': entry.get('x', 0),
                     'y': entry.get('y', 0),
-                    'w': entry.get('logo_w', entry.get('w', None)),
-                    'h': entry.get('logo_h', entry.get('h', None)),
+                    'w': final_w,
+                    'h': final_h,
                     'blur': entry.get('blur', True),
                 })
         else:
-            lp = Path(get_resource_path(params.get('logo_path')))
+            lp = str(get_resource_path(params.get('logo_path')))
             self.logos = [{
                 'path': lp,
                 'x': params.get('x', 10),
@@ -483,10 +509,6 @@ class LogoConverter(MediaConverter):
             }]
 
         super().__init__(support_exts=support_exts, output_ext=output_ext, init_checks=init_checks)
-
-        for logo in self.logos:
-            if not logo['path'].exists():
-                raise FileNotFoundError(f"Logo not found: {logo['path']}")
 
     def process_file(self, input_path: Path, output_path: Path, duration: float, monitor=None):
         output_file_name = f"{output_path}{self.output_ext}" 
@@ -542,7 +564,11 @@ class LogoConverter(MediaConverter):
             "-i", str(input_path)
         ]
         for logo in self.logos:
-            cmd.extend(["-i", str(logo['path'])])
+            lp = str(logo['path'])
+            if "%" in lp:
+                cmd.extend(["-stream_loop", "-1", "-framerate", "25", "-i", lp])
+            else:
+                cmd.extend(["-i", lp])
 
         # 根据实际使用的编码器，附加合适的质量 / 码率参数，避免依赖各平台默认值
         extra_video_args: list[str] = []
