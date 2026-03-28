@@ -401,36 +401,36 @@ class YtDlpVersionManager:
             logger.error(f"回滚失败: {e}")
             return False
     
-    def get_release_info(self, version: str) -> Optional[Dict]:
-        """
-        获取特定版本的发布信息（更新日志、发布时间等）
+    # def get_release_info(self, version: str) -> Optional[Dict]:
+    #     """
+    #     获取特定版本的发布信息（更新日志、发布时间等）
         
-        Args:
-            version: 版本号
+    #     Args:
+    #         version: 版本号
             
-        Returns:
-            发布信息字典
-        """
-        try:
-            url = f"https://api.github.com/repos/yt-dlp/yt-dlp/releases/tags/{version}"
+    #     Returns:
+    #         发布信息字典
+    #     """
+    #     try:
+    #         url = f"https://api.github.com/repos/yt-dlp/yt-dlp/releases/tags/{version}"
             
-            request = urllib.request.Request(
-                url,
-                headers={'User-Agent': 'Mozilla/5.0 (pyMediaTools)'}
-            )
+    #         request = urllib.request.Request(
+    #             url,
+    #             headers={'User-Agent': 'Mozilla/5.0 (pyMediaTools)'}
+    #         )
             
-            with urllib.request.urlopen(request, timeout=10) as response:
-                data = json.loads(response.read().decode('utf-8'))
-                return {
-                    'version': version,
-                    'published_at': data.get('published_at'),
-                    'body': data.get('body'),
-                    'download_url': data.get('html_url'),
-                }
+    #         with urllib.request.urlopen(request, timeout=10) as response:
+    #             data = json.loads(response.read().decode('utf-8'))
+    #             return {
+    #                 'version': version,
+    #                 'published_at': data.get('published_at'),
+    #                 'body': data.get('body'),
+    #                 'download_url': data.get('html_url'),
+    #             }
                 
-        except Exception as e:
-            logger.warning(f"获取发布信息失败: {e}")
-            return None
+    #     except Exception as e:
+    #         logger.warning(f"获取发布信息失败: {e}")
+    #         return None
 
 
 class YtDlpUpdater(YtDlpVersionManager):

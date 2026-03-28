@@ -1,14 +1,14 @@
 """
 项目名称: pyMediaTools
 创建日期: 2025-12-20
-作者: TimCode
-版本: v1.13.5
+作者: timcode-cmyk
+版本: v1.14.3
 许可证: GPL License
 """
 
-__version__ = "1.13.5"
-__author__ = "TimCode"
-__description__ = "A professional media conversion tool based on FFmpeg"
+__version__ = "1.14.3"
+__author__ = "timcode-cmyk"
+__description__ = "A professional media toolkit built with Python and PySide6, offering a suite of utilities for video editing, audio processing, and more."
 __license__ = "GPL License"
 
 import sys
@@ -34,7 +34,7 @@ def create_main_window():
         ("视频下载", VideoDownloadWidget()),
         ("字幕编辑", ASSEditorWidget()),
     ]
-    return DashboardWindow(modules)
+    return DashboardWindow(modules, version=__version__)
 
 
 
