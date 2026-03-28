@@ -89,7 +89,8 @@ def setup_binaries():
     urls = {
         'ffmpeg': {
             'darwin': {
-                'arm64': 'https://evermeet.cx/ffmpeg/ffmpeg-8.1.zip', # Direct link to 8.1 stable
+                'arm64': 'https://evermeet.cx/ffmpeg/ffmpeg-8.1.zip',
+                'x86_64': 'https://evermeet.cx/ffmpeg/ffmpeg-8.1.zip',
             },
             'windows': {
                 'x86_64': 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip'
@@ -98,17 +99,10 @@ def setup_binaries():
         'ffprobe': {
             'darwin': {
                 'arm64': 'https://evermeet.cx/ffmpeg/ffprobe-8.1.zip',
+                'x86_64': 'https://evermeet.cx/ffmpeg/ffprobe-8.1.zip',
             }
         },
-        # 'aria2': {
-        #     'darwin': {
-        #         'arm64': 'https://github.com/q3aql/aria2-static-builds/releases/download/v1.37.0/aria2-1.37.0-macos-arm64.tar.xz' # Removed the extra -1
-        #     },
-        #     'windows': {
-        #         'x86_64': 'https://github.com/aria2/aria2/releases/download/release-1.37.0/aria2-1.37.0-win-64bit-build1.zip'
-        #     }
-        # },
-        'yt-dlp': 'https://github.com/yt-dlp/yt-dlp/archive/refs/heads/release.zip' # Use a specific version for stability
+        'yt-dlp': 'https://github.com/yt-dlp/yt-dlp/archive/refs/heads/release.zip'
     }
 
     temp_dir = os.path.join(root_dir, 'temp_downloads')
@@ -116,14 +110,21 @@ def setup_binaries():
 
     try:
         # 1. Download and Setup ffmpeg/ffprobe
-        if os_name == 'darwin' and arch == 'arm64':
+        if os_name == 'darwin':
             for tool in ['ffmpeg', 'ffprobe']:
                 target_path = os.path.join(bin_dir, tool)
                 if os.path.exists(target_path):
                     print(f"{tool} already exists, skipping download.")
                     continue
+                
+                # Default to arm64 and fallback to x86_64 if not found (though they are same URL here)
+                url = urls[tool]['darwin'].get(arch, urls[tool]['darwin'].get('x86_64'))
+                if not url:
+                    print(f"No {tool} URL found for architecture {arch}")
+                    continue
+                    
                 zip_path = os.path.join(temp_dir, f"{tool}.zip")
-                download_file(urls[tool]['darwin']['arm64'], zip_path)
+                download_file(url, zip_path)
                 extract_archive(zip_path, bin_dir)
                 make_executable(target_path)
         
@@ -165,10 +166,16 @@ def setup_binaries():
             yt_zip = os.path.join(temp_dir, "yt-dlp.zip")
             download_file(urls['yt-dlp'], yt_zip)
             extract_archive(yt_zip, temp_dir)
-            yt_dir_name = next(d for d in os.listdir(temp_dir) if d.startswith('yt-dlp'))
+            
+            # Specifically filter for directories to avoid picking up the zip file itself
+            yt_dir_name = next(d for d in os.listdir(temp_dir) 
+                              if d.startswith('yt-dlp') and os.path.isdir(os.path.join(temp_dir, d)))
             yt_extracted = os.path.join(temp_dir, yt_dir_name, "yt_dlp")
             
-            shutil.move(yt_extracted, target_yt_dlp)
+            if os.path.exists(yt_extracted):
+                shutil.move(yt_extracted, target_yt_dlp)
+            else:
+                raise FileNotFoundError(f"Could not find 'yt_dlp' folder in {yt_extracted}")
         else:
             print("yt_dlp folder already exists, skipping.")
 
