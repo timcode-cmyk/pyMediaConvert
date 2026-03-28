@@ -9,11 +9,11 @@ def _get_base_font():
     sys_name = platform.system()
     if sys_name == 'Darwin':
         # SF Pro is standard on macOS, but we include common fallbacks
-        return ".AppleSystemUIFont, Helvetica Neue, Helvetica, Arial, sans-serif"
+        return '".AppleSystemUIFont", "Helvetica Neue", Helvetica, Arial, sans-serif'
     elif sys_name == 'Windows':
-        return "Segoe UI, Microsoft YaHei, Arial, sans-serif"
+        return '"Segoe UI", "Microsoft YaHei", Arial, sans-serif'
     else:
-        return "Inter, Roboto, Noto Sans, Arial, sans-serif"
+        return 'Inter, Roboto, "Noto Sans", Arial, sans-serif'
 
 
 def generate_common_qss(app: QApplication = None, font_size: int = 14) -> str:
@@ -37,7 +37,7 @@ def generate_common_qss(app: QApplication = None, font_size: int = 14) -> str:
 
     qss = f"""
     QWidget {{
-        font-family: "{base_font}";
+        font-family: {base_font};
         font-size: {font_size}px;
         color: palette(text);
     }}

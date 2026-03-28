@@ -31,10 +31,15 @@ class EmotionTagButton(QPushButton):
         self.setToolTip(emotion_info.get('description',''))
         self.setCheckable(False)
         # 根据组设置不同颜色
-        # Calculate a slightly darker color for hover
         if self.group == 'emotion':
+            bg = '#FFB86B'  # 浅橙色
+            border = '#E79A40'
+            fg = '#4a2b00'
             hover_bg = '#E7A45B'
         else:
+            bg = '#6DD3C3'  # 浅青色
+            border = '#49b3a3'
+            fg = '#003633'
             hover_bg = '#59BCAB'
 
         self.setStyleSheet(f"""
