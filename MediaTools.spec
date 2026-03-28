@@ -2,7 +2,7 @@
 
 import sys
 import os
-from PyInstaller.utils.hooks import collect_data_files
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 # 获取当前项目根目录，确保路径处理的一致性
 block_cipher = None
@@ -24,13 +24,7 @@ a = Analysis(
     hiddenimports=[
         'pysrt',
         'toml',
-        'pyMediaTools.core.factory',
-        'pyMediaTools.core.config',
-        'pyMediaTools.core.mediaconvert',
-        'pyMediaTools.ui.media_tools_ui',
-        'pyMediaTools.ui.elevenlabs_ui',
-        'pyMediaTools.ui.download_manager_ui',
-        'pyMediaTools.ui.video_downloader_ui',
+        *collect_submodules('pyMediaTools'), # 自动收集项目内所有子模块
     ],
     hookspath=[],
     hooksconfig={},

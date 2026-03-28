@@ -47,7 +47,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install nuitka
-          python build.py
+          python install_dependencies.py
 
       - name: Extract Version from Tag
         shell: bash
@@ -161,8 +161,102 @@ jobs:
           name: artifacts-${{ matrix.platform_tag }}
           path: out/*
 
+  build_pyinstaller:
+    name: PyInstaller Build for ${{ matrix.platform_tag }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: windows-x86_64
+            platform_tag: win-x64
+            is_win: true
+          - os: macos-latest
+            platform: macos-arm64
+            platform_tag: mac-AppleSilicon
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+          python install_dependencies.py
+
+      - name: Extract Version from Tag
+        shell: bash
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          echo "APP_VERSION=$VERSION" >> $GITHUB_ENV
+          echo "BASENAME=MediaTools-v$VERSION-${{ matrix.platform_tag }}-PyInstaller" >> $GITHUB_ENV
+
+      - name: Set up NSIS (Windows)
+        if: matrix.is_win
+        run: choco install nsis -y
+
+      - name: Prepare Binaries (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          chmod +x bin/ffmpeg bin/ffprobe || true
+
+      - name: Build with PyInstaller (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          pyinstaller MediaTools.spec --noconfirm
+
+      - name: Build with PyInstaller (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          pyinstaller MediaTools.spec --noconfirm
+
+      - name: Build Installer (Windows)
+        if: matrix.is_win
+        run: |
+          & "C:\Program Files (x86)\NSIS\makensis.exe" `
+            /DVERSION="${{ env.APP_VERSION }}" `
+            /DOUTFILE="${{ env.BASENAME }}.exe" `
+            installer.nsi
+  
+      - name: Final Package
+        shell: bash
+        run: |
+          mkdir -p out
+          if [ "${{ runner.os }}" == "Windows" ]; then
+            powershell.exe -Command "Compress-Archive -Path 'dist/MediaTools/*' -DestinationPath 'out/${{ env.BASENAME }}.zip' -Force"
+            if [ -f "${{ env.BASENAME }}.exe" ]; then
+              mv "${{ env.BASENAME }}.exe" out/
+            fi
+          else
+            xattr -cr dist/MediaTools.app
+            codesign --force --deep --sign - dist/MediaTools.app
+            mkdir -p dist-dmg
+            cp -R dist/MediaTools.app dist-dmg/
+            ln -s /Applications dist-dmg/Applications
+            hdiutil create -srcfolder dist-dmg \
+                           -volname "MediaTools" \
+                           -format UDZO \
+                           -ov \
+                           "out/${{ env.BASENAME }}.dmg"
+          fi
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: artifacts-pyinstaller-${{ matrix.platform_tag }}
+          path: out/*
+
   release:
-    needs: build
+    needs: [build, build_pyinstaller]
     runs-on: ubuntu-latest
     permissions:
       contents: write
