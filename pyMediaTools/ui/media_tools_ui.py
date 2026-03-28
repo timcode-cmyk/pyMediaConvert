@@ -196,14 +196,17 @@ class MediaConverterWidget(QWidget):
         scroll_content = QWidget()
         self.logos_layout = QVBoxLayout(scroll_content)
         
-        platforms = [
-            ("Dreamina AI", "assets/Dream.png"),
-            ("Gemini", "assets/Gemini.png"),
-            ("Vidu", "assets/vidu.png"),
-            ("HeyGen", "assets/HeyGen.png"),
-            ("Veo", "assets/Veo.png"),
-            ("Kling", "assets/Kling.png"),
-        ]
+        # 从 config.toml 加载平台配置
+        config = load_project_config()
+        platforms = config.get('watermark', {}).get('platforms', [
+            ["Dreamina AI", "assets/Dream.png"],
+            ["Gemini", "assets/Gemini.png"],
+            ["Vidu", "assets/vidu.png"],
+            ["Veo", "assets/Veo.png"],
+            ["Kling", "assets/Kling.png"],
+            ["Hailuo", "assets/Hailuo.png"],
+            ["HeyGen", "assets/HeyGen.png"],
+        ])
         
         for name, pth in platforms:
             # name, path, x, y, scale(%), blur

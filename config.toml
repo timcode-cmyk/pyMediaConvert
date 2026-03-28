@@ -1,73 +1,14 @@
 # MediaConvertMODES 配置
 
-[modes.hailuo]
-class = "LogoConverter"
-description = "1. 添加 Dream+Hailuo Logo (竖屏)"
-output_ext = "_hailuo.mp4"
-support_exts = [".mp4"]
-
-[modes.hailuo.params]
-target_w = 1080
-target_h = 1920
-logos = [
-  { x = 590, y = 1810, logo_w = 475, logo_h = 90, logo_path = "assets/hailuoDream.png" },
-  { x = 0, y = 0, logo_w = 100, logo_h = 100, logo_path = "assets/Dream_AI.png", blur = true }
-]
-
-[modes.vidu]
-class = "LogoConverter"
-description = "2. 添加 Dream+Vidu Logo (竖屏)"
-output_ext = "_vidu.mp4"
-support_exts = [".mp4"]
-
-[modes.vidu.params]
-target_w = 1080
-target_h = 1920
-logos = [
-  { x = 700, y = 1810, logo_w = 360, logo_h = 90, logo_path = "assets/viduDream.png" },
-  { x = 0, y = 0, logo_w = 100, logo_h = 100, logo_path = "assets/Dream_AI.png", blur = true }
-]
-
-[modes.veo]
-class = "LogoConverter"
-description = "3. 添加 Dream+Veo Logo (竖屏)"
-output_ext = "_veo.mp4"
-support_exts = [".mp4"]
-
-[modes.veo.params]
-target_w = 1080
-target_h = 1920
-logos = [
-  { x = 700, y = 1810, logo_w = 360, logo_h = 90, logo_path = "assets/VeoDream.png" },
-  { x = 0, y = 0, logo_w = 100, logo_h = 100, logo_path = "assets/Dream_AI.png", blur = true }
-]
-
-[modes.heygen]
-class = "LogoConverter"
-description = "4. 添加 Dream+HegGen Logo (竖屏)"
-output_ext = "_veo.mp4"
-support_exts = [".mp4"]
-
-[modes.heygen.params]
-target_w = 1080
-target_h = 1920
-logos = [
-  { x = 700, y = 1810, logo_w = 360, logo_h = 90, logo_path = "assets/HeyGenDream.png" },
-  { x = 0, y = 0, logo_w = 100, logo_h = 100, logo_path = "assets/Dream_AI.png", blur = true }
-]
-
-[modes.dream]
-class = "LogoConverter"
-description = "5. 添加 Dreamina Logo (竖屏)"
-output_ext = "_Dream.mp4"
-support_exts = [".mp4"]
-
-[modes.dream.params]
-target_w = 1080
-target_h = 1920
-logos = [
-  { x = 700, y = 1810, logo_w = 360, logo_h = 90, logo_path = "assets/Dream.png" },
-  { x = 0, y = 0, logo_w = 100, logo_h = 100, logo_path = "assets/Dream_AI.png", blur = true }
+[watermark]
+platforms = [
+    ["Dreamina AI", "assets/Dream.png"],
+    ["Gemini", "assets/Gemini.png"],
+    ["Vidu", "assets/vidu.png"],
+    ["Veo", "assets/Veo.png"],
+    ["Kling", "assets/Kling.png"],
+    ["Hailuo", "assets/Hailuo.png"],
+    ["HeyGen", "assets/HeyGen.png"],
 ]
 
 [modes.image]
