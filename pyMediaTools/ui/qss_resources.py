@@ -161,13 +161,21 @@ QScrollArea > QWidget > QWidget {
 LIGHT_STYLE = """
 /* Main Application Background */
 QMainWindow {
+    background-color: transparent;
+}
+
+#MainContainer {
     background-color: #F0F4FA;
+    border-radius: 12px;
+    border: 1px solid #E2E8F0;
 }
 
 /* Sidebar Styling */
 #Sidebar {
     background-color: #FFFFFF;
     border-right: 1px solid #E5E9F2;
+    border-top-left-radius: 12px;
+    border-bottom-left-radius: 12px;
 }
 
 /* Sidebar Buttons */
@@ -208,7 +216,7 @@ QMainWindow {
     background-color: transparent;
 }
 
-#HeaderTitle {
+#HeaderTitleText, #HeaderTitle {
     color: #2D3748;
 }
 
@@ -284,4 +292,24 @@ QScrollArea {
 QScrollArea > QWidget > QWidget {
     background-color: transparent;
 }
+
+/* --- Window Controls (macOS Traffic Lights) --- */
+#WindowClose { background-color: #FF5F56; border-radius: 6px; border: none; }
+#WindowClose:hover { background-color: #E04E47; }
+#WindowMin { background-color: #FFBD2E; border-radius: 6px; border: none; }
+#WindowMin:hover { background-color: #E0A428; }
+#WindowMax { background-color: #27C93F; border-radius: 6px; border: none; }
+#WindowMax:hover { background-color: #1EA632; }
+
+/* --- Window Controls (Windows Style) --- */
+#WinMin, #WinMax, #WinClose {
+    background: transparent;
+    border: none;
+    color: #4A5568;
+    font-size: 16px;
+    padding: 5px 10px;
+    min-width: 30px;
+}
+#WinMin:hover, #WinMax:hover { background-color: #E2E8F0; }
+#WinClose:hover { background-color: #E81123; color: white; }
 """
