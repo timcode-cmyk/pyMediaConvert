@@ -162,7 +162,7 @@ class DashboardWindow(QMainWindow):
         self.version_label.mousePressEvent = lambda e: self.show_update_dialog()
         sidebar_layout.addWidget(self.version_label)
 
-        github_link = QLabel("<a href='https://github.com/timcode-cmyk/pyMediaTools' style='color: #4A5568; text-decoration: none;'>GitHub Project</a>")
+        github_link = QLabel("<a href='https://github.com/timcode-cmyk/pyMediaConvert' style='color: #4A5568; text-decoration: none;'>GitHub Project</a>")
         github_link.setAlignment(Qt.AlignCenter)
         github_link.setOpenExternalLinks(True)
         github_link.setStyleSheet("font-size: 11px; margin-bottom: 10px;")

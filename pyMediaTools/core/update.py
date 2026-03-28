@@ -1,12 +1,13 @@
 import requests
 
-def check_latest_release(repo="TimCode/pyMediaTools", current_version="1.0.0"):
+def check_latest_release(repo="secure-artifacts/pyMediaTools", current_version="1.0.0"):
     """
     使用 Requests 获取 GitHub 最新 Release 信息
     """
     try:
         api_url = f"https://api.github.com/repos/{repo}/releases/latest"
-        response = requests.get(api_url, timeout=10)
+        headers = {"User-Agent": "pyMediaTools-Updater"}
+        response = requests.get(api_url, headers=headers, timeout=10)
         if response.status_code == 200:
             data = response.json()
             latest_version = data.get("tag_name", "").replace("v", "")
