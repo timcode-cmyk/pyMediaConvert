@@ -295,13 +295,9 @@ class DashboardWindow(QMainWindow):
 
     def apply_stylesheet(self, scheme=None):
         from PySide6.QtCore import Qt
+        from .qss_resources import DARK_STYLE, LIGHT_STYLE
         
         if scheme == Qt.ColorScheme.Dark:
-            file_name = "dashboard_style_dark.qss"
+            self.setStyleSheet(DARK_STYLE)
         else:
-            file_name = "dashboard_style_light.qss"
-
-        style_path = os.path.join(os.path.dirname(__file__), file_name)
-        if os.path.exists(style_path):
-            with open(style_path, "r", encoding="utf-8") as f:
-                self.setStyleSheet(f.read())
+            self.setStyleSheet(LIGHT_STYLE)

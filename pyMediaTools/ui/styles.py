@@ -8,11 +8,12 @@ __all__ = ["generate_common_qss", "apply_common_style"]
 def _get_base_font():
     sys_name = platform.system()
     if sys_name == 'Darwin':
-        return "SF Pro Text, Helvetica Neue, Helvetica, Arial, sans-serif"
+        # SF Pro is standard on macOS, but we include common fallbacks
+        return ".AppleSystemUIFont, Helvetica Neue, Helvetica, Arial, sans-serif"
     elif sys_name == 'Windows':
-        return "Segoe UI, Microsoft YaHei, sans-serif"
+        return "Segoe UI, Microsoft YaHei, Arial, sans-serif"
     else:
-        return "Roboto, Noto Sans, Arial, sans-serif"
+        return "Inter, Roboto, Noto Sans, Arial, sans-serif"
 
 
 def generate_common_qss(app: QApplication = None, font_size: int = 14) -> str:
