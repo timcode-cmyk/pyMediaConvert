@@ -27,6 +27,9 @@ jobs:
           - os: macos-latest # Apple Silicon Mac
             platform: macos-arm64
             platform_tag: mac-AppleSilicon
+          - os: macos-15-intel # Intel Mac
+            platform: macos-x86_64
+            platform_tag: mac-Intel
 
     runs-on: ${{ matrix.os }}
 
