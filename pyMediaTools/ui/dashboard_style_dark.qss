@@ -1,12 +1,12 @@
 /* Main Application Background */
 QMainWindow {
-    background-color: #1A202C;
+    background-color: #1E1E1E;
 }
 
 /* Sidebar Styling */
 #Sidebar {
-    background-color: #2D3748;
-    border-right: 1px solid #4A5568;
+    background-color: #252526;
+    border-right: 1px solid #303031;
 }
 
 /* Sidebar Buttons */
@@ -16,21 +16,21 @@ QMainWindow {
     border: none;
     border-radius: 8px;
     font-size: 14px;
-    color: #A0AEC0;
+    color: #CCCCCC;
     background-color: transparent;
     margin: 4px 10px;
 }
 
 #SidebarButton:hover {
-    background-color: #4A5568;
-    color: #E2E8F0;
+    background-color: #2A2D2E;
+    color: #FFFFFF;
 }
 
 #SidebarButton[active="true"] {
-    background-color: #2A4365;
-    color: #63B3ED;
+    background-color: #37373D;
+    color: #FFFFFF;
     font-weight: bold;
-    border-left: 4px solid #63B3ED;
+    border-left: 4px solid #007ACC;
     border-radius: 4px;
 }
 
@@ -38,7 +38,7 @@ QMainWindow {
 #SidebarTitle {
     font-size: 18px;
     font-weight: bold;
-    color: #E2E8F0;
+    color: #FFFFFF;
     padding: 20px 10px;
 }
 
@@ -48,24 +48,24 @@ QMainWindow {
 }
 
 #HeaderTitle {
-    color: #E2E8F0;
+    color: #D4D4D4;
 }
 
 #HeaderIcons {
-    color: #A0AEC0;
+    color: #858585;
 }
 
 #HeaderSearch {
-    background-color: #2D3748;
-    border: 1px solid #4A5568;
+    background-color: #3C3C3C;
+    border: 1px solid #3C3C3C;
     border-radius: 18px;
     padding: 8px 15px;
     font-size: 13px;
-    color: #E2E8F0;
+    color: #CCCCCC;
 }
 
 #HeaderSearch:focus {
-    border: 1px solid #63B3ED;
+    border: 1px solid #007ACC;
 }
 
 /* Base Card Style for internal widgets */
@@ -75,12 +75,12 @@ QWidget#MainContentArea > QWidget {
 
 /* Styling internal groupboxes/cards to look like dashboard panels */
 QGroupBox {
-    background-color: #2D3748;
+    background-color: #252526;
     border-radius: 12px;
-    border: 1px solid #4A5568;
+    border: 1px solid #303031;
     margin-top: 2ex; /* space for title */
     font-weight: bold;
-    color: #E2E8F0;
+    color: #D4D4D4;
 }
 
 QGroupBox::title {
@@ -89,29 +89,29 @@ QGroupBox::title {
     left: 15px;
     top: 5px;
     padding: 0 5px;
-    color: #A0AEC0;
+    color: #858585;
 }
 
 QTabWidget::pane {
-    border: 1px solid #4A5568;
-    background-color: #2D3748;
+    border: 1px solid #303031;
+    background-color: #252526;
     border-radius: 8px;
 }
 
 QTabBar::tab {
-    background: #1A202C;
-    border: 1px solid #4A5568;
+    background: #2D2D2D;
+    border: 1px solid #303031;
     padding: 8px 16px;
     margin-right: 2px;
     border-top-left-radius: 6px;
     border-top-right-radius: 6px;
-    color: #A0AEC0;
+    color: #858585;
 }
 
 QTabBar::tab:selected {
-    background: #2D3748;
-    border-bottom-color: #2D3748;
-    color: #63B3ED;
+    background: #1E1E1E;
+    border-bottom-color: #1E1E1E;
+    color: #007ACC;
     font-weight: bold;
 }
 

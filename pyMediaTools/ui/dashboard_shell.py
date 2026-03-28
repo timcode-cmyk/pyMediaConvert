@@ -46,7 +46,7 @@ class DashboardWindow(QMainWindow):
         sidebar_layout.setSpacing(0)
 
         # Logo/Title
-        title_label = QLabel(" 🎬 pyMediaTools")
+        title_label = QLabel("MediaTools")
         title_label.setObjectName("SidebarTitle")
         sidebar_layout.addWidget(title_label)
         sidebar_layout.addSpacing(20)
