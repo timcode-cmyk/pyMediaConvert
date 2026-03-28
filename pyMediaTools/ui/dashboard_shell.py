@@ -54,13 +54,47 @@ class UpdateDialog(QDialog):
         layout.addLayout(btn_layout)
 
     def open_download(self):
+        import platform
         url = self.info['download_url']
-        # 尝试寻找二进制安装包
+        system = sys.platform
+        machine = platform.machine().lower()
+        
+        # 定义当前平台的识别关键字（对应 release.yml 中的 platform_tag）
+        if system == "win32":
+            target_tag = "win-x64"
+            preferred_exts = ('.exe', '.zip')
+        elif system == "darwin":
+            if machine in ('arm64', 'aarch64'):
+                target_tag = "mac-AppleSilicon"
+            else:
+                target_tag = "mac-Intel"
+            preferred_exts = ('.dmg', '.pkg', '.zip')
+        else:
+            target_tag = ""
+            preferred_exts = ('.exe', '.dmg', '.pkg', '.zip')
+
+        # 优先级：首先尝试匹配对应平台的 tag 且后缀名正确
+        best_match = None
         for asset in self.info['assets']:
-            name = asset.get('name', '').lower()
-            if name.endswith(('.exe', '.dmg', '.pkg', '.zip')):
-                url = asset.get('browser_download_url', url)
-                break
+            name = asset.get('name', '')
+            # 检查是否包含平台标识 (如 mac-AppleSilicon)
+            if target_tag and target_tag.lower() in name.lower():
+                if name.lower().endswith(preferred_exts):
+                    best_match = asset.get('browser_download_url')
+                    # 如果匹配了最理想的后缀（dmg/exe），直接退出循环
+                    if name.lower().endswith(preferred_exts[:1]):
+                        break
+        
+        if best_match:
+            url = best_match
+        else:
+            # 次优选择：寻找任何匹配当前系统后缀的文件
+            for asset in self.info['assets']:
+                name = asset.get('name', '').lower()
+                if name.endswith(preferred_exts):
+                    url = asset.get('browser_download_url', url)
+                    break
+                    
         QDesktopServices.openUrl(QUrl(url))
 
 class SidebarButton(QPushButton):
