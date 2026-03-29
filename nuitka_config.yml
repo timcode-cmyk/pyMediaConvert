@@ -1,0 +1,40 @@
+# Nuitka Project Configuration for pyMediaTools
+# 遵循 Nuitka 4.0+ 严格的 YAML Schema 校验
+
+- module-name: "__main__"
+  # implicit-imports 每个条目必须是一个对象
+  implicit-imports:
+    - depends:
+        - "optparse"
+        - "asyncio"
+        - "pyMediaTools"
+        - "pyMediaTools.ui"
+        - "pyMediaTools.core"
+        - "pyMediaTools.utils"
+        - "pyMediaTools.logging_config"
+  
+  # data-files 必须是一个包含 patterns 或 dirs 的对象列表
+  data-files:
+    - patterns:
+        - "config.toml"
+        - "MediaTools.ico"
+        - "Icon.icns"
+      # Nuitka 4.0 要求目录使用 dirs 键，而非在 patterns 中包含
+      dirs:
+        - "assets"
+  
+  # anti-bloat 结构修正：使用 no-auto-follow 配合 ignore
+  anti-bloat:
+    - no-auto-follow:
+        "unittest": "ignore"
+        "pytest": "ignore"
+        "sympy": "ignore"
+        "yt_dlp": "ignore"
+
+- module-name: "pyMediaTools"
+  implicit-imports:
+    - depends:
+        - "pyMediaTools.ui"
+        - "pyMediaTools.core"
+        - "pyMediaTools.utils"
+        - "pyMediaTools.logging_config"

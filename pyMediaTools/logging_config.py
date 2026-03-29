@@ -22,7 +22,16 @@ def setup_logging(log_level=logging.INFO, filename="pyMediaConvert.log"):
     handler.setFormatter(fmt)
     logger.addHandler(handler)
 
-    # ensure no console handler by default (packaged app shouldn't write to stdout)
+    # 注册全局异常钩子，确保未捕获的异常能写入日志
+    import sys
+    def handle_exception(exc_type, exc_value, exc_traceback):
+        if issubclass(exc_type, KeyboardInterrupt):
+            sys.__excepthook__(exc_type, exc_value, exc_traceback)
+            return
+        logging.critical("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
+
+    sys.excepthook = handle_exception
+    logging.info("Logging initialized with exception hook.")
     return logger
 
 
