@@ -92,35 +92,22 @@ class ConversionWorker(QObject):
 
 
 class LogoConfigWidget(QWidget):
-    def __init__(self, platform_name, default_path, x, y, default_scale, blur, parent=None):
+    def __init__(self, platform_name, default_path, x, y, default_scale, blur, enabled, parent=None):
         super().__init__(parent)
         self.platform_name = platform_name
         self.default_path = default_path
+        self.config_x = x
+        self.config_y = y
+        self.config_scale = default_scale
         
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(5, 5, 5, 5)
+        layout.setContentsMargins(15, 8, 15, 8)
         
         self.chk_enable = QCheckBox(platform_name)
+        self.chk_enable.setChecked(enabled)
         layout.addWidget(self.chk_enable)
         
-        self.spin_x = QSpinBox()
-        self.spin_x.setRange(0, 9999)
-        self.spin_x.setValue(x)
-        layout.addWidget(QLabel("X:"))
-        layout.addWidget(self.spin_x)
-        
-        self.spin_y = QSpinBox()
-        self.spin_y.setRange(0, 9999)
-        self.spin_y.setValue(y)
-        layout.addWidget(QLabel("Y:"))
-        layout.addWidget(self.spin_y)
-        
-        self.spin_scale = QSpinBox()
-        self.spin_scale.setRange(1, 1000)
-        self.spin_scale.setSuffix("%")
-        self.spin_scale.setValue(default_scale)
-        layout.addWidget(QLabel("比例:"))
-        layout.addWidget(self.spin_scale)
+        layout.addStretch()
         
         self.chk_blur = QCheckBox("背景模糊")
         self.chk_blur.setChecked(blur)
@@ -128,8 +115,7 @@ class LogoConfigWidget(QWidget):
         
         # Disable/Enable based on checkbox
         def on_toggle(checked):
-            for widget in [self.spin_x, self.spin_y, self.spin_scale, self.chk_blur]:
-                widget.setEnabled(checked)
+            self.chk_blur.setEnabled(checked)
         self.chk_enable.toggled.connect(on_toggle)
         on_toggle(self.chk_enable.isChecked())
         
@@ -138,20 +124,19 @@ class LogoConfigWidget(QWidget):
             "enabled": self.chk_enable.isChecked(),
             "name": self.platform_name,
             "path": self.default_path,
-            "x": self.spin_x.value(),
-            "y": self.spin_y.value(),
-            "scale": self.spin_scale.value(),
+            "x": self.config_x,
+            "y": self.config_y,
+            "scale": self.config_scale,
             "blur": self.chk_blur.isChecked()
         }
         
     def set_config(self, cfg):
         if not isinstance(cfg, dict):
             return
-        self.chk_enable.setChecked(bool(cfg.get("enabled", False)))
-        self.spin_x.setValue(int(cfg.get("x", 0)))
-        self.spin_y.setValue(int(cfg.get("y", 0)))
-        self.spin_scale.setValue(int(cfg.get("scale", 100)))
-        self.chk_blur.setChecked(bool(cfg.get("blur", False)))
+        if "enabled" in cfg:
+            self.chk_enable.setChecked(bool(cfg["enabled"]))
+        if "blur" in cfg:
+            self.chk_blur.setChecked(bool(cfg["blur"]))
 
 
 class MediaConverterWidget(QWidget):
@@ -198,19 +183,34 @@ class MediaConverterWidget(QWidget):
         
         # 从 config.toml 加载平台配置
         config = load_project_config()
-        platforms = config.get('watermark', {}).get('platforms', [
-            ["Dreamina AI", "assets/Dream.png"],
-            ["Gemini", "assets/Gemini.png"],
-            ["Vidu", "assets/vidu.png"],
-            ["Veo", "assets/Veo.png"],
-            ["Kling", "assets/Kling.png"],
-            ["Hailuo", "assets/Hailuo.png"],
-            ["HeyGen", "assets/HeyGen.png"],
-        ])
+        platforms = config.get('watermark', {}).get('platforms', [])
         
-        for name, pth in platforms:
-            # name, path, x, y, scale(%), blur
-            lw = LogoConfigWidget(name, pth, 700, 1810, 100, True)
+        if not platforms:
+            platforms = [
+                {"name": "Dreamina AI", "path": "assets/Dream.png"},
+                {"name": "Gemini", "path": "assets/Gemini.png"},
+                {"name": "Vidu", "path": "assets/vidu.png"},
+                {"name": "Veo", "path": "assets/Veo.png"},
+                {"name": "Kling", "path": "assets/Kling.png"},
+                {"name": "Hailuo", "path": "assets/Hailuo.png"},
+                {"name": "HeyGen", "path": "assets/HeyGen.png"},
+            ]
+        
+        for plat in platforms:
+            if isinstance(plat, list):
+                # old format fallback
+                name, pth = plat[0], plat[1]
+                x, y, scale, blur, enabled = 700, 1810, 100, False, False
+            else:
+                name = plat.get("name", "Unknown")
+                pth = plat.get("path", "")
+                x = plat.get("x", 700)
+                y = plat.get("y", 1810)
+                scale = plat.get("scale", 100)
+                blur = plat.get("blur", False)
+                enabled = plat.get("enabled", False)
+                
+            lw = LogoConfigWidget(name, pth, x, y, scale, blur, enabled)
             self.logos_layout.addWidget(lw)
             self.logo_widgets.append(lw)
             
@@ -241,10 +241,9 @@ class MediaConverterWidget(QWidget):
 
         # 2. 路径设置区
         path_group = QGroupBox("源文件与输出")
-        path_layout = QVBoxLayout(path_group)
+        path_layout = QFormLayout(path_group)
         path_layout.setSpacing(10)
 
-        input_label = QLabel("输入源 (拖拽文件夹到下方框中):")
         self.input_path_edit = DropLineEdit()
         self.input_path_edit.setPlaceholderText("📂 拖放文件夹/文件到此处，或点击右侧按钮")
         self.input_path_edit.setMinimumHeight(40)
@@ -253,29 +252,31 @@ class MediaConverterWidget(QWidget):
         
         input_btn = QPushButton("浏览...")
         input_btn.setCursor(Qt.PointingHandCursor)
+        input_btn.setMinimumHeight(40)
         input_btn.clicked.connect(self.selectInputPath)
         
         input_box = QHBoxLayout()
+        input_box.setContentsMargins(0, 0, 0, 0)
         input_box.addWidget(self.input_path_edit)
         input_box.addWidget(input_btn)
         
-        path_layout.addWidget(input_label)
-        path_layout.addLayout(input_box)
+        path_layout.addRow("输入:" + " "*4, input_box)
 
-        output_label = QLabel("输出目录:")
         self.output_path_edit = QLineEdit()
         self.output_path_edit.setPlaceholderText("转换后的文件将保存在这里")
+        self.output_path_edit.setMinimumHeight(40)
         
         output_btn = QPushButton("浏览...")
         output_btn.setCursor(Qt.PointingHandCursor)
+        output_btn.setMinimumHeight(40)
         output_btn.clicked.connect(self.selectOutputDirectory)
         
         output_box = QHBoxLayout()
+        output_box.setContentsMargins(0, 0, 0, 0)
         output_box.addWidget(self.output_path_edit)
         output_box.addWidget(output_btn)
         
-        path_layout.addWidget(output_label)
-        path_layout.addLayout(output_box)
+        path_layout.addRow("输出:" + " "*4, output_box)
         main_layout.addWidget(path_group)
 
         # 3. 进度与操作区
@@ -287,28 +288,36 @@ class MediaConverterWidget(QWidget):
         self.status_label.setObjectName("StatusLabel")
         self.status_label.setWordWrap(True)
         
-        progress_layout.addWidget(QLabel("总进度:"))
-        self.overall_progress_bar = QProgressBar()
-        self.overall_progress_bar.setRange(0, 100)
-        self.overall_progress_text = QLabel("0/0 (0%)")
-        self.overall_progress_text.setAlignment(Qt.AlignmentFlag.AlignRight)
+        progress_grid = QHBoxLayout()
+        progress_grid.setContentsMargins(0, 0, 0, 0)
         
-        overall_layout = QHBoxLayout()
-        overall_layout.addWidget(self.overall_progress_bar)
-        overall_layout.addWidget(self.overall_progress_text)
-        progress_layout.addLayout(overall_layout)
-
-        progress_layout.addWidget(QLabel("当前文件:"))
         self.file_progress_bar = QProgressBar()
         self.file_progress_bar.setRange(0, 100)
         self.file_progress_text = QLabel("无")
-        self.file_progress_text.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.file_progress_text.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.file_progress_text.setFixedWidth(50)
         
-        file_p_layout = QHBoxLayout()
-        file_p_layout.addWidget(self.file_progress_bar)
-        file_p_layout.addWidget(self.file_progress_text)
-        progress_layout.addLayout(file_p_layout)
+        f_box = QHBoxLayout()
+        f_box.addWidget(QLabel("文件:"))
+        f_box.addWidget(self.file_progress_bar)
+        f_box.addWidget(self.file_progress_text)
         
+        self.overall_progress_bar = QProgressBar()
+        self.overall_progress_bar.setRange(0, 100)
+        self.overall_progress_text = QLabel("0/0 (0%)")
+        self.overall_progress_text.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.overall_progress_text.setFixedWidth(80)
+        
+        o_box = QHBoxLayout()
+        o_box.addWidget(QLabel("总计:"))
+        o_box.addWidget(self.overall_progress_bar)
+        o_box.addWidget(self.overall_progress_text)
+
+        progress_grid.addLayout(f_box)
+        progress_grid.addSpacing(20)
+        progress_grid.addLayout(o_box)
+
+        progress_layout.addLayout(progress_grid)
         progress_layout.addWidget(self.status_label)
         main_layout.addWidget(progress_group)
 
@@ -332,9 +341,6 @@ class MediaConverterWidget(QWidget):
                 if settings.contains("enabled"):
                      cfg = {
                          "enabled": str(settings.value("enabled", "false")).lower() in ('true', '1'),
-                         "x": int(settings.value("x", 0)),
-                         "y": int(settings.value("y", 0)),
-                         "scale": int(settings.value("scale", 100)),
                          "blur": str(settings.value("blur", "false")).lower() in ('true', '1'),
                      }
                      lw.set_config(cfg)
@@ -349,9 +355,6 @@ class MediaConverterWidget(QWidget):
                 settings.beginGroup(lw.platform_name)
                 cfg = lw.get_config()
                 settings.setValue("enabled", cfg["enabled"])
-                settings.setValue("x", cfg["x"])
-                settings.setValue("y", cfg["y"])
-                settings.setValue("scale", cfg["scale"])
                 settings.setValue("blur", cfg["blur"])
                 settings.endGroup()
             settings.sync()
@@ -443,7 +446,7 @@ class MediaConverterWidget(QWidget):
                         # Dream_AI 锁定在左上角
                         active_logos.append({
                             "logo_path": "assets/Dream_AI.png",
-                            "x": 0, "y": 0, "scale": 100, "blur": False
+                            "x": 0, "y": 0, "scale": 100, "blur": True
                         })
                     
                     active_logos.append({

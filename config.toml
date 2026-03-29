@@ -1,15 +1,68 @@
 # MediaConvertMODES 配置
 
 [watermark]
-platforms = [
-    ["Dreamina AI", "assets/Dream.png"],
-    ["Gemini", "assets/Gemini.png"],
-    ["Vidu", "assets/vidu.png"],
-    ["Veo", "assets/Veo.png"],
-    ["Kling", "assets/Kling.png"],
-    ["Hailuo", "assets/Hailuo.png"],
-    ["HeyGen", "assets/HeyGen.png"],
-]
+[[watermark.platforms]]
+name = "Dreamina AI"
+path = "assets/Dream.png"
+x = 700
+y = 1810
+scale = 100
+blur = true
+enabled = true
+
+[[watermark.platforms]]
+name = "Gemini"
+path = "assets/Gemini.png"
+x = 700
+y = 1810
+scale = 100
+blur = false
+enabled = false
+
+[[watermark.platforms]]
+name = "Vidu"
+path = "assets/vidu.png"
+x = 700
+y = 1810
+scale = 100
+blur = false
+enabled = false
+
+[[watermark.platforms]]
+name = "Veo"
+path = "assets/Veo.png"
+x = 700
+y = 1810
+scale = 100
+blur = false
+enabled = false
+
+[[watermark.platforms]]
+name = "Kling"
+path = "assets/Kling.png"
+x = 700
+y = 1810
+scale = 100
+blur = false
+enabled = false
+
+[[watermark.platforms]]
+name = "Hailuo"
+path = "assets/Hailuo.png"
+x = 700
+y = 1810
+scale = 100
+blur = false
+enabled = false
+
+[[watermark.platforms]]
+name = "HeyGen"
+path = "assets/HeyGen.png"
+x = 700
+y = 1810
+scale = 100
+blur = false
+enabled = false
 
 [modes.image]
 class = "AddCustomLogo"
