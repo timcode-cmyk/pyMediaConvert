@@ -4,8 +4,8 @@
 [[watermark.platforms]]
 name = "Dreamina AI"
 path = "assets/Dream.png"
-x = 700
-y = 1810
+x = 692
+y = 1771
 scale = 100
 blur = true
 enabled = true
@@ -13,17 +13,17 @@ enabled = true
 [[watermark.platforms]]
 name = "Gemini"
 path = "assets/Gemini.png"
-x = 700
-y = 1810
+x = 981
+y = 1732
 scale = 100
-blur = false
+blur = true
 enabled = false
 
 [[watermark.platforms]]
 name = "Vidu"
 path = "assets/vidu.png"
-x = 700
-y = 1810
+x = 817
+y = 1762
 scale = 100
 blur = false
 enabled = false
@@ -31,17 +31,17 @@ enabled = false
 [[watermark.platforms]]
 name = "Veo"
 path = "assets/Veo.png"
-x = 700
-y = 1810
+x = 952
+y = 1845
 scale = 100
-blur = false
+blur = true
 enabled = false
 
 [[watermark.platforms]]
 name = "Kling"
 path = "assets/Kling.png"
-x = 700
-y = 1810
+x = 692
+y = 1684
 scale = 100
 blur = false
 enabled = false
@@ -49,19 +49,19 @@ enabled = false
 [[watermark.platforms]]
 name = "Hailuo"
 path = "assets/Hailuo.png"
-x = 700
-y = 1810
+x = 637
+y = 1861
 scale = 100
-blur = false
+blur = true
 enabled = false
 
 [[watermark.platforms]]
 name = "HeyGen"
 path = "assets/HeyGen.png"
-x = 700
-y = 1810
+x = 510
+y = 1700
 scale = 100
-blur = false
+blur = true
 enabled = false
 
 [modes.image]

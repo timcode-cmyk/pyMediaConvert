@@ -150,7 +150,6 @@ class MediaConverterWidget(QWidget):
         self.logo_widgets = []
         self.init_ui()
         self.apply_styles()
-        self.load_project_settings()
 
     def apply_styles(self):
         apply_common_style(self)
@@ -332,34 +331,6 @@ class MediaConverterWidget(QWidget):
 
         self.loadModes()
 
-    def load_project_settings(self):
-        try:
-            settings = QSettings("pyMediaTools", "WatermarkSettings")
-            for lw in self.logo_widgets:
-                settings.beginGroup(lw.platform_name)
-                # Ensure something is actually saved here before calling set
-                if settings.contains("enabled"):
-                     cfg = {
-                         "enabled": str(settings.value("enabled", "false")).lower() in ('true', '1'),
-                         "blur": str(settings.value("blur", "false")).lower() in ('true', '1'),
-                     }
-                     lw.set_config(cfg)
-                settings.endGroup()
-        except Exception as e:
-            logger.error(f"Failed to load UI layout settings: {e}")
-            
-    def save_project_settings(self):
-        try:
-            settings = QSettings("pyMediaTools", "WatermarkSettings")
-            for lw in self.logo_widgets:
-                settings.beginGroup(lw.platform_name)
-                cfg = lw.get_config()
-                settings.setValue("enabled", cfg["enabled"])
-                settings.setValue("blur", cfg["blur"])
-                settings.endGroup()
-            settings.sync()
-        except Exception as e:
-            logger.error(f"Failed to save UI layout settings: {e}")
 
     def loadModes(self):
         if not MODES:
@@ -416,8 +387,6 @@ class MediaConverterWidget(QWidget):
             self.startConversion()
 
     def startConversion(self):
-        # 1. 保存设置
-        self.save_project_settings()
         
         input_dir = self.input_path_edit.text().strip()
         output_dir = self.output_path_edit.text().strip()
