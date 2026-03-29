@@ -3,9 +3,9 @@ from pathlib import Path
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel, 
                                QLineEdit, QPushButton, QComboBox, QProgressBar, QMessageBox, 
                                QFileDialog, QSizePolicy, QGroupBox, QApplication,
-                               QTabWidget, QScrollArea, QCheckBox, QSpinBox)
+                               QTabWidget, QScrollArea, QCheckBox, QSpinBox, QFrame, QGridLayout)
 from PySide6.QtCore import QObject, QThread, Signal, Slot, Qt, QSettings
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QPixmap, QCursor
 
 from ..core.config import MODES
 from .styles import apply_common_style
@@ -91,7 +91,7 @@ class ConversionWorker(QObject):
             self.finished.emit(is_successful, error_msg)
 
 
-class LogoConfigWidget(QWidget):
+class LogoConfigWidget(QFrame):
     def __init__(self, platform_name, default_path, x, y, default_scale, blur, enabled, parent=None):
         super().__init__(parent)
         self.platform_name = platform_name
@@ -100,28 +100,84 @@ class LogoConfigWidget(QWidget):
         self.config_y = y
         self.config_scale = default_scale
         
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(15, 8, 15, 8)
+        self.is_enabled = enabled
+        self.setCursor(Qt.PointingHandCursor)
+        self.setObjectName("LogoCard")
         
-        self.chk_enable = QCheckBox(platform_name)
-        self.chk_enable.setChecked(enabled)
-        layout.addWidget(self.chk_enable)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setSpacing(10)
         
-        layout.addStretch()
+        # 1. Image
+        self.lbl_logo = QLabel()
+        from pyMediaTools.utils import get_resource_path
+        pixmap = QPixmap(str(get_resource_path(default_path)))
+        if not pixmap.isNull():
+            # scale the pixmap to a reasonable height
+            self.lbl_logo.setPixmap(pixmap.scaledToHeight(40, Qt.SmoothTransformation))
+        else:
+            self.lbl_logo.setText(platform_name)
+        self.lbl_logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.lbl_logo.setMinimumHeight(45)
+        layout.addWidget(self.lbl_logo)
+        
+        # 2. Controls Layout (Name + Blur checkbox)
+        controls_layout = QHBoxLayout()
+        controls_layout.setContentsMargins(0, 5, 0, 0)
+        
+        self.lbl_name = QLabel(platform_name)
+        self.lbl_name.setFont(QFont("Segoe UI", 11, QFont.Bold))
+        self.lbl_name.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
         
         self.chk_blur = QCheckBox("背景模糊")
         self.chk_blur.setChecked(blur)
-        layout.addWidget(self.chk_blur)
         
-        # Disable/Enable based on checkbox
-        def on_toggle(checked):
-            self.chk_blur.setEnabled(checked)
-        self.chk_enable.toggled.connect(on_toggle)
-        on_toggle(self.chk_enable.isChecked())
+        controls_layout.addWidget(self.lbl_name)
+        controls_layout.addStretch()
+        controls_layout.addWidget(self.chk_blur)
         
+        layout.addLayout(controls_layout)
+        
+        self.update_style()
+        self.chk_blur.setEnabled(self.is_enabled)
+        
+    def mousePressEvent(self, event):
+        # Prevent checking or unchecking if clicking on the checkbox itself
+        child = self.childAt(event.position().toPoint())
+        if child == self.chk_blur:
+            super().mousePressEvent(event)
+            return
+            
+        self.is_enabled = not self.is_enabled
+        self.chk_blur.setEnabled(self.is_enabled)
+        self.update_style()
+        super().mousePressEvent(event)
+
+    def update_style(self):
+        if self.is_enabled:
+            self.setStyleSheet("""
+                QFrame#LogoCard {
+                    background-color: rgba(65, 137, 230, 0.1);
+                    border: 2px solid #4189E6;
+                    border-radius: 10px;
+                }
+            """)
+        else:
+            self.setStyleSheet("""
+                QFrame#LogoCard {
+                    background-color: transparent;
+                    border: 1px solid #777777;
+                    border-radius: 10px;
+                }
+                QFrame#LogoCard:hover {
+                    border: 1px solid #AAAAAA;
+                    background-color: rgba(255, 255, 255, 0.05);
+                }
+            """)
+
     def get_config(self):
         return {
-            "enabled": self.chk_enable.isChecked(),
+            "enabled": self.is_enabled,
             "name": self.platform_name,
             "path": self.default_path,
             "x": self.config_x,
@@ -134,7 +190,9 @@ class LogoConfigWidget(QWidget):
         if not isinstance(cfg, dict):
             return
         if "enabled" in cfg:
-            self.chk_enable.setChecked(bool(cfg["enabled"]))
+            self.is_enabled = bool(cfg["enabled"])
+            self.update_style()
+            self.chk_blur.setEnabled(self.is_enabled)
         if "blur" in cfg:
             self.chk_blur.setChecked(bool(cfg["blur"]))
 
@@ -178,7 +236,8 @@ class MediaConverterWidget(QWidget):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll_content = QWidget()
-        self.logos_layout = QVBoxLayout(scroll_content)
+        self.logos_layout = QGridLayout(scroll_content)
+        self.logos_layout.setSpacing(15)
         
         # 从 config.toml 加载平台配置
         config = load_project_config()
@@ -195,6 +254,8 @@ class MediaConverterWidget(QWidget):
                 {"name": "HeyGen", "path": "assets/HeyGen.png"},
             ]
         
+        row = 0
+        col = 0
         for plat in platforms:
             if isinstance(plat, list):
                 # old format fallback
@@ -210,10 +271,14 @@ class MediaConverterWidget(QWidget):
                 enabled = plat.get("enabled", False)
                 
             lw = LogoConfigWidget(name, pth, x, y, scale, blur, enabled)
-            self.logos_layout.addWidget(lw)
+            self.logos_layout.addWidget(lw, row, col)
             self.logo_widgets.append(lw)
+            col += 1
+            if col > 1:
+                col = 0
+                row += 1
             
-        self.logos_layout.addStretch()
+        self.logos_layout.setRowStretch(row + 1, 1)
         scroll.setWidget(scroll_content)
         wm_layout.addWidget(scroll)
         self.tabs.addTab(self.tab_watermark, "水印添加")
