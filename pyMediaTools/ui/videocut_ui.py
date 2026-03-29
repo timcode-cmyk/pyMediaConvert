@@ -191,20 +191,29 @@ class VideoCutWidget(QWidget):
         self.threshold_slider.setValue(20)
         self.threshold_label = QLabel("20%")
         self.threshold_slider.valueChanged.connect(lambda v: self.threshold_label.setText(f"{v}%"))
-        options_layout.addWidget(QLabel("场景检测阈值:"), 0, 0)
-        options_layout.addWidget(self.threshold_slider, 0, 1)
-        options_layout.addWidget(self.threshold_label, 0, 2)
-
+        # 导出视频
+        self.chk_export_video = QCheckBox("导出视频")
+        self.chk_export_video.setChecked(True)
+        
         # 导出静帧
         self.chk_export_frame = QCheckBox("导出静帧")
         self.chk_export_frame.setChecked(True)
+
         self.spin_frame_offset = QSpinBox()
         self.spin_frame_offset.setRange(0, 1000)
         self.spin_frame_offset.setValue(10)
-        self.chk_export_frame.toggled.connect(self.spin_frame_offset.setEnabled)
-        options_layout.addWidget(self.chk_export_frame, 0, 3)
-        options_layout.addWidget(QLabel("偏移量:"), 0, 4)
-        options_layout.addWidget(self.spin_frame_offset, 0, 5)
+        
+        # 建立相互依赖逻辑
+        self.chk_export_video.toggled.connect(self._on_export_video_toggled)
+        self.chk_export_frame.toggled.connect(self._on_export_frame_toggled)
+
+        options_layout.addWidget(QLabel("场景检测阈值:"), 0, 0)
+        options_layout.addWidget(self.threshold_slider, 0, 1)
+        options_layout.addWidget(self.threshold_label, 0, 2)
+        options_layout.addWidget(self.chk_export_video, 0, 3)
+        options_layout.addWidget(self.chk_export_frame, 0, 4)
+        options_layout.addWidget(QLabel("偏移量:"), 0, 5)
+        options_layout.addWidget(self.spin_frame_offset, 0, 6)
 
         # 水印
         self.chk_add_watermark = QCheckBox("添加水印:")
@@ -303,6 +312,23 @@ class VideoCutWidget(QWidget):
             self.watermark_settings['text'] = self.combo_watermark_ass.currentText()
             logger.info(f"水印参数已更新: {self.watermark_settings}")
 
+    def _on_export_video_toggled(self, checked):
+        # 取消导出视频时，导出静帧无法取消 (必须勾选并禁用)
+        if not checked:
+            self.chk_export_frame.setChecked(True)
+            self.chk_export_frame.setEnabled(False)
+        else:
+            self.chk_export_frame.setEnabled(True)
+
+    def _on_export_frame_toggled(self, checked):
+        # 取消导出静帧时，导出视频无法取消 (必须勾选并禁用)
+        self.spin_frame_offset.setEnabled(checked)
+        if not checked:
+            self.chk_export_video.setChecked(True)
+            self.chk_export_video.setEnabled(False)
+        else:
+            self.chk_export_video.setEnabled(True)
+
     def toggle_processing(self):
         if self.is_processing:
             self.stop_processing()
@@ -324,6 +350,7 @@ class VideoCutWidget(QWidget):
 
         options = {
             'threshold': self.threshold_slider.value() / 100.0,
+            'export_video': self.chk_export_video.isChecked(),
             'export_frame': self.chk_export_frame.isChecked(),
             'frame_offset': self.spin_frame_offset.value(),
             'watermark_params': None,

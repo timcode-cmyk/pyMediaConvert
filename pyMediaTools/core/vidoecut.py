@@ -420,7 +420,7 @@ class SceneCutter:
         return [round(t * fps) / fps for t in times]
 
     def process_video(self, video_path: Path, output_root: Path, threshold=0.2,
-                      export_frame=True, frame_offset=0,
+                      export_video=True, export_frame=True, frame_offset=0,
                       watermark_params=None, person_id: str = "", rename_lines: list = None):
         
         video_output_dir = output_root / video_path.stem
@@ -486,7 +486,7 @@ class SceneCutter:
                 report_line = f"段落 {scene_idx:03d}: 开始 {start_t:>7.2f}s | 时长: {duration_str:>8}"
 
                 # A. 分割视频
-                if duration > 0.1: # 忽略过短片段
+                if export_video and duration > 0.1: # 忽略过短片段
                     # --- New Naming Logic ---
                     date_str = datetime.now().strftime("%Y%m%d")
                     
