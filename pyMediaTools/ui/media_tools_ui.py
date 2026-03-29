@@ -206,6 +206,56 @@ class LogoConfigWidget(QFrame):
             self.chk_blur.setChecked(bool(cfg["blur"]))
 
 
+class FlowGridContainer(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.grid = QGridLayout(self)
+        self.grid.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        self.grid.setSpacing(10)
+        self.items = []
+        self.item_width = 200
+        self.current_cols = -1
+        
+    def add_widget(self, widget):
+        widget.setFixedWidth(self.item_width)
+        self.items.append(widget)
+        self._relayout(self.width())
+        
+    def minimumSizeHint(self):
+        from PySide6.QtCore import QSize
+        # Override minimum size hint so the QScrollArea allows it to shrink!
+        # Otherwise the QGridLayout prevents shrinking once columns are added.
+        return QSize(self.item_width, 0)
+        
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._relayout(event.size().width())
+        
+    def _relayout(self, width):
+        if width <= 0 or not self.items:
+            return
+            
+        margins = self.grid.contentsMargins()
+        avail_width = width - margins.left() - margins.right()
+        
+        cols = max(1, (avail_width + self.grid.spacing()) // (self.item_width + self.grid.spacing()))
+        
+        if cols == self.current_cols:
+            return
+            
+        self.current_cols = cols
+        
+        for i in reversed(range(self.grid.count())):
+            item = self.grid.itemAt(i)
+            if item.widget():
+                self.grid.removeWidget(item.widget())
+                
+        for index, widget in enumerate(self.items):
+            row = index // cols
+            col = index % cols
+            self.grid.addWidget(widget, row, col)
+
+
 class MediaConverterWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -244,9 +294,11 @@ class MediaConverterWidget(QWidget):
         
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll_content = QWidget()
-        self.logos_layout = QGridLayout(scroll_content)
-        self.logos_layout.setSpacing(15)
+        # Prevent horizontal scrollbar, force items to wrap
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        
+        scroll_content = FlowGridContainer()
+        self.logos_layout = scroll_content
         
         # 从 config.toml 加载平台配置
         config = load_project_config()
@@ -263,8 +315,6 @@ class MediaConverterWidget(QWidget):
                 {"name": "HeyGen", "path": "assets/HeyGen.png"},
             ]
         
-        row = 0
-        col = 0
         for plat in platforms:
             if isinstance(plat, list):
                 # old format fallback
@@ -280,14 +330,9 @@ class MediaConverterWidget(QWidget):
                 enabled = plat.get("enabled", False)
                 
             lw = LogoConfigWidget(name, pth, x, y, scale, blur, enabled)
-            self.logos_layout.addWidget(lw, row, col)
+            scroll_content.add_widget(lw)
             self.logo_widgets.append(lw)
-            col += 1
-            if col > 1:
-                col = 0
-                row += 1
             
-        self.logos_layout.setRowStretch(row + 1, 1)
         scroll.setWidget(scroll_content)
         wm_layout.addWidget(scroll)
         self.tabs.addTab(self.tab_watermark, "水印添加")
