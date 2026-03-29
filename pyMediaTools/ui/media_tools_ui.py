@@ -105,28 +105,37 @@ class LogoConfigWidget(QFrame):
         self.setObjectName("LogoCard")
         
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(15, 15, 15, 15)
-        layout.setSpacing(10)
+        layout.setContentsMargins(10, 8, 10, 8)
+        layout.setSpacing(5)
         
         # 1. Image
         self.lbl_logo = QLabel()
         from pyMediaTools.utils import get_resource_path
         pixmap = QPixmap(str(get_resource_path(default_path)))
         if not pixmap.isNull():
-            # scale the pixmap to a reasonable height
-            self.lbl_logo.setPixmap(pixmap.scaledToHeight(40, Qt.SmoothTransformation))
+            # scale the pixmap to a smaller height
+            self.lbl_logo.setPixmap(pixmap.scaledToHeight(26, Qt.SmoothTransformation))
         else:
             self.lbl_logo.setText(platform_name)
         self.lbl_logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.lbl_logo.setMinimumHeight(45)
+        
+        # Ensure white logos are visible on light mode by adding a dark rounded background just for the image area
+        self.lbl_logo.setStyleSheet("""
+            QLabel {
+                background-color: rgba(35, 35, 35, 0.8);
+                border-radius: 5px;
+                padding: 4px;
+                color: white;
+            }
+        """)
         layout.addWidget(self.lbl_logo)
         
         # 2. Controls Layout (Name + Blur checkbox)
         controls_layout = QHBoxLayout()
-        controls_layout.setContentsMargins(0, 5, 0, 0)
+        controls_layout.setContentsMargins(0, 3, 0, 0)
         
         self.lbl_name = QLabel(platform_name)
-        self.lbl_name.setFont(QFont("Segoe UI", 11, QFont.Bold))
+        self.lbl_name.setFont(QFont("Segoe UI", 10, QFont.Bold))
         self.lbl_name.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
         
         self.chk_blur = QCheckBox("背景模糊")
