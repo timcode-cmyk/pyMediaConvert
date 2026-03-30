@@ -26,6 +26,7 @@ import requests
 from difflib import SequenceMatcher
 from pathlib import Path
 from ..logging_config import get_logger
+from ..utils import get_ffmpeg_exe, get_ffprobe_exe
 
 logger = get_logger(__name__)
 
@@ -89,23 +90,35 @@ TRANSLATE_TARGET_LANGUAGES = {
 # ffmpeg 音频提取
 # ---------------------------------------------------------------------------
 
-def _find_ffmpeg() -> str:
-    """查找 ffmpeg 可执行文件路径（优先 bin/ 目录，其次系统 PATH）。"""
-    from ..utils import get_resource_path  # 复用项目已有的路径工具
-    candidates = [
-        str(get_resource_path("bin/ffmpeg")),
-        str(get_resource_path("bin/ffmpeg.exe")),
-        "ffmpeg",
-    ]
-    for c in candidates:
-        try:
-            result = subprocess.run([c, "-version"], capture_output=True, timeout=5)
-            if result.returncode == 0:
-                return c
-        except (FileNotFoundError, subprocess.TimeoutExpired):
-            continue
-    raise FileNotFoundError("未找到 ffmpeg，请确认 bin/ffmpeg 存在或系统 PATH 中包含 ffmpeg。")
+# def _find_ffmpeg() -> str:
+#     """查找 ffmpeg 可执行文件路径（优先 bin/ 目录，其次系统 PATH）。"""
+#     from ..utils import get_resource_path  # 复用项目已有的路径工具
+#     candidates = [
+#         str(get_resource_path("bin/ffmpeg")),
+#         str(get_resource_path("bin/ffmpeg.exe")),
+#         "ffmpeg",
+#     ]
+#     for c in candidates:
+#         try:
+#             result = subprocess.run([c, "-version"], capture_output=True, timeout=5)
+#             if result.returncode == 0:
+#                 return c
+#         except (FileNotFoundError, subprocess.TimeoutExpired):
+#             continue
+#     raise FileNotFoundError("未找到 ffmpeg，请确认 bin/ffmpeg 存在或系统 PATH 中包含 ffmpeg。")
 
+def _check_ffmpeg_path():
+    """检查捆绑的 ffmpeg 和 ffprobe 文件是否存在"""
+    # 注意：这里使用 get_ffmpeg_exe() 返回的路径，在运行时是绝对路径
+    ffmpeg_path = Path(get_ffmpeg_exe())
+    ffprobe_path = Path(get_ffprobe_exe())
+    
+    if not ffmpeg_path.exists():
+        logger.critical(f"绑定的 ffmpeg 可执行文件未找到: {ffmpeg_path}")
+        raise FileNotFoundError(f"ffmpeg not found: {ffmpeg_path}")
+    if not ffprobe_path.exists():
+        logger.critical(f"绑定的 ffprobe 可执行文件未找到: {ffprobe_path}")
+        raise FileNotFoundError(f"ffprobe not found: {ffprobe_path}")
 
 def extract_audio_with_ffmpeg(
     media_path: str,
@@ -125,12 +138,12 @@ def extract_audio_with_ffmpeg(
     Returns:
         output_wav 路径
     """
-    ffmpeg_bin = _find_ffmpeg()
+    ffmpeg_bin = str(get_ffmpeg_exe())
 
     cmd = [
         ffmpeg_bin,
         "-y",                    # 覆盖输出
-        "-i", media_path,
+        "-i", str(media_path),   # 确保路径是字符串
         "-vn",                   # 不含视频流
         "-acodec", "pcm_s16le",  # 16-bit PCM
         "-ar", str(sample_rate), # 采样率
@@ -161,8 +174,7 @@ def extract_audio_with_ffmpeg(
 
 def get_audio_duration(media_path: str) -> float:
     """使用 ffprobe 获取媒体文件时长（秒）。"""
-    ffmpeg_bin = _find_ffmpeg()
-    ffprobe_bin = ffmpeg_bin.replace("ffmpeg", "ffprobe")
+    ffprobe_bin = str(get_ffprobe_exe())
 
     cmd = [
         ffprobe_bin, "-v", "error",
@@ -197,7 +209,7 @@ def split_wav_into_chunks(
 
     chunks = []
     t = 0.0
-    ffmpeg_bin = _find_ffmpeg()
+    ffmpeg_bin = str(get_ffmpeg_exe())
     tmp_dir = tmp_dir or tempfile.gettempdir()
 
     chunk_idx = 0
