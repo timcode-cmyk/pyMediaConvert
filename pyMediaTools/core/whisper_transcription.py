@@ -368,7 +368,7 @@ def transcribe_file(
                 api_key=api_key,
                 language=language,
                 model=model,
-                user_prompt=user_prompt,
+                user_prompt="",
                 progress_callback=progress_callback if len(chunks) == 1 else None,
                 time_offset=start_sec,
             )
@@ -599,6 +599,7 @@ def build_segments_from_words(
     aligned_words: list,
     words_per_segment: int = DEFAULT_WORDS_PER_SEGMENT,
     use_script_punctuation: bool = True,
+    pause_threshold: float = 0.4,
 ) -> list:
     """
     将词级列表重新分组为字幕 segments。
@@ -638,6 +639,13 @@ def build_segments_from_words(
 
     for word_info in aligned_words:
         word = word_info["word"]
+
+        # 如果当前词与上一词之间存在明显停顿，则切断当前段
+        if current_words:
+            prev_end = current_words[-1]["end"]
+            if word_info["start"] - prev_end > pause_threshold:
+                flush_segment()
+                current_words = []
 
         current_words.append(word_info)
 
@@ -894,7 +902,7 @@ try:
                     api_key=self.api_key,
                     language=self.language if self.language != "auto" else "",
                     model=self.model,
-                    user_prompt=self.user_script,
+                    user_prompt="",
                     progress_callback=self.progress.emit,
                 )
 

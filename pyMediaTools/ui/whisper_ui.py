@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
     QSizePolicy, QSpacerItem, QSplitter, QSpinBox, QTabWidget,
     QGridLayout, QStackedWidget,
 )
-from PySide6.QtCore import Qt, QThread, QSettings, QMimeData, QUrl, QSize
+from PySide6.QtCore import Qt, QThread, QSettings, QMimeData, QUrl, QSize, QObject, Signal
 from PySide6.QtGui import QFont, QDragEnterEvent, QDropEvent, QColor, QPalette
 
 from ..core.whisper_transcription import (
@@ -34,6 +34,7 @@ from ..core.whisper_transcription import (
     export_fcpxml,
     segments_to_srt_text,
 )
+from ..core.translation_worker import TranslationWorker
 from .styles import apply_common_style
 from ..logging_config import get_logger
 
@@ -122,6 +123,14 @@ class DropZoneWidget(QFrame):
                 return
         event.ignore()
 
+    def dragMoveEvent(self, event: QDragEnterEvent):
+        if event.mimeData().hasUrls():
+            urls = event.mimeData().urls()
+            if urls and Path(urls[0].toLocalFile()).suffix.lower() in SUPPORTED_MEDIA_EXTENSIONS:
+                event.acceptProposedAction()
+                return
+        event.ignore()
+
     def dragLeaveEvent(self, event):
         self._apply_style(hovering=False)
 
@@ -130,6 +139,7 @@ class DropZoneWidget(QFrame):
         if urls:
             path = urls[0].toLocalFile()
             self._set_file(path)
+            event.acceptProposedAction()
         self._apply_style(hovering=False)
 
     def _browse_file(self):
@@ -183,8 +193,6 @@ class LogPanel(QTextEdit):
 
 
 # ---------------------------------------------------------------------------
-# 配置区卡片
-# ---------------------------------------------------------------------------
 
 class ConfigCard(QGroupBox):
     """样式统一的配置卡片。"""
@@ -235,6 +243,7 @@ class WhisperWidget(QWidget):
         self._worker: WhisperWorker | None = None
         self._worker_thread: QThread | None = None
         self._current_segments = []
+        self._translated_segments = []
 
         # 复用 Groq QSettings（与其他模块共享 API Key）
         self._groq_settings = QSettings("pyMediaTools", "Groq")
@@ -372,7 +381,7 @@ class WhisperWidget(QWidget):
         script_layout.addWidget(script_hint)
 
         self.script_edit = QTextEdit()
-        self.script_edit.setPlaceholderText("在此粘贴参考文案或台词脚本...")
+        self.script_edit.setPlaceholderText("在此粘贴参考文案或台词脚本...\n该内容仅用于识别后对齐纠错，不作为 Whisper prompt 输入。")
         self.script_edit.setMinimumHeight(110)
         self.script_edit.setMaximumHeight(180)
         script_layout.addWidget(self.script_edit)
@@ -574,6 +583,22 @@ class WhisperWidget(QWidget):
         """)
         self.result_tabs.addTab(self.json_preview, "词级数据 (JSON)")
 
+        # Tab 3: 翻译预览
+        self.trans_preview = QTextEdit()
+        self.trans_preview.setReadOnly(True)
+        self.trans_preview.setFont(QFont("Courier New", 11))
+        self.trans_preview.setPlaceholderText("若启用自动翻译，翻译结果会显示在此处。")
+        self.trans_preview.setStyleSheet("""
+            QTextEdit {
+                background: rgba(0,0,0,0.15);
+                border: 1px solid #444;
+                border-radius: 8px;
+                padding: 10px;
+                color: #eee;
+            }
+        """)
+        self.result_tabs.addTab(self.trans_preview, "翻译预览")
+
         layout.addWidget(self.result_tabs, 1)
 
         # ------- 统计信息 -------
@@ -630,11 +655,12 @@ class WhisperWidget(QWidget):
         self.log_panel.clear()
         self.stats_label.setText("")
         self._current_segments = []
+        self._translated_segments = []
 
         self.log_panel.append_log(f"文件: {os.path.basename(media_path)}")
         self.log_panel.append_log(f"模型: {model} | 语言: {language or '自动检测'}")
         if user_script:
-            self.log_panel.append_log(f"参考文案: {len(user_script)} 字符")
+            self.log_panel.append_log(f"参考文案: {len(user_script)} 字符（仅用于对齐纠错，不作为 Whisper prompt）")
 
         # 创建 Worker
         self._worker = WhisperWorker(
@@ -676,6 +702,7 @@ class WhisperWidget(QWidget):
 
     def _on_finished(self, segments: list):
         self._current_segments = segments
+        self._translated_segments = []
 
         # 可选翻译
         if self.chk_translate.isChecked() and segments:
@@ -686,75 +713,52 @@ class WhisperWidget(QWidget):
     def _run_translation(self, segments: list):
         """调用 TranslationManager 翻译 segments。"""
         self.log_panel.append_log("🌍 正在调用翻译 API...")
+        self.progress_bar.setVisible(True)
         api_key = self.api_key_edit.text().strip()
         target_lang = self.trans_lang_combo.currentData()
 
-        try:
-            from ..core.translation_manager import TranslationManager
-            tm = TranslationManager(api_key=api_key)
+        self._translate_worker = TranslationWorker(
+            segments=segments,
+            api_key=api_key,
+            target_lang=target_lang,
+        )
+        self._translate_thread = QThread()
+        self._translate_worker.moveToThread(self._translate_thread)
+        self._translate_thread.started.connect(self._translate_worker.run)
+        self._translate_worker.progress.connect(self._on_progress)
+        self._translate_worker.finished.connect(self._on_translation_finished)
+        self._translate_worker.error.connect(self._on_translation_error)
+        self._translate_worker.finished.connect(self._translate_thread.quit)
+        self._translate_worker.error.connect(self._translate_thread.quit)
+        self._translate_thread.start()
 
-            # TranslationManager.translate_segments 只支持中文，对于其他语言使用自定义 prompt
-            if target_lang == "zh":
-                translated = tm.translate_segments(segments)
-            else:
-                # 对其他目标语言，修改 model 和 prompt
-                lang_name = TRANSLATE_TARGET_LANGUAGES.get(target_lang, target_lang)
-                translated = self._translate_to_other_language(segments, api_key, lang_name)
+    def _on_translation_finished(self, translated: list):
+        self._translated_segments = translated
+        self._display_segments(self._current_segments, translated)
+        self.log_panel.append_log("✅ 翻译完成")
+        self.progress_bar.setVisible(False)
 
-            self._current_segments = translated
-            self.log_panel.append_log(f"✅ 翻译完成 → {TRANSLATE_TARGET_LANGUAGES.get(target_lang, target_lang)}")
-            self._display_segments(translated)
-        except Exception as e:
-            self.log_panel.append_log(f"⚠️ 翻译失败: {e}，使用原始识别结果")
-            self._display_segments(segments)
+    def _on_translation_error(self, message: str):
+        self._translated_segments = []
+        self.log_panel.append_log(f"⚠️ 翻译失败: {message}，使用原始识别结果")
+        self._display_segments(self._current_segments)
+        self.progress_bar.setVisible(False)
 
-    def _translate_to_other_language(self, segments: list, api_key: str, lang_name: str) -> list:
-        """翻译到非中文的目标语言。"""
-        from ..core.translation_manager import TranslationManager
-        import requests as req_module
-
-        tm = TranslationManager(api_key=api_key)
-        # 覆盖系统提示
-        batch_size = 20
-        translated_segs = []
-
-        for i in range(0, len(segments), batch_size):
-            batch = segments[i:i + batch_size]
-            texts = [f"{idx+1}. {s.get('text','')}" for idx, s in enumerate(batch)]
-            sep = "###SEG_SEP###"
-            combined = f"\n{sep}\n".join(texts)
-
-            system_prompt = (
-                f"You are a professional subtitle translator. "
-                f"Translate each numbered segment into {lang_name}, preserving the numeric prefix. "
-                f"Segments are separated by '{sep}'. Output only the translated segments separated by '{sep}'."
-            )
-
-            try:
-                result = tm._request_with_retry(system_prompt, combined)
-                if result:
-                    import re
-                    parts = [p.strip() for p in result.split(sep)]
-                    for j, (orig, trans) in enumerate(zip(batch, parts)):
-                        m = re.match(r'\s*\d+[\.:]\s*(.*)', trans, re.S)
-                        txt = m.group(1).strip() if m else trans.strip()
-                        updated = orig.copy()
-                        updated["text"] = txt
-                        translated_segs.append(updated)
-                else:
-                    translated_segs.extend(batch)
-            except Exception:
-                translated_segs.extend(batch)
-
-        return translated_segs
-
-    def _display_segments(self, segments: list):
+    def _display_segments(self, segments: list, translated_segments: list | None = None):
         """将 segments 显示到预览面板。"""
         self._current_segments = segments
 
         # SRT 预览
         srt_text = segments_to_srt_text(segments)
         self.srt_preview.setPlainText(srt_text)
+
+        # 翻译预览
+        if translated_segments:
+            trans_text = segments_to_srt_text(translated_segments)
+            self.trans_preview.setPlainText(trans_text)
+        else:
+            self.trans_preview.clear()
+            self.trans_preview.setPlaceholderText("若启用自动翻译，翻译结果会显示在此处。")
 
         # JSON 预览
         try:
@@ -815,20 +819,29 @@ class WhisperWidget(QWidget):
             QMessageBox.warning(self, "未选择格式", "请至少勾选一种导出格式。")
             return
 
-        # 选择保存目录
+        # 选择保存文件名（默认跟随输入文件所在目录）
         media_path = self.drop_zone.file_path
         default_dir = str(Path(media_path).parent) if media_path else ""
         default_name = Path(media_path).stem if media_path else "subtitle"
+        default_path = os.path.join(default_dir, f"{default_name}.srt")
 
-        save_dir = QFileDialog.getExistingDirectory(self, "选择保存目录", default_dir)
-        if not save_dir:
+        save_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "选择导出文件",
+            default_path,
+            "字幕文件 (*.srt *.vtt *.ass *.fcpxml);;所有文件 (*)"
+        )
+        if not save_path:
             return
+
+        save_dir = str(Path(save_path).parent)
+        base_name = Path(save_path).stem
 
         exported = []
         errors = []
 
         for fmt in formats:
-            out_path = os.path.join(save_dir, f"{default_name}.{fmt}")
+            out_path = os.path.join(save_dir, f"{base_name}.{fmt}")
             try:
                 if fmt == "srt":
                     export_srt(segments_to_export, out_path)
@@ -840,6 +853,22 @@ class WhisperWidget(QWidget):
                     export_fcpxml(segments_to_export, out_path)
                 exported.append(os.path.basename(out_path))
                 self.log_panel.append_log(f"✅ 已导出: {os.path.basename(out_path)}")
+
+                # 导出翻译文件
+                if self.chk_translate.isChecked() and self._translated_segments:
+                    trans_label = self.trans_lang_combo.currentData() or "trans"
+                    trans_suffix = "cn" if trans_label == "zh" else trans_label
+                    trans_path = os.path.join(save_dir, f"{base_name}_{trans_suffix}.{fmt}")
+                    if fmt == "srt":
+                        export_srt(self._translated_segments, trans_path)
+                    elif fmt == "vtt":
+                        export_vtt(self._translated_segments, trans_path)
+                    elif fmt == "ass":
+                        export_ass(self._translated_segments, trans_path)
+                    elif fmt == "fcpxml":
+                        export_fcpxml(self._translated_segments, trans_path)
+                    exported.append(os.path.basename(trans_path))
+                    self.log_panel.append_log(f"✅ 已导出翻译文件: {os.path.basename(trans_path)}")
             except Exception as e:
                 errors.append(f"{fmt.upper()}: {e}")
                 self.log_panel.append_log(f"❌ {fmt.upper()} 导出失败: {e}")
