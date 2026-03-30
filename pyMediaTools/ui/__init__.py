@@ -9,6 +9,7 @@ from .videocut_ui import VideoCutWidget
 # from .rembg_ui import RembgWidget
 from .ass_editor_ui import ASSEditorWidget
 from .dashboard_shell import DashboardWindow
+from .whisper_ui import WhisperWidget
 
 __all__ = [
     "ElevenLabsWidget",
@@ -18,4 +19,5 @@ __all__ = [
     # "RembgWidget",
     "ASSEditorWidget",
     "DashboardWindow",
+    "WhisperWidget",
 ]

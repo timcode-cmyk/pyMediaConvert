@@ -58,7 +58,7 @@ logger.info(f"MediaTools 启动中 (v{__version__})...")
 # --- 4. 导入业务组件 ---
 try:
     logger.info("正在导入依赖组件 (Importing UI components)...")
-    from pyMediaTools.ui import MediaConverterWidget, ElevenLabsWidget, VideoDownloadWidget, VideoCutWidget, ASSEditorWidget, DashboardWindow
+    from pyMediaTools.ui import MediaConverterWidget, ElevenLabsWidget, VideoDownloadWidget, VideoCutWidget, ASSEditorWidget, DashboardWindow, WhisperWidget
     from PySide6.QtWidgets import QApplication
     logger.info("组件导入成功 (Components imported).")
 except Exception as e:
@@ -71,6 +71,7 @@ def create_main_window():
     modules = [
         ("工作台", MediaConverterWidget()),
         ("视频配音", ElevenLabsWidget()),
+        ("语音识别", WhisperWidget()),
         ("场景分割", VideoCutWidget()),
         ("视频下载", VideoDownloadWidget()),
         ("字幕编辑", ASSEditorWidget()),
