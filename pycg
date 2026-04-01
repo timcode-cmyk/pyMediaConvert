@@ -1,2 +1,0 @@
-import pycg
-from pycg.pycg import CallGraphGenerator
