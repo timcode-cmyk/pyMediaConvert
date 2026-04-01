@@ -41,4 +41,5 @@ nuitka-crash-report.xml
 .idea/
 
 *.log
+ffmpeg_log.txt
 .pytest_cache

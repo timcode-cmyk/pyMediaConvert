@@ -67,17 +67,21 @@ QMainWindow {
     color: #858585;
 }
 
-#HeaderSearch {
+#SearchContainer {
     background-color: #3C3C3C;
     border: 1px solid #3C3C3C;
     border-radius: 18px;
-    padding: 8px 15px;
-    font-size: 13px;
-    color: #CCCCCC;
 }
 
-#HeaderSearch:focus {
+#SearchContainer:focus-within {
     border: 1px solid #007ACC;
+}
+
+#HeaderSearch {
+    background-color: transparent;
+    border: none;
+    font-size: 13px;
+    color: #CCCCCC;
 }
 
 /* Base Card Style for internal widgets */
@@ -224,17 +228,21 @@ QMainWindow {
     color: #4A5568;
 }
 
-#HeaderSearch {
+#SearchContainer {
     background-color: #FFFFFF;
     border: 1px solid #E2E8F0;
     border-radius: 18px;
-    padding: 8px 15px;
-    font-size: 13px;
-    color: #4A5568;
 }
 
-#HeaderSearch:focus {
+#SearchContainer:focus-within {
     border: 1px solid #3182CE;
+}
+
+#HeaderSearch {
+    background-color: transparent;
+    border: none;
+    font-size: 13px;
+    color: #4A5568;
 }
 
 /* Base Card Style for internal widgets */
