@@ -135,8 +135,9 @@ class DashboardWindow(QMainWindow):
         self.resize(1100, 720)
         
         # 设置无边框与透明背景（实现圆角关键）
-        self.setWindowFlags(Qt.Window | Qt.FramelessWindowHint | Qt.WindowMinMaxButtonsHint)
+        self.setWindowFlags(Qt.Window | Qt.FramelessWindowHint | Qt.WindowSystemMenuHint | Qt.WindowMinMaxButtonsHint)
         self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setMouseTracking(True)
 
         # 主容器：用于承载背景色和圆角
         self.main_container = QWidget()
@@ -229,17 +230,18 @@ class DashboardWindow(QMainWindow):
         # --- Search Bar with Icon Styling ---
         self.search_container = QFrame()
         self.search_container.setObjectName("SearchContainer")
+        self.search_container.setAttribute(Qt.WA_StyledBackground, True)
         self.search_container.setFixedWidth(320)
         search_layout = QHBoxLayout(self.search_container)
         search_layout.setContentsMargins(10, 0, 10, 0)
         search_layout.setSpacing(5)
         
-        search_icon = QLabel("🔍")
+        search_icon = QLabel("Q")
         search_icon.setStyleSheet("color: #718096; font-size: 14px;")
         
         self.search_bar = QLineEdit()
         self.search_bar.setObjectName("HeaderSearch")
-        self.search_bar.setPlaceholderText("关键词查找工具或功能...")
+        self.search_bar.setPlaceholderText("关键词查找工具...")
         self.search_bar.setFrame(False)
         self.search_bar.setStyleSheet("background: transparent; border: none; padding: 5px;")
         
@@ -313,19 +315,77 @@ class DashboardWindow(QMainWindow):
         else:
             self.showMaximized()
 
-    def mousePressEvent(self, event):
-        if event.button() == Qt.LeftButton and not self.isMaximized():
-            # 仅在顶部区域（高度 70px 内）触发拖拽
-            if event.position().y() < 70:
-                # 调用操作系统原生的窗口拖动接口，彻底解决延迟问题
-                self.windowHandle().startSystemMove()
-                event.accept()
-
     def mouseDoubleClickEvent(self, event):
         # 双击顶部区域最大化/还原
         if event.button() == Qt.LeftButton and event.position().y() < 70:
             self.toggle_maximize()
             event.accept()
+
+    def _resize_edge_at_pos(self, pos):
+        margin = 8
+        x, y = pos.x(), pos.y()
+        w, h = self.width(), self.height()
+        top = y <= margin
+        bottom = y >= h - margin
+        left = x <= margin
+        right = x >= w - margin
+
+        if top and left:
+            return Qt.TopLeftCorner
+        if top and right:
+            return Qt.TopRightCorner
+        if bottom and left:
+            return Qt.BottomLeftCorner
+        if bottom and right:
+            return Qt.BottomRightCorner
+        if left:
+            return Qt.LeftEdge
+        if right:
+            return Qt.RightEdge
+        if top:
+            return Qt.TopEdge
+        if bottom:
+            return Qt.BottomEdge
+        return None
+
+    def _update_resize_cursor(self, event):
+        if self.isMaximized():
+            self.unsetCursor()
+            return
+        edge = self._resize_edge_at_pos(event.pos())
+        if edge in (Qt.TopEdge, Qt.BottomEdge):
+            self.setCursor(Qt.SizeVerCursor)
+        elif edge in (Qt.LeftEdge, Qt.RightEdge):
+            self.setCursor(Qt.SizeHorCursor)
+        elif edge in (Qt.TopLeftCorner, Qt.BottomRightCorner):
+            self.setCursor(Qt.SizeFDiagCursor)
+        elif edge in (Qt.TopRightCorner, Qt.BottomLeftCorner):
+            self.setCursor(Qt.SizeBDiagCursor)
+        else:
+            self.unsetCursor()
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton and not self.isMaximized():
+            edge = self._resize_edge_at_pos(event.pos())
+            if edge and self.windowHandle():
+                self.windowHandle().startSystemResize(edge)
+                event.accept()
+                return
+            if event.position().y() < 70:
+                self.windowHandle().startSystemMove()
+                event.accept()
+                return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if event.buttons() == Qt.NoButton:
+            self._update_resize_cursor(event)
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.unsetCursor()
+        super().mouseReleaseEvent(event)
 
     def switch_module(self, index):
         self.stacked_widget.setCurrentIndex(index)
