@@ -2,6 +2,7 @@ import time
 import requests
 import json
 import re
+from PySide6.QtCore import QThread, Signal
 from ..logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -279,3 +280,32 @@ def generate_emotion_for_sentence(text, api_key, model="openai/gpt-oss-120b"):
             time.sleep(2)
 
     return None
+
+
+class EmotionAnalysisWorker(QThread):
+    """
+    异步执行 Groq 情绪分析的 Worker。
+    """
+    result_ready = Signal(str)  # 成功时发送优化后的文本
+    error = Signal(str)         # 错误时发送错误信息
+    finished = Signal(str)      # 兼容旧代码，发送结果或空串
+
+    def __init__(self, text, api_key, model="openai/gpt-oss-120b", parent=None):
+        super().__init__(parent)
+        self.text = text
+        self.api_key = api_key
+        self.model = model
+
+    def run(self):
+        try:
+            logger.info(f"开始异步情绪分析: {self.text[:30]}...")
+            # generate_emotion_for_sentence 会根据 system_prompt 返回包含标签的全文
+            improved_text = generate_emotion_for_sentence(self.text, self.api_key, self.model)
+            if improved_text:
+                self.result_ready.emit(improved_text)
+                self.finished.emit(improved_text)
+            else:
+                self.error.emit("AI 未能返回优化后的文本")
+        except Exception as e:
+            logger.exception(f"情绪分析 Worker 异常: {e}")
+            self.error.emit(str(e))

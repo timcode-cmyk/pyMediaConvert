@@ -61,6 +61,7 @@ class ProgressMonitor(QObject):
 
 class ConversionWorker(QObject):
     finished = Signal(bool, str)
+    total_files_found = Signal(int)
 
     def __init__(self, input_dir, output_dir, mode_config, monitor, parent=None):
         super().__init__(parent)
@@ -80,8 +81,19 @@ class ConversionWorker(QObject):
                 support_exts=self.mode_config.get('support_exts'),
                 output_ext=self.mode_config.get('output_ext')
             )
-            converter.run(Path(self.input_dir), Path(self.output_dir), self.monitor)
-            is_successful = not self.monitor.check_stop_flag()
+            
+            # 在后台线程扫描文件
+            self.monitor.update_overall_progress(0, 0, "正在扫描文件...")
+            converter.find_files(Path(self.input_dir))
+            total_files = len(converter.files)
+            self.total_files_found.emit(total_files)
+            
+            if total_files == 0:
+                error_msg = f"在目录中未找到支持的文件类型。\n支持类型: {self.mode_config.get('support_exts')}"
+                is_successful = False
+            else:
+                converter.run(Path(self.input_dir), Path(self.output_dir), self.monitor)
+                is_successful = not self.monitor.check_stop_flag()
         except Exception as e:
             import traceback
             error_msg = traceback.format_exc()
@@ -569,23 +581,6 @@ class MediaConverterWidget(QWidget):
                 QMessageBox.critical(self, "配置错误", "请选择有效的转换模式。")
                 return
 
-        # 检查文件
-        try:
-            self.status_label.setText("正在扫描文件...")
-            QApplication.processEvents() 
-            temp_worker = mode_config['class'](params=mode_config.get('params', {}), support_exts=mode_config.get('support_exts'), init_checks=False)
-            temp_worker.find_files(Path(input_dir))
-            files_to_process_count = len(temp_worker.files)
-        except Exception as e:
-            logger.exception(f"文件扫描失败: {e}")
-            QMessageBox.critical(self, "错误", f"文件扫描失败: {e}")
-            return
-
-        if files_to_process_count == 0:
-            QMessageBox.warning(self, "无文件", f"在目录中未找到支持的文件类型。\n支持类型: {mode_config.get('support_exts')}")
-            return
-
-        self.last_total_files = files_to_process_count
         self.last_stop_requested = False
         self.is_converting = True
         
@@ -596,9 +591,9 @@ class MediaConverterWidget(QWidget):
         
         self.overall_progress_bar.setValue(0)
         self.file_progress_bar.setValue(0)
-        self.overall_progress_text.setText(f"0/{self.last_total_files}")
+        self.overall_progress_text.setText("扫描中...")
         self.file_progress_text.setText("准备中...")
-        self.status_label.setText(f"正在初始化 Worker，共 {self.last_total_files} 个文件...")
+        self.status_label.setText("正在启动后台扫描线程...")
 
         self.worker_thread = QThread()
         self.conversion_monitor = ProgressMonitor()
@@ -606,12 +601,22 @@ class MediaConverterWidget(QWidget):
         self.worker.moveToThread(self.worker_thread)
         self.worker_thread.started.connect(self.worker.run)
         self.worker.finished.connect(self.conversionFinished)
+        self.worker.total_files_found.connect(self.onTotalFilesFound)
         self.conversion_monitor.file_progress.connect(self.updateFileProgress)
         self.conversion_monitor.overall_progress.connect(self.updateOverallProgress)
         self.worker.finished.connect(self.worker_thread.quit)
         self.worker.finished.connect(self.worker.deleteLater)
         self.worker_thread.finished.connect(self.worker_thread.deleteLater)
         self.worker_thread.start()
+
+    @Slot(int)
+    def onTotalFilesFound(self, count):
+        self.last_total_files = count
+        if count > 0:
+            self.overall_progress_text.setText(f"0/{count}")
+            self.status_label.setText(f"已找到 {count} 个文件，开始转换...")
+        else:
+            self.status_label.setText("未找到符合条件的文件。")
 
     def stopConversion(self):
         if self.worker_thread and self.worker_thread.isRunning() and self.conversion_monitor:

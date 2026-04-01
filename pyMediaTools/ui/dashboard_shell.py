@@ -2,7 +2,7 @@ import os
 import sys
 from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
                                QPushButton, QLabel, QStackedWidget, QLineEdit, QSpacerItem, 
-                               QSizePolicy, QDialog, QTextEdit)
+                               QSizePolicy, QDialog, QTextEdit, QFrame)
 from PySide6.QtCore import Qt, QSize, QPoint, QThread, Signal, Slot, QUrl
 from PySide6.QtGui import QFont, QIcon, QDesktopServices
 from pyMediaTools.core.update import check_latest_release
@@ -135,8 +135,9 @@ class DashboardWindow(QMainWindow):
         self.resize(1100, 720)
         
         # 设置无边框与透明背景（实现圆角关键）
-        self.setWindowFlags(Qt.Window | Qt.FramelessWindowHint | Qt.WindowMinMaxButtonsHint)
+        self.setWindowFlags(Qt.Window | Qt.FramelessWindowHint | Qt.WindowSystemMenuHint | Qt.WindowMinMaxButtonsHint)
         self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setMouseTracking(True)
 
         # 主容器：用于承载背景色和圆角
         self.main_container = QWidget()
@@ -226,21 +227,59 @@ class DashboardWindow(QMainWindow):
         self.header_title.setObjectName("HeaderTitleText")
         self.header_title.setFont(QFont("Segoe UI", 16, QFont.Bold))
         
-        search_bar = QLineEdit()
-        search_bar.setObjectName("HeaderSearch")
-        search_bar.setPlaceholderText("Q 关键词查找")
-        search_bar.setFixedWidth(300)
+        # --- Search Bar with Icon Styling ---
+        self.search_container = QFrame()
+        self.search_container.setObjectName("SearchContainer")
+        self.search_container.setAttribute(Qt.WA_StyledBackground, True)
+        self.search_container.setFixedWidth(320)
+        search_layout = QHBoxLayout(self.search_container)
+        search_layout.setContentsMargins(10, 0, 10, 0)
+        search_layout.setSpacing(5)
+        
+        search_icon = QLabel("Q")
+        search_icon.setStyleSheet("color: #718096; font-size: 14px;")
+        
+        self.search_bar = QLineEdit()
+        self.search_bar.setObjectName("HeaderSearch")
+        self.search_bar.setPlaceholderText("关键词查找工具...")
+        self.search_bar.setFrame(False)
+        self.search_bar.setStyleSheet("background: transparent; border: none; padding: 5px;")
+        
+        search_layout.addWidget(search_icon)
+        search_layout.addWidget(self.search_bar)
 
-        # Mock icons (similar to reference image)
-        mock_icons = QLabel(" 🖲️   🔔   🧑 ")
-        mock_icons.setStyleSheet("font-size: 16px; color: #4A5568;")
-        mock_icons.setCursor(Qt.PointingHandCursor)
+        # --- Header Action Icons ---
+        actions_layout = QHBoxLayout()
+        actions_layout.setSpacing(15)
+        
+        btn_feedback = QPushButton("💬")
+        btn_feedback.setToolTip("反馈建议")
+        btn_notif = QPushButton("🔔")
+        btn_notif.setToolTip("通知中心")
+        btn_user = QPushButton("👤")
+        btn_user.setToolTip("用户中心")
+        
+        for b in [btn_feedback, btn_notif, btn_user]:
+            b.setFixedSize(32, 32)
+            b.setCursor(Qt.PointingHandCursor)
+            b.setStyleSheet("""
+                QPushButton {
+                    background-color: transparent;
+                    border-radius: 16px;
+                    font-size: 16px;
+                    color: #4A5568;
+                }
+                QPushButton:hover {
+                    background-color: rgba(0, 0, 0, 0.05);
+                }
+            """)
+            actions_layout.addWidget(b)
 
         header_layout.addWidget(self.header_title)
         header_layout.addStretch()
-        header_layout.addWidget(search_bar)
-        header_layout.addSpacing(20)
-        header_layout.addWidget(mock_icons)
+        header_layout.addWidget(self.search_container)
+        header_layout.addSpacing(10)
+        header_layout.addLayout(actions_layout)
         
         # --- Windows 风格控制按钮 (放在 Header 右侧) ---
         if sys.platform != "darwin":
@@ -276,19 +315,77 @@ class DashboardWindow(QMainWindow):
         else:
             self.showMaximized()
 
-    def mousePressEvent(self, event):
-        if event.button() == Qt.LeftButton and not self.isMaximized():
-            # 仅在顶部区域（高度 70px 内）触发拖拽
-            if event.position().y() < 70:
-                # 调用操作系统原生的窗口拖动接口，彻底解决延迟问题
-                self.windowHandle().startSystemMove()
-                event.accept()
-
     def mouseDoubleClickEvent(self, event):
         # 双击顶部区域最大化/还原
         if event.button() == Qt.LeftButton and event.position().y() < 70:
             self.toggle_maximize()
             event.accept()
+
+    def _resize_edge_at_pos(self, pos):
+        margin = 8
+        x, y = pos.x(), pos.y()
+        w, h = self.width(), self.height()
+        top = y <= margin
+        bottom = y >= h - margin
+        left = x <= margin
+        right = x >= w - margin
+
+        if top and left:
+            return Qt.TopLeftCorner
+        if top and right:
+            return Qt.TopRightCorner
+        if bottom and left:
+            return Qt.BottomLeftCorner
+        if bottom and right:
+            return Qt.BottomRightCorner
+        if left:
+            return Qt.LeftEdge
+        if right:
+            return Qt.RightEdge
+        if top:
+            return Qt.TopEdge
+        if bottom:
+            return Qt.BottomEdge
+        return None
+
+    def _update_resize_cursor(self, event):
+        if self.isMaximized():
+            self.unsetCursor()
+            return
+        edge = self._resize_edge_at_pos(event.pos())
+        if edge in (Qt.TopEdge, Qt.BottomEdge):
+            self.setCursor(Qt.SizeVerCursor)
+        elif edge in (Qt.LeftEdge, Qt.RightEdge):
+            self.setCursor(Qt.SizeHorCursor)
+        elif edge in (Qt.TopLeftCorner, Qt.BottomRightCorner):
+            self.setCursor(Qt.SizeFDiagCursor)
+        elif edge in (Qt.TopRightCorner, Qt.BottomLeftCorner):
+            self.setCursor(Qt.SizeBDiagCursor)
+        else:
+            self.unsetCursor()
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton and not self.isMaximized():
+            edge = self._resize_edge_at_pos(event.pos())
+            if edge and self.windowHandle():
+                self.windowHandle().startSystemResize(edge)
+                event.accept()
+                return
+            if event.position().y() < 70:
+                self.windowHandle().startSystemMove()
+                event.accept()
+                return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if event.buttons() == Qt.NoButton:
+            self._update_resize_cursor(event)
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.unsetCursor()
+        super().mouseReleaseEvent(event)
 
     def switch_module(self, index):
         self.stacked_widget.setCurrentIndex(index)

@@ -237,11 +237,15 @@ class MediaConverter(ABC):
             logger.error("ffprobe 启动失败")
             return 0.0
 
-        # 循环等待结束，同时允许 UI 处理事件
-        while process.state() == QProcess.ProcessState.Running:
-            QCoreApplication.processEvents()
-            if process.waitForFinished(100):
-                break
+        # 等待进程结束
+        if not process.waitForFinished(10000): # 10秒超时
+            logger.error("ffprobe 执行超时")
+            process.kill()
+            return 0.0
+
+        if process.exitCode() != 0:
+            logger.error(f"ffprobe 运行出错，错误码: {process.exitCode()}")
+            return 0.0
 
         output = str(process.readAllStandardOutput(), encoding='utf-8').strip()
         
