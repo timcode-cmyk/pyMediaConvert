@@ -689,7 +689,7 @@ class SubtitleSettingsDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("字幕设置")
         self.setModal(True)
-        self.setMinimumSize(700, 700)  # 增加高度以防止内容被压缩
+        self.setMinimumSize(600, 600)  # 增加高度以防止内容被压缩
         
         self.parent_widget = parent
         self.xml_styles = xml_styles or {}
@@ -1353,7 +1353,7 @@ class ElevenLabsWidget(QWidget):
 
     def setup_ui(self):
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(20, 20, 20, 20)
+        main_layout.setContentsMargins(15, 10, 15, 15)
         main_layout.setSpacing(15)
 
         # # 标题

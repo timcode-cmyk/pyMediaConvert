@@ -273,8 +273,8 @@ class MediaConverterWidget(QWidget):
 
     def init_ui(self):
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(20, 20, 20, 20)
-        main_layout.setSpacing(15)
+        main_layout.setContentsMargins(15, 10, 15, 15)
+        main_layout.setSpacing(10)
 
         # title = QLabel("媒体转换工具 v1.14.2")
         # title.setFont(QFont("Segoe UI", 20, QFont.Bold))
@@ -364,13 +364,13 @@ class MediaConverterWidget(QWidget):
 
         self.input_path_edit = DropLineEdit()
         self.input_path_edit.setPlaceholderText("📂 拖放文件夹/文件到此处，或点击右侧按钮")
-        self.input_path_edit.setMinimumHeight(40)
+        self.input_path_edit.setMinimumHeight(36)
         self.input_path_edit.pathDropped.connect(self.updateOutputPath)
         self.input_path_edit.textChanged.connect(self.updateOutputPath)
         
         input_btn = QPushButton("浏览...")
         input_btn.setCursor(Qt.PointingHandCursor)
-        input_btn.setMinimumHeight(40)
+        input_btn.setMinimumHeight(36)
         input_btn.clicked.connect(self.selectInputPath)
         
         input_box = QHBoxLayout()
@@ -382,11 +382,11 @@ class MediaConverterWidget(QWidget):
 
         self.output_path_edit = QLineEdit()
         self.output_path_edit.setPlaceholderText("转换后的文件将保存在这里")
-        self.output_path_edit.setMinimumHeight(40)
+        self.output_path_edit.setMinimumHeight(36)
         
         output_btn = QPushButton("浏览...")
         output_btn.setCursor(Qt.PointingHandCursor)
-        output_btn.setMinimumHeight(40)
+        output_btn.setMinimumHeight(36)
         output_btn.clicked.connect(self.selectOutputDirectory)
         
         output_box = QHBoxLayout()
@@ -445,7 +445,7 @@ class MediaConverterWidget(QWidget):
         self.start_stop_button.clicked.connect(self.toggleConversion)
         self.start_stop_button.setProperty('converting', 'false')
         self.start_stop_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.start_stop_button.setMinimumHeight(45)
+        self.start_stop_button.setMinimumHeight(40)
         main_layout.addWidget(self.start_stop_button)
 
         self.loadModes()

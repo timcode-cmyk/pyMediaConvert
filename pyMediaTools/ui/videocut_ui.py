@@ -155,15 +155,15 @@ class VideoCutWidget(QWidget):
 
     def init_ui(self):
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(20, 20, 20, 20)
-        main_layout.setSpacing(15)
+        main_layout.setContentsMargins(15, 10, 15, 15)
+        main_layout.setSpacing(10)
 
         # 1. 路径设置
         path_group = QGroupBox("文件路径")
         path_layout = QVBoxLayout(path_group)
         self.input_path_edit = DropLineEdit()
         self.input_path_edit.setPlaceholderText("📂 拖放视频文件或文件夹到此处")
-        self.input_path_edit.setMinimumHeight(50)
+        self.input_path_edit.setMinimumHeight(40)
         self.input_path_edit.pathDropped.connect(self.update_output_path)
         self.input_path_edit.textChanged.connect(self.update_output_path)
         
@@ -257,7 +257,7 @@ class VideoCutWidget(QWidget):
         rename_layout.addWidget(QLabel("自定义片段名称 (每行对应一个片段):"))
         self.rename_edit = QTextEdit()
         self.rename_edit.setPlaceholderText("第一段视频的名称\n第二段视频的名称\n...")
-        self.rename_edit.setMinimumHeight(80)
+        self.rename_edit.setMinimumHeight(60)
         rename_layout.addWidget(self.rename_edit)
 
         naming_info = QLabel("命名规则: 日期_人员ID_自定义名称_序号.mp4")
@@ -283,7 +283,7 @@ class VideoCutWidget(QWidget):
         self.start_stop_button = QPushButton("🚀 开始处理")
         self.start_stop_button.setObjectName('StartStopButton')
         self.start_stop_button.setProperty('converting', 'false')
-        self.start_stop_button.setMinimumHeight(45)
+        self.start_stop_button.setMinimumHeight(40)
         self.start_stop_button.clicked.connect(self.toggle_processing)
         main_layout.addWidget(self.start_stop_button)
 

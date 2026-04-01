@@ -68,7 +68,7 @@ class DropZoneWidget(QFrame):
         layout = QVBoxLayout(self)
         layout.setAlignment(Qt.AlignCenter)
         layout.setSpacing(10)
-        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setContentsMargins(15, 10, 15, 15)
 
         self.icon_label = QLabel("🎬")
         self.icon_label.setAlignment(Qt.AlignCenter)
@@ -272,7 +272,7 @@ class WhisperWidget(QWidget):
         splitter.addWidget(right_panel)
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
-        splitter.setSizes([340, 700])
+        splitter.setSizes([310, 790])
         splitter.setHandleWidth(1)
 
         root.addWidget(splitter)
@@ -280,7 +280,7 @@ class WhisperWidget(QWidget):
     def _build_left_panel(self) -> QWidget:
         panel = QWidget()
         panel.setObjectName("LeftPanel")
-        panel.setFixedWidth(360)
+        panel.setFixedWidth(310)
         panel.setStyleSheet("""
             QWidget#LeftPanel {
                 border-right: 1px solid #333;
@@ -294,8 +294,8 @@ class WhisperWidget(QWidget):
 
         content = QWidget()
         layout = QVBoxLayout(content)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(14)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(10)
 
         # ------- 标题 -------
         title = QLabel("🎤  语音识别")
@@ -382,7 +382,7 @@ class WhisperWidget(QWidget):
 
         self.script_edit = QTextEdit()
         self.script_edit.setPlaceholderText("在此粘贴参考文案或台词脚本...\n该内容仅用于识别后对齐纠错，不作为 Whisper prompt 输入。")
-        self.script_edit.setMinimumHeight(110)
+        self.script_edit.setMinimumHeight(80)
         self.script_edit.setMaximumHeight(180)
         script_layout.addWidget(self.script_edit)
 

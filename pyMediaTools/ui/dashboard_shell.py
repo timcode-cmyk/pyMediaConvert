@@ -132,7 +132,7 @@ class DashboardWindow(QMainWindow):
 
     def init_ui(self):
         self.setWindowTitle("pyMediaTools")
-        self.resize(1280, 800)
+        self.resize(1100, 720)
         
         # 设置无边框与透明背景（实现圆角关键）
         self.setWindowFlags(Qt.Window | Qt.FramelessWindowHint | Qt.WindowMinMaxButtonsHint)
@@ -150,7 +150,7 @@ class DashboardWindow(QMainWindow):
         # --- Sidebar ---
         self.sidebar = QWidget()
         self.sidebar.setObjectName("Sidebar")
-        self.sidebar.setFixedWidth(240)
+        self.sidebar.setFixedWidth(210)
         sidebar_layout = QVBoxLayout(self.sidebar)
         sidebar_layout.setContentsMargins(0, 15, 0, 0)
         sidebar_layout.setSpacing(0)
@@ -213,8 +213,8 @@ class DashboardWindow(QMainWindow):
         # --- Right Content Area ---
         right_area = QWidget()
         right_area_layout = QVBoxLayout(right_area)
-        right_area_layout.setContentsMargins(30, 20, 30, 30)
-        right_area_layout.setSpacing(20)
+        right_area_layout.setContentsMargins(20, 10, 20, 15)
+        right_area_layout.setSpacing(15)
 
         # Header
         header = QWidget()
@@ -224,7 +224,7 @@ class DashboardWindow(QMainWindow):
 
         self.header_title = QLabel("Dashboard")
         self.header_title.setObjectName("HeaderTitleText")
-        self.header_title.setFont(QFont("Segoe UI", 18, QFont.Bold))
+        self.header_title.setFont(QFont("Segoe UI", 16, QFont.Bold))
         
         search_bar = QLineEdit()
         search_bar.setObjectName("HeaderSearch")

@@ -42,7 +42,7 @@ class VideoDownloadWidget(QWidget):
     def initUI(self):
         layout = QVBoxLayout(self)
         layout.setSpacing(10)
-        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setContentsMargins(15, 10, 15, 15)
         # --- 区域1: 视频链接解析与列表 (合并) ---
         parse_list_group = QGroupBox("任务列表")
         parse_list_layout = QVBoxLayout(parse_list_group)
@@ -187,7 +187,7 @@ class VideoDownloadWidget(QWidget):
         
         self.btn_download = QPushButton("⬇️ 开始下载")
         self.btn_download.clicked.connect(self.toggle_download)
-        self.btn_download.setMinimumHeight(45)
+        self.btn_download.setMinimumHeight(40)
         self.btn_download.setMinimumWidth(140)
         self.btn_download.setStyleSheet("font-weight: bold;")
         
