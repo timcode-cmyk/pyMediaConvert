@@ -9,6 +9,7 @@ y = 1820
 scale = 100
 blur = true
 enabled = true
+group = 1
 
 [[watermark.platforms]]
 name = "Gemini"
@@ -18,6 +19,7 @@ y = 1792
 scale = 100
 blur = true
 enabled = false
+group = 1
 
 [[watermark.platforms]]
 name = "Vidu"
@@ -27,6 +29,7 @@ y = 1811
 scale = 100
 blur = false
 enabled = false
+group = 2
 
 [[watermark.platforms]]
 name = "Veo"
@@ -36,6 +39,7 @@ y = 1812
 scale = 100
 blur = true
 enabled = false
+group = 2
 
 [[watermark.platforms]]
 name = "Kling"
@@ -45,6 +49,7 @@ y = 1688
 scale = 100
 blur = false
 enabled = false
+group = 1
 
 [[watermark.platforms]]
 name = "Hailuo"
@@ -54,6 +59,7 @@ y = 1769
 scale = 100
 blur = true
 enabled = false
+group = 2
 
 [[watermark.platforms]]
 name = "HeyGen"
@@ -63,6 +69,27 @@ y = 1805
 scale = 100
 blur = true
 enabled = false
+group = 3
+
+[[watermark.platforms]]
+name = "SUNO"
+path = "assets/suno.png"
+x = 13
+y = 1853
+scale = 100
+blur = false
+enabled = false
+group = 4
+
+[[watermark.platforms]]
+name = "ElevenLabs"
+path = "assets/elevenlabs.png"
+x = 17
+y = 1806
+scale = 100
+blur = false
+enabled = false
+group = 4
 
 [modes.image]
 class = "AddCustomLogo"

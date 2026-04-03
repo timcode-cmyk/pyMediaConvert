@@ -104,13 +104,14 @@ class ConversionWorker(QObject):
 
 
 class LogoConfigWidget(QFrame):
-    def __init__(self, platform_name, default_path, x, y, default_scale, blur, enabled, parent=None):
+    def __init__(self, platform_name, default_path, x, y, default_scale, blur, enabled, group_id=1, parent=None):
         super().__init__(parent)
         self.platform_name = platform_name
         self.default_path = default_path
         self.config_x = x
         self.config_y = y
         self.config_scale = default_scale
+        self.group_id = group_id
         
         self.is_enabled = enabled
         self.setCursor(Qt.PointingHandCursor)
@@ -175,25 +176,54 @@ class LogoConfigWidget(QFrame):
         super().mousePressEvent(event)
 
     def update_style(self):
+        from PySide6.QtGui import QPalette
+        is_dark = self.palette().color(QPalette.Window).lightness() < 128
+        
+        # Color palette for groups
+        colors = [
+            "#4189E6", # 1 Blue (default)
+            "#4CAF50", # 2 Green
+            "#FF9800", # 3 Orange
+            "#9C27B0", # 4 Purple
+            "#E91E63", # 5 Pink
+            "#00BCD4", # 6 Cyan
+            "#F44336", # 7 Red
+        ]
+        
+        # Map group_id to a color index
+        idx = (self.group_id - 1) % len(colors)
+        base_color = colors[idx]
+        
+        # Convert hex to rgb
+        base_hex = base_color.lstrip('#')
+        r, g, b = tuple(int(base_hex[i:i+2], 16) for i in (0, 2, 4))
+        
+        # Calculate opacities depending on light/dark mode
+        bg_alpha = 0.15 if is_dark else 0.1
+        active_bg = f"rgba({r}, {g}, {b}, {bg_alpha})"
+        active_border = f"rgba({r}, {g}, {b}, 0.8)"
+        
+        hover_bg = f"rgba({r}, {g}, {b}, 0.05)"
+
         if self.is_enabled:
-            self.setStyleSheet("""
-                QFrame#LogoCard {
-                    background-color: rgba(65, 137, 230, 0.1);
-                    border: 2px solid #4189E6;
+            self.setStyleSheet(f"""
+                QFrame#LogoCard {{
+                    background-color: {active_bg};
+                    border: 2px solid {active_border};
                     border-radius: 10px;
-                }
+                }}
             """)
         else:
-            self.setStyleSheet("""
-                QFrame#LogoCard {
+            self.setStyleSheet(f"""
+                QFrame#LogoCard {{
                     background-color: transparent;
                     border: 1px solid #777777;
                     border-radius: 10px;
-                }
-                QFrame#LogoCard:hover {
+                }}
+                QFrame#LogoCard:hover {{
                     border: 1px solid #AAAAAA;
-                    background-color: rgba(255, 255, 255, 0.05);
-                }
+                    background-color: {hover_bg};
+                }}
             """)
 
     def get_config(self):
@@ -340,8 +370,9 @@ class MediaConverterWidget(QWidget):
                 scale = plat.get("scale", 100)
                 blur = plat.get("blur", False)
                 enabled = plat.get("enabled", False)
+                group_id = plat.get("group", 1)
                 
-            lw = LogoConfigWidget(name, pth, x, y, scale, blur, enabled)
+            lw = LogoConfigWidget(name, pth, x, y, scale, blur, enabled, group_id)
             scroll_content.add_widget(lw)
             self.logo_widgets.append(lw)
             
