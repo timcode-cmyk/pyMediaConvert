@@ -169,7 +169,7 @@ jobs:
           subject-path: 'release-dist/*'
 
       - name: Create Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           # 修正：添加了 .dmg 并确保路径正确
           files: |
