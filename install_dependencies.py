@@ -102,7 +102,7 @@ def setup_binaries():
                 'x86_64': 'https://evermeet.cx/ffmpeg/ffprobe-8.1.zip',
             }
         },
-        'yt-dlp': 'https://github.com/yt-dlp/yt-dlp/archive/refs/heads/release.zip'
+        'yt-dlp': 'https://github.com/yt-dlp/yt-dlp/archive/refs/heads/master.zip'
     }
 
     temp_dir = os.path.join(root_dir, 'temp_downloads')

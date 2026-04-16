@@ -115,18 +115,13 @@ support_exts = [".mp4", ".png", ".jpg", ".jpeg"]
 ass = "assets/AI-Hindi.ass"
 
 [modes.image3]
-class = "AddCustomLogo"
-description = "6. 添加 Dibuat dengan Al"
+class = "AddAssText"
+description = "6. 添加 Dibuat dengan AI"
 output_ext = ""
 support_exts = [".mp4", ".png", ".jpg", ".jpeg"]
  
 [modes.image3.params]
-x = "W-tw-10"
-y = 40
-font_path = "assets/Roboto-Bold.ttf"
-font_size = "24"
-font_color = "white"
-text = "Dibuat dengan Al"
+ass = "assets/AI-Indonesian.ass"
  
 
 [modes.h264]
