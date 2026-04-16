@@ -189,13 +189,26 @@ class DashboardWindow(QMainWindow):
 
         sidebar_layout.addSpacerItem(QSpacerItem(20, 40, QSizePolicy.Minimum, QSizePolicy.Expanding))
 
-        # --- 版本号与 GitHub 链接 (位于退出按钮上方) ---
+        # --- 版本号与设置按钮 ---
+        ver_set_layout = QHBoxLayout()
+        ver_set_layout.setContentsMargins(20, 0, 20, 0)
+        
         self.version_label = QLabel(f"v{self.version}")
-        self.version_label.setAlignment(Qt.AlignCenter)
         self.version_label.setStyleSheet("color: #718096; font-size: 11px; margin-bottom: 2px;")
         self.version_label.setCursor(Qt.PointingHandCursor)
         self.version_label.mousePressEvent = lambda e: self.show_update_dialog()
-        sidebar_layout.addWidget(self.version_label)
+        ver_set_layout.addWidget(self.version_label)
+        
+        ver_set_layout.addStretch()
+        
+        self.settings_btn = QPushButton("⚙️")
+        self.settings_btn.setFixedSize(24, 24)
+        self.settings_btn.setCursor(Qt.PointingHandCursor)
+        self.settings_btn.setStyleSheet("QPushButton { background: transparent; border: none; font-size: 15px; } QPushButton:hover { background: rgba(0,0,0,0.05); border-radius: 12px; }")
+        self.settings_btn.clicked.connect(self.show_settings_dialog)
+        ver_set_layout.addWidget(self.settings_btn)
+        
+        sidebar_layout.addLayout(ver_set_layout)
 
         github_link = QLabel("<a href='https://github.com/timcode-cmyk/pyMediaConvert' style='color: #4A5568; text-decoration: none;'>GitHub Project</a>")
         github_link.setAlignment(Qt.AlignCenter)
@@ -414,6 +427,12 @@ class DashboardWindow(QMainWindow):
             dialog.exec()
         else:
             self.check_for_updates()
+
+    def show_settings_dialog(self):
+        """弹出全局设置面板"""
+        from pyMediaTools.ui.settings_dialog import GlobalSettingsDialog
+        dialog = GlobalSettingsDialog(self)
+        dialog.exec()
 
     def init_stylesheet_listener(self):
         from PySide6.QtGui import QGuiApplication

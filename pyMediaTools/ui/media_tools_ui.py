@@ -3,7 +3,7 @@ from pathlib import Path
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel, 
                                QLineEdit, QPushButton, QComboBox, QProgressBar, QMessageBox, 
                                QFileDialog, QSizePolicy, QGroupBox, QApplication,
-                               QTabWidget, QScrollArea, QCheckBox, QSpinBox, QFrame, QGridLayout)
+                               QTabWidget, QScrollArea, QCheckBox, QSpinBox, QFrame, QGridLayout, QSplitter)
 from PySide6.QtCore import QObject, QThread, Signal, Slot, Qt, QSettings
 from PySide6.QtGui import QFont, QPixmap, QCursor
 
@@ -377,7 +377,46 @@ class MediaConverterWidget(QWidget):
             self.logo_widgets.append(lw)
             
         scroll.setWidget(scroll_content)
-        wm_layout.addWidget(scroll)
+        
+        # Text Watermark & Username section
+        text_wm_group = QGroupBox("文字水印 / 用户名")
+        text_wm_layout = QVBoxLayout(text_wm_group)
+        
+        self.chk_text_wm = QCheckBox("启用预设文字水印")
+        self.combo_text_wm = QComboBox()
+        # Find text watermark presets
+        for key, cfg in MODES.items():
+            cls = cfg.get('class')
+            if hasattr(cls, '__name__') and cls.__name__ in ('AddCustomLogo', 'AddAssText'):
+                self.combo_text_wm.addItem(f"{cfg['description']}", key)
+                
+        self.chk_username = QCheckBox("添加用户名水印")
+        self.username_display = QLabel()
+        self.username_display.setStyleSheet("color: #777; font-size: 11px;")
+        user_settings = QSettings("pyMediaTools", "GlobalSettings")
+        user_name = user_settings.value("username", "")
+        self.username_display.setText(f"当前用户: {user_name}" if user_name else "请先在全局设置中配置用户名")
+        self.chk_username.setEnabled(bool(user_name))
+        
+        text_wm_layout.addWidget(self.chk_text_wm)
+        text_wm_layout.addWidget(self.combo_text_wm)
+        text_wm_layout.addWidget(self.chk_username)
+        text_wm_layout.addWidget(self.username_display)
+        
+        wm_split = QSplitter(Qt.Vertical)
+        
+        wm_top = QWidget()
+        l_top = QVBoxLayout(wm_top)
+        l_top.setContentsMargins(0,0,0,0)
+        l_top.addWidget(wm_desc)
+        l_top.addWidget(scroll)
+        
+        wm_split.addWidget(wm_top)
+        wm_split.addWidget(text_wm_group)
+        wm_split.setStretchFactor(0, 1)
+        wm_split.setStretchFactor(1, 0)
+        
+        wm_layout.addWidget(wm_split)
         self.tabs.addTab(self.tab_watermark, "水印添加")
         
         # ---------------- Tab 2: Transcode ----------------
@@ -480,7 +519,13 @@ class MediaConverterWidget(QWidget):
 
         progress_layout.addLayout(progress_grid)
         progress_layout.addWidget(self.status_label)
-        main_layout.addWidget(progress_group)
+        
+        bottom_layout = QHBoxLayout()
+        bottom_layout.addWidget(path_group)
+        bottom_layout.addWidget(progress_group)
+        bottom_layout.setStretchFactor(path_group, 5)
+        bottom_layout.setStretchFactor(progress_group, 4)
+        main_layout.addLayout(bottom_layout)
 
         self.start_stop_button = QPushButton("🚀 开始转换")
         self.start_stop_button.setObjectName('StartStopButton')
@@ -501,9 +546,13 @@ class MediaConverterWidget(QWidget):
         
         # 只在转码 Tab 展示非 Logo 的转换模式
         # 也就是不在模式里展示 LogoConverter，因为我们在水印tab原生支持
-        from ..core.mediaconvert import LogoConverter
+        from ..core.mediaconvert import LogoConverter, AddCustomLogo, AddAssText
         for key, config in MODES.items():
-            if config['class'] == LogoConverter:
+            cls = config.get('class')
+            # LogoConverter is built-in watermark tab.
+            # Text/Ass are also moved to watermark tab.
+            # We skip them in Transcode mode.
+            if cls in (LogoConverter, AddCustomLogo, AddAssText) or str(cls) in ("AddCustomLogo", "AddAssText", "LogoConverter"):
                 continue
             display_text = f"{config['description']} [{key}]"
             self.mode_combo.addItem(display_text, key)
@@ -588,8 +637,50 @@ class MediaConverterWidget(QWidget):
                         "blur": c["blur"]
                     })
             
-            if len(active_logos) == 0:
-                QMessageBox.warning(self, "参数错误", "请至少勾选一个平台徽标！")
+            active_texts = []
+            active_ass = []
+            
+            if self.chk_text_wm.isChecked():
+                key = self.combo_text_wm.currentData()
+                cfg = MODES.get(key)
+                if cfg:
+                    cls = cfg.get('class')
+                    if (hasattr(cls, '__name__') and cls.__name__ == 'AddCustomLogo') or str(cls) == 'AddCustomLogo':
+                        params = cfg.get('params', {})
+                        active_texts.append({
+                            'text': params.get('text', ''),
+                            'x': params.get('x', 10),
+                            'y': params.get('y', 10),
+                            'font_color': params.get('font_color', 'white'),
+                            'font_size': params.get('font_size', 24),
+                            'font_path': params.get('font_path', 'assets/Roboto-Bold.ttf'),
+                            'use_box': True
+                        })
+                    elif (hasattr(cls, '__name__') and cls.__name__ == 'AddAssText') or str(cls) == 'AddAssText':
+                        ass_file = cfg.get('params', {}).get('ass')
+                        if ass_file:
+                            active_ass.append(ass_file)
+
+            if self.chk_username.isChecked():
+                user_settings = QSettings("pyMediaTools", "GlobalSettings")
+                user_name = user_settings.value("username", "")
+                
+                from ..utils import load_project_config
+                style_config = load_project_config().get("username", {})
+                
+                if user_name:
+                    active_texts.append({
+                        'text': user_name,
+                        'x': style_config.get('x', "(w-text_w)-40"),
+                        'y': style_config.get('y', 40),
+                        'font_color': style_config.get('font_color', "white"),
+                        'font_size': style_config.get('font_size', 40),
+                        'font_path': style_config.get('font_path', "assets/Roboto-Bold.ttf"),
+                        'use_box': style_config.get('use_box', True)
+                    })
+            
+            if len(active_logos) == 0 and len(active_texts) == 0 and len(active_ass) == 0:
+                QMessageBox.warning(self, "参数错误", "请至少勾选一个图片徽标或文字水印！")
                 return
             
             from ..core.mediaconvert import LogoConverter
@@ -601,7 +692,9 @@ class MediaConverterWidget(QWidget):
                 'params': {
                     'target_w': 1080,  # 默认竖屏
                     'target_h': 1920,
-                    'logos': active_logos
+                    'logos': active_logos,
+                    'texts': active_texts,
+                    'ass_files': active_ass
                 }
             }
         else:

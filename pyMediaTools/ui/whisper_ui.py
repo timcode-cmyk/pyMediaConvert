@@ -936,6 +936,8 @@ class WhisperWidget(QWidget):
         if api_key:
             self._groq_settings.setValue("api_key", api_key)
         self._groq_settings.setValue("whisper_model", self.model_combo.currentData())
+        
+        # 其他本地 UI 设置依然使用 QSettings
         self._groq_settings.setValue("whisper_language", self.language_combo.currentData())
         self._groq_settings.setValue("whisper_words_per_seg", self.words_per_seg_spin.value())
         self._groq_settings.setValue("whisper_translate", self.chk_translate.isChecked())

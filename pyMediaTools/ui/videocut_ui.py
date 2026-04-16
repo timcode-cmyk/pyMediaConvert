@@ -247,12 +247,7 @@ class VideoCutWidget(QWidget):
         rename_group = QGroupBox("片段重命名 (可选)")
         rename_layout = QVBoxLayout(rename_group)
         
-        id_layout = QHBoxLayout()
-        id_layout.addWidget(QLabel("人员ID:"))
-        self.person_id_edit = QLineEdit()
-        self.person_id_edit.setPlaceholderText("例如: Tim")
-        id_layout.addWidget(self.person_id_edit)
-        rename_layout.addLayout(id_layout)
+        # 人员ID 取自全局设置，不再从 UI 输入
 
         rename_layout.addWidget(QLabel("自定义片段名称 (每行对应一个片段):"))
         self.rename_edit = QTextEdit()
@@ -260,7 +255,7 @@ class VideoCutWidget(QWidget):
         self.rename_edit.setMinimumHeight(60)
         rename_layout.addWidget(self.rename_edit)
 
-        naming_info = QLabel("命名规则: 日期_人员ID_自定义名称_序号.mp4")
+        naming_info = QLabel("命名规则: 日期_用户名_自定义名称_序号.mp4")
         naming_info.setStyleSheet("color: palette(mid); font-size: 11px;")
         rename_layout.addWidget(naming_info)
 
@@ -345,7 +340,8 @@ class VideoCutWidget(QWidget):
 
         Path(output_path).mkdir(parents=True, exist_ok=True)
 
-        person_id = self.person_id_edit.text().strip()
+        user_settings = QSettings("pyMediaTools", "GlobalSettings")
+        person_id = user_settings.value("username", "").replace("@", "").strip()
         rename_lines = self.rename_edit.toPlainText().splitlines()
 
         options = {

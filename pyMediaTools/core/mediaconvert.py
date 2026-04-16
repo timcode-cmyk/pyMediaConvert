@@ -502,15 +502,34 @@ class LogoConverter(MediaConverter):
                     'blur': entry.get('blur', True),
                 })
         else:
-            lp = str(get_resource_path(params.get('logo_path')))
-            self.logos = [{
-                'path': lp,
-                'x': params.get('x', 10),
-                'y': params.get('y', 10),
-                'w': params.get('logo_w', 100),
-                'h': params.get('logo_h', 100),
-                'blur': params.get('blur', True),
-            }]
+            lp = params.get('logo_path')
+            if lp:
+                self.logos = [{
+                    'path': str(get_resource_path(lp)),
+                    'x': params.get('x', 10),
+                    'y': params.get('y', 10),
+                    'w': params.get('logo_w', 100),
+                    'h': params.get('logo_h', 100),
+                    'blur': params.get('blur', True),
+                }]
+            else:
+                self.logos = []
+
+        self.texts = []
+        raw_texts = params.get('texts')
+        if raw_texts:
+            for entry in raw_texts:
+                self.texts.append({
+                    'text': entry.get('text', ''),
+                    'x': entry.get('x', 10),
+                    'y': entry.get('y', 10),
+                    'font_color': entry.get('font_color', 'white'),
+                    'font_size': entry.get('font_size', 24),
+                    'font_path': entry.get('font_path', 'assets/Roboto-Bold.ttf'),
+                    'use_box': entry.get('use_box', True)
+                })
+
+        self.ass_files = params.get('ass_files', [])
 
         super().__init__(support_exts=support_exts, output_ext=output_ext, init_checks=init_checks)
 
@@ -558,6 +577,38 @@ class LogoConverter(MediaConverter):
             parts.append(f"[{logo_in}]scale={w}:{h}[{logo_scaled}]")
             parts.append(f"[{current_link}][{logo_scaled}]overlay={x}:{y}:format=auto[{final_out}]")
             current_link = final_out
+
+        # 添加文本水印层
+        for idx, text_cfg in enumerate(self.texts):
+            abs_font = get_resource_path(text_cfg['font_path'])
+            escaped_font = self._format_ffmpeg_path(str(abs_font.absolute()))
+            
+            # 安全转义 FFmpeg 文本
+            # 必须转义 \ , : 和 ' 
+            safe_text = str(text_cfg['text']).replace("\\", "\\\\\\\\").replace("'", "\\\\\\'").replace(":", "\\\\:")
+            
+            box_str = ":box=1:boxcolor=black@0.5:boxborderw=10" if text_cfg['use_box'] else ""
+            
+            drawtext_filter = (
+                f"drawtext=fontfile='{escaped_font}':"
+                f"text='{safe_text}':"
+                f"fontcolor={text_cfg['font_color']}:"
+                f"fontsize={text_cfg['font_size']}{box_str}:"
+                f"x={text_cfg['x']}:y={text_cfg['y']}"
+            )
+            
+            text_out = f"text_layer_{idx}"
+            parts.append(f"[{current_link}]{drawtext_filter}[{text_out}]")
+            current_link = text_out
+
+        # 添加 ASS 字幕层
+        for idx, ass_path in enumerate(self.ass_files):
+            abs_ass = get_resource_path(ass_path)
+            escaped_ass = self._format_ffmpeg_path(str(abs_ass.absolute()))
+            
+            ass_out = f"ass_layer_{idx}"
+            parts.append(f"[{current_link}]ass='{escaped_ass}'[{ass_out}]")
+            current_link = ass_out
 
         # 核心修复点 2: 必须用分号分隔每个滤镜声明
         filter_complex = ";".join(parts)

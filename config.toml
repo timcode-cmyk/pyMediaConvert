@@ -91,6 +91,19 @@ blur = false
 enabled = false
 group = 4
 
+## 全局用户名设置
+
+[username]
+x = "(w-text_w)-40"
+y = 80
+font_size = 24
+font_color = "white"
+font_path = "assets/Roboto-Bold.ttf"
+use_box = false
+box_color = "black"
+box_opacity = 0.5
+box_padding = 10
+
 [modes.image]
 class = "AddCustomLogo"
 description = "6. 添加 ImageFromAI"
@@ -101,7 +114,7 @@ support_exts = [".mp4", ".png", ".jpg", ".jpeg"]
 x = "W-tw-10"
 y = 40
 font_path = "assets/Roboto-Bold.ttf"
-font_size = "24"
+font_size = "30"
 font_color = "white"
 text = "AI Created"
 
@@ -121,7 +134,7 @@ output_ext = ""
 support_exts = [".mp4", ".png", ".jpg", ".jpeg"]
  
 [modes.image3.params]
-ass = "assets/AI-Indonesian.ass"
+ass = "assets/AI-Indonesia.ass"
  
 
 [modes.h264]
