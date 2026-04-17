@@ -13,6 +13,7 @@ class GlobalSettingsDialog(QDialog):
         
         self.settings_el = QSettings("pyMediaTools", "ElevenLabs")
         self.settings_groq = QSettings("pyMediaTools", "Groq")
+        self.settings_gladia = QSettings("pyMediaTools", "Gladia")
         self.settings_global = QSettings("pyMediaTools", "GlobalSettings")
         
         self.init_ui()
@@ -38,17 +39,24 @@ class GlobalSettingsDialog(QDialog):
         el_layout.addRow("API Key:", self.eleven_api_edit)
         api_layout.addWidget(el_group)
 
-        # Groq Settings
-        groq_group = QGroupBox("Groq Whisper (转录)")
+        # Gladia Settings（语音识别）
+        gladia_group = QGroupBox("Gladia 语音识别")
+        gladia_layout = QFormLayout(gladia_group)
+        self.gladia_api_edit = QLineEdit()
+        self.gladia_api_edit.setEchoMode(QLineEdit.Password)
+        self.gladia_api_edit.setPlaceholderText("在 app.gladia.io 申请")
+        self.gladia_api_edit.setText(self.settings_gladia.value("api_key", ""))
+        gladia_layout.addRow("API Key:", self.gladia_api_edit)
+        api_layout.addWidget(gladia_group)
+
+        # Groq Settings（LLM 翻译 / Groq 相关）
+        groq_group = QGroupBox("Groq LLM (翻译功能)")
         groq_layout = QFormLayout(groq_group)
         self.groq_api_edit = QLineEdit()
         self.groq_api_edit.setEchoMode(QLineEdit.Password)
+        self.groq_api_edit.setPlaceholderText("在 console.groq.com 申请")
         self.groq_api_edit.setText(self.settings_groq.value("api_key", ""))
         groq_layout.addRow("API Key:", self.groq_api_edit)
-        
-        self.groq_model_edit = QLineEdit()
-        self.groq_model_edit.setText(self.settings_groq.value("whisper_model", "whisper-large-v3-turbo"))
-        groq_layout.addRow("模型:", self.groq_model_edit)
         api_layout.addWidget(groq_group)
         
         api_layout.addStretch()
@@ -71,13 +79,13 @@ class GlobalSettingsDialog(QDialog):
         trans_layout = QFormLayout(trans_group)
         self.max_chars_spin = QSpinBox()
         self.max_chars_spin.setRange(10, 100)
-        self.max_chars_spin.setValue(int(self.settings_el.value("srt_max_chars", 35)))
+        self.max_chars_spin.setValue(int(self.settings_global.value("srt_max_chars", 35)))
         trans_layout.addRow("字幕单行最多字符数:", self.max_chars_spin)
 
         self.pause_spin = QDoubleSpinBox()
         self.pause_spin.setRange(0.05, 2.0)
         self.pause_spin.setSingleStep(0.1)
-        self.pause_spin.setValue(float(self.settings_el.value("srt_pause_threshold", 0.2)))
+        self.pause_spin.setValue(float(self.settings_global.value("srt_pause_threshold", 0.3)))
         trans_layout.addRow("分句断行气口 (秒):", self.pause_spin)
         user_layout.addWidget(trans_group)
 
@@ -106,11 +114,14 @@ class GlobalSettingsDialog(QDialog):
     def save_settings(self):
         # API Keys
         self.settings_el.setValue("api_key", self.eleven_api_edit.text().strip())
-        self.settings_el.setValue("srt_max_chars", self.max_chars_spin.value())
-        self.settings_el.setValue("srt_pause_threshold", self.pause_spin.value())
+
+        self.settings_gladia.setValue("api_key", self.gladia_api_edit.text().strip())
 
         self.settings_groq.setValue("api_key", self.groq_api_edit.text().strip())
-        self.settings_groq.setValue("whisper_model", self.groq_model_edit.text().strip())
+
+        # 字幕分段参数存入 GlobalSettings（供 whisper_ui 读取）
+        self.settings_global.setValue("srt_max_chars", self.max_chars_spin.value())
+        self.settings_global.setValue("srt_pause_threshold", self.pause_spin.value())
 
         # User Info
         self.settings_global.setValue("username", self.username_edit.text().strip())

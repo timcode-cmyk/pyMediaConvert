@@ -44,7 +44,6 @@ class YtDlpInfoWorker(QThread):
             'dump_single_json': True,
             'no_warnings': True,
             'logger': YtDlpLogger(),
-            'restrictfilenames': True,
             'windowsfilenames': True,
         }
         try:
@@ -156,8 +155,7 @@ class YtDlpDownloadWorker(QThread):
             'no_warnings': False,
             'ignoreerrors': False,
             'logger': YtDlpLogger(),
-            # Security and compatibility for filenames
-            'restrictfilenames': True,
+            # 保留 Unicode 文件名（中文等），仅在 Windows 下进行安全过滤
             'windowsfilenames': True,
             'trim_file_name': 100,  # Limit filename length to 100 chars
             # 'cookiesfrombrowser': ('chrome',) # cookies选择问题

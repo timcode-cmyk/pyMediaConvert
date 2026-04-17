@@ -25,7 +25,6 @@ from PySide6.QtGui import QFont, QDragEnterEvent, QDropEvent, QColor, QPalette
 from ..core.whisper_transcription import (
     LANGUAGE_OPTIONS,
     TRANSLATE_TARGET_LANGUAGES,
-    SUPPORTED_WHISPER_MODELS,
     DEFAULT_WORDS_PER_SEGMENT,
     WhisperWorker,
     export_srt,
@@ -245,8 +244,11 @@ class WhisperWidget(QWidget):
         self._current_segments = []
         self._translated_segments = []
 
-        # 复用 Groq QSettings（与其他模块共享 API Key）
+        # Gladia + Groq API Keys 从全局 QSettings 读取
+        self._gladia_settings = QSettings("pyMediaTools", "Gladia")
         self._groq_settings = QSettings("pyMediaTools", "Groq")
+        # 字幕分段参数
+        self._global_settings = QSettings("pyMediaTools", "GlobalSettings")
 
         self._setup_ui()
         self._load_settings()
@@ -301,7 +303,7 @@ class WhisperWidget(QWidget):
         title = QLabel("🎤  语音识别")
         title.setFont(QFont("Segoe UI", 16, QFont.Bold))
         title.setStyleSheet("color: #6DD3C3;")
-        subtitle = QLabel("Groq Whisper 词级精度识别 · 文案对齐 · 字幕导出")
+        subtitle = QLabel("Gladia 词级精度识别 · 文案对齐纠错 · 字幕导出")
         subtitle.setWordWrap(True)
         subtitle.setStyleSheet("color: #888; font-size: 11px;")
         layout.addWidget(title)
@@ -311,50 +313,12 @@ class WhisperWidget(QWidget):
         self.drop_zone = DropZoneWidget()
         layout.addWidget(self.drop_zone)
 
-        # ------- API Key -------
-        api_card = ConfigCard("🔑 Groq API 配置")
-        api_layout = api_card.inner_layout()
-
-        self.api_key_edit = QLineEdit()
-        self.api_key_edit.setPlaceholderText("gsk_...")
-        self.api_key_edit.setEchoMode(QLineEdit.Password)
-        self.api_key_edit.setMinimumHeight(36)
-
-        show_btn = QPushButton("👁")
-        show_btn.setFixedSize(36, 36)
-        show_btn.setCheckable(True)
-        show_btn.setCursor(Qt.PointingHandCursor)
-        show_btn.toggled.connect(
-            lambda checked: self.api_key_edit.setEchoMode(
-                QLineEdit.Normal if checked else QLineEdit.Password
-            )
+        # ------- API Key 提示（从全局设置读取，不在此配置）-------
+        api_notice = QLabel(
+            '🔑 Gladia API Key 请在 <a href="#" style="color:#6DD3C3;">⚙️ 全局设置</a> 中配置'
         )
-        show_btn.setToolTip("显示/隐藏 API Key")
-
-        key_row = QHBoxLayout()
-        key_row.setSpacing(6)
-        key_row.addWidget(self.api_key_edit)
-        key_row.addWidget(show_btn)
-        api_layout.addLayout(key_row)
-
-        hint = QLabel(
-            '没有 Key? 前往 <a href="https://console.groq.com/keys" style="color:#6DD3C3;">console.groq.com</a> 免费获取'
-        )
-        hint.setOpenExternalLinks(True)
-        hint.setStyleSheet("font-size: 10px; color: #888;")
-        api_layout.addWidget(hint)
-
-        # 模型选择
-        model_row = QHBoxLayout()
-        model_row.addWidget(QLabel("模型:"))
-        self.model_combo = QComboBox()
-        for m in SUPPORTED_WHISPER_MODELS:
-            self.model_combo.addItem(m, m)
-        self.model_combo.setToolTip("whisper-large-v3-turbo: 速度快\nwhisper-large-v3: 精度高\ndistil-whisper: 仅英文")
-        model_row.addWidget(self.model_combo)
-        api_layout.addLayout(model_row)
-
-        layout.addWidget(api_card)
+        api_notice.setStyleSheet("font-size: 10px; color: #aaa; padding: 4px 0;")
+        layout.addWidget(api_notice)
 
         # ------- 识别语言 -------
         lang_card = ConfigCard("🌐 识别语言")
@@ -385,17 +349,6 @@ class WhisperWidget(QWidget):
         self.script_edit.setMinimumHeight(80)
         self.script_edit.setMaximumHeight(180)
         script_layout.addWidget(self.script_edit)
-
-        # 每段词数
-        wps_row = QHBoxLayout()
-        wps_row.addWidget(QLabel("每段最多词数:"))
-        self.words_per_seg_spin = QSpinBox()
-        self.words_per_seg_spin.setRange(3, 50)
-        self.words_per_seg_spin.setValue(DEFAULT_WORDS_PER_SEGMENT)
-        self.words_per_seg_spin.setToolTip("字幕分段时每条最多包含的词数（遇到句子标点会提前切断）")
-        wps_row.addWidget(self.words_per_seg_spin)
-        wps_row.addStretch()
-        script_layout.addLayout(wps_row)
 
         layout.addWidget(script_card)
 
@@ -628,17 +581,26 @@ class WhisperWidget(QWidget):
             QMessageBox.warning(self, "请选择文件", "请先拖拽或浏览选择一个媒体文件。")
             return
 
-        api_key = self.api_key_edit.text().strip()
+        # 从全局 QSettings 读取 API Key
+        api_key = self._gladia_settings.value("api_key", "").strip()
         if not api_key:
-            QMessageBox.warning(self, "缺少 API Key", "请输入 Groq API Key。\n可前往 https://console.groq.com/keys 免费获取。")
+            QMessageBox.warning(
+                self, "缺少 API Key",
+                "请在全局设置 (⚙️) 中配置 Gladia API Key。\n"
+                "可前往 https://app.gladia.io/ 免费申请。"
+            )
             return
 
         language = self.language_combo.currentData()
-        model = self.model_combo.currentData()
         user_script = self.script_edit.toPlainText().strip()
-        words_per_seg = self.words_per_seg_spin.value()
 
-        # 保存设置
+        # 字幕分段参数从全局设置读取
+        subtitle_config = {
+            "srt_max_chars": int(self._global_settings.value("srt_max_chars", 35)),
+            "srt_pause_threshold": float(self._global_settings.value("srt_pause_threshold", 0.3)),
+        }
+
+        # 保存 UI 偏好设置
         self._save_settings()
 
         # UI 状态切换
@@ -658,18 +620,17 @@ class WhisperWidget(QWidget):
         self._translated_segments = []
 
         self.log_panel.append_log(f"文件: {os.path.basename(media_path)}")
-        self.log_panel.append_log(f"模型: {model} | 语言: {language or '自动检测'}")
+        self.log_panel.append_log(f"语言: {language or '自动检测'} | 分段: {subtitle_config['srt_max_chars']}字/行")
         if user_script:
-            self.log_panel.append_log(f"参考文案: {len(user_script)} 字符（仅用于对齐纠错，不作为 Whisper prompt）")
+            self.log_panel.append_log(f"参考文案: {len(user_script)} 字符（用于对齐纠错）")
 
         # 创建 Worker
         self._worker = WhisperWorker(
             media_path=media_path,
             api_key=api_key,
-            language=language if language != "auto" else "",
-            model=model,
+            language=language if language != "auto" else "auto",
             user_script=user_script,
-            words_per_segment=words_per_seg,
+            subtitle_config=subtitle_config,
         )
 
         self._worker_thread = QThread()
@@ -711,10 +672,10 @@ class WhisperWidget(QWidget):
             self._display_segments(segments)
 
     def _run_translation(self, segments: list):
-        """调用 TranslationManager 翻译 segments。"""
+        """调用 TranslationManager 翻译 segments（使用 Groq API Key）。"""
         self.log_panel.append_log("🌍 正在调用翻译 API...")
         self.progress_bar.setVisible(True)
-        api_key = self.api_key_edit.text().strip()
+        api_key = self._groq_settings.value("api_key", "").strip()
         target_lang = self.trans_lang_combo.currentData()
 
         self._translate_worker = TranslationWorker(
@@ -932,44 +893,23 @@ class WhisperWidget(QWidget):
     # -----------------------------------------------------------------------
 
     def _save_settings(self):
-        api_key = self.api_key_edit.text().strip()
-        if api_key:
-            self._groq_settings.setValue("api_key", api_key)
-        self._groq_settings.setValue("whisper_model", self.model_combo.currentData())
-        
-        # 其他本地 UI 设置依然使用 QSettings
-        self._groq_settings.setValue("whisper_language", self.language_combo.currentData())
-        self._groq_settings.setValue("whisper_words_per_seg", self.words_per_seg_spin.value())
-        self._groq_settings.setValue("whisper_translate", self.chk_translate.isChecked())
-        self._groq_settings.setValue("whisper_trans_lang", self.trans_lang_combo.currentData())
+        # 保存语言和翻译偏好到 Gladia QSettings
+        self._gladia_settings.setValue("whisper_language", self.language_combo.currentData())
+        self._gladia_settings.setValue("whisper_translate", self.chk_translate.isChecked())
+        self._gladia_settings.setValue("whisper_trans_lang", self.trans_lang_combo.currentData())
 
     def _load_settings(self):
-        api_key = self._groq_settings.value("api_key", "")
-        if api_key:
-            self.api_key_edit.setText(api_key)
-
-        model = self._groq_settings.value("whisper_model", SUPPORTED_WHISPER_MODELS[0])
-        idx = self.model_combo.findData(model)
-        if idx >= 0:
-            self.model_combo.setCurrentIndex(idx)
-
-        language = self._groq_settings.value("whisper_language", "auto")
+        language = self._gladia_settings.value("whisper_language", "auto")
         idx = self.language_combo.findData(language)
         if idx >= 0:
             self.language_combo.setCurrentIndex(idx)
 
-        wps = self._groq_settings.value("whisper_words_per_seg", DEFAULT_WORDS_PER_SEGMENT)
-        try:
-            self.words_per_seg_spin.setValue(int(wps))
-        except Exception:
-            pass
-
-        do_translate = self._groq_settings.value("whisper_translate", False)
+        do_translate = self._gladia_settings.value("whisper_translate", False)
         if isinstance(do_translate, str):
             do_translate = do_translate.lower() == "true"
         self.chk_translate.setChecked(bool(do_translate))
 
-        trans_lang = self._groq_settings.value("whisper_trans_lang", "zh")
+        trans_lang = self._gladia_settings.value("whisper_trans_lang", "zh")
         idx = self.trans_lang_combo.findData(trans_lang)
         if idx >= 0:
             self.trans_lang_combo.setCurrentIndex(idx)
