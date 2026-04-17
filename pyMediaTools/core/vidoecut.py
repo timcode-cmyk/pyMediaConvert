@@ -381,36 +381,43 @@ class SceneCutter:
     def _build_watermark_filter(self, watermark_params):
         """
         构建水印过滤器
-        watermark_params 中应包含:
-        - text: 水印文本 或 .ass 文件名
+        watermark_params 可以是字典（单个）或列表（多个）
         """
         if not watermark_params:
             return None
         
-        text = watermark_params.get('text', '')
+        params_list = watermark_params if isinstance(watermark_params, list) else [watermark_params]
+        filters = []
         
-        # 如果 text 是 .ass 文件，使用 ass 过滤器
-        if text.lower().endswith('.ass'):
-            ass_path = self.available_ass_files.get(text)
-            if ass_path:
-                escaped_path = self._format_ffmpeg_path(ass_path)
-                return f"ass='{escaped_path}'"
+        for params in params_list:
+            text = params.get('text', '')
+            
+            if text.lower().endswith('.ass'):
+                ass_path = self.available_ass_files.get(text)
+                if ass_path:
+                    escaped_path = self._format_ffmpeg_path(ass_path)
+                    filters.append(f"ass='{escaped_path}'")
+                continue
+            
+            font_name = params.get('font_name')
+            if not font_name or font_name not in self.available_fonts:
+                continue
+            
+            font_absolute_path = self.available_fonts[font_name]
+            escaped_font_path = self._format_ffmpeg_path(font_absolute_path)
+            use_box = params.get('use_box', True)
+            box_str = "box=1:boxcolor=black@0.5:boxborderw=10:" if use_box else ""
+            
+            filters.append(
+                f"drawtext=fontfile='{escaped_font_path}':"
+                f"text='{text}':"
+                f"fontcolor={params['font_color']}:"
+                f"fontsize={params['font_size']}:"
+                f"{box_str}"
+                f"x={params['x']}:y={params['y']}"
+            )
         
-        # 否则回退到 drawtext 过滤器
-        font_name = watermark_params.get('font_name')
-        if not font_name or font_name not in self.available_fonts:
-            return None
-        
-        font_absolute_path = self.available_fonts[font_name]
-        escaped_font_path = self._format_ffmpeg_path(font_absolute_path)
-        return (
-            f"drawtext=fontfile='{escaped_font_path}':"
-            f"text='{text}':"
-            f"fontcolor={watermark_params['font_color']}:"
-            f"fontsize={watermark_params['font_size']}:"
-            "box=1:boxcolor=black@0.5:boxborderw=10:"
-            f"x={watermark_params['x']}:y={watermark_params['y']}"
-        )
+        return ",".join(filters) if filters else None
 
     def _align_to_frame(self, times: list[float], fps: float) -> list[float]:
         """将一组时间戳四舍五入到最接近的帧边界。

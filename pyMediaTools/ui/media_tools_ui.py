@@ -116,6 +116,8 @@ class LogoConfigWidget(QFrame):
         self.is_enabled = enabled
         self.setCursor(Qt.PointingHandCursor)
         self.setObjectName("LogoCard")
+        self.setMinimumHeight(80)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 8, 10, 8)
@@ -265,9 +267,8 @@ class FlowGridContainer(QWidget):
         
     def minimumSizeHint(self):
         from PySide6.QtCore import QSize
-        # Override minimum size hint so the QScrollArea allows it to shrink!
-        # Otherwise the QGridLayout prevents shrinking once columns are added.
-        return QSize(self.item_width, 0)
+        # Only override minimum width so it triggers resize wrapping
+        return QSize(0, 0)
         
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -281,6 +282,12 @@ class FlowGridContainer(QWidget):
         avail_width = width - margins.left() - margins.right()
         
         cols = max(1, (avail_width + self.grid.spacing()) // (self.item_width + self.grid.spacing()))
+        
+        # ALWAYS Update minimum height dynamically so QScrollArea won't squeeze widgets vertically!
+        rows = (len(self.items) + cols - 1) // cols
+        item_h = self.items[0].minimumHeight() if self.items else 80
+        total_h = margins.top() + margins.bottom() + rows * item_h + max(0, rows - 1) * self.grid.spacing()
+        self.setMinimumHeight(total_h)
         
         if cols == self.current_cols:
             return
@@ -332,12 +339,38 @@ class MediaConverterWidget(QWidget):
         
         wm_desc = QLabel("多选下方 Logo，程序会将其叠加到视频上。可独立设置位置、缩放比例、并应用底层模糊。")
         wm_desc.setWordWrap(True)
-        wm_layout.addWidget(wm_desc)
         
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         # Prevent horizontal scrollbar, force items to wrap
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        
+        # Style the scrollbar
+        scroll.setStyleSheet("""
+            QScrollArea {
+                border: none;
+                background-color: transparent;
+            }
+            QScrollBar:vertical {
+                border: none;
+                background: transparent;
+                width: 6px;
+                margin: 0px;
+            }
+            QScrollBar::handle:vertical {
+                background: rgba(150, 150, 150, 0.4);
+                min-height: 30px;
+                border-radius: 3px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: rgba(150, 150, 150, 0.7);
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical,
+            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+                height: 0px;
+                background: none;
+            }
+        """)
         
         scroll_content = FlowGridContainer()
         self.logos_layout = scroll_content
@@ -415,8 +448,11 @@ class MediaConverterWidget(QWidget):
         wm_split.addWidget(text_wm_group)
         wm_split.setStretchFactor(0, 1)
         wm_split.setStretchFactor(1, 0)
+        wm_split.setCollapsible(0, False)
+        wm_split.setCollapsible(1, True)
         
         wm_layout.addWidget(wm_split)
+        
         self.tabs.addTab(self.tab_watermark, "水印添加")
         
         # ---------------- Tab 2: Transcode ----------------
@@ -654,7 +690,7 @@ class MediaConverterWidget(QWidget):
                             'font_color': params.get('font_color', 'white'),
                             'font_size': params.get('font_size', 24),
                             'font_path': params.get('font_path', 'assets/Roboto-Bold.ttf'),
-                            'use_box': True
+                            'use_box': params.get('use_box', True)
                         })
                     elif (hasattr(cls, '__name__') and cls.__name__ == 'AddAssText') or str(cls) == 'AddAssText':
                         ass_file = cfg.get('params', {}).get('ass')

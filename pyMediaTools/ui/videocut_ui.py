@@ -3,7 +3,7 @@ from pathlib import Path
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                                QLineEdit, QPushButton, QProgressBar, QMessageBox,
                                QFileDialog, QSizePolicy, QGroupBox, QSlider, QCheckBox, QSpinBox, QColorDialog, QFontComboBox, QDialog, QFormLayout, QDialogButtonBox, QTextEdit, QGridLayout, QComboBox)
-from PySide6.QtCore import QObject, QThread, Signal, Slot, Qt
+from PySide6.QtCore import QObject, QThread, Signal, Slot, Qt, QSettings
 from PySide6.QtGui import QFont, QColor
 
 from .styles import apply_common_style
@@ -32,8 +32,15 @@ class SceneCutWorker(QObject):
         try:
             # 从watermark_params中提取font_name用于初始化SceneCutter
             font_name = None
-            if self.options.get('watermark_params'):
-                font_name = self.options['watermark_params'].get('font_name')
+            wm_params = self.options.get('watermark_params')
+            if wm_params:
+                if isinstance(wm_params, list):
+                    for w in wm_params:
+                        if w.get('font_name'):
+                            font_name = w.get('font_name')
+                            break
+                elif isinstance(wm_params, dict):
+                    font_name = wm_params.get('font_name')
             
             cutter = SceneCutter(monitor=self.monitor, font_name=font_name)
             cutter.run(Path(self.input_path), Path(self.output_path), **self.options)
@@ -158,17 +165,19 @@ class VideoCutWidget(QWidget):
         main_layout.setContentsMargins(15, 10, 15, 15)
         main_layout.setSpacing(10)
 
+        # --- Top Section: Path and Progress ---
+        top_layout = QHBoxLayout()
+
         # 1. 路径设置
         path_group = QGroupBox("文件路径")
         path_layout = QVBoxLayout(path_group)
         self.input_path_edit = DropLineEdit()
-        self.input_path_edit.setPlaceholderText("📂 拖放视频文件或文件夹到此处")
+        self.input_path_edit.setPlaceholderText("📂 拖放视频文件或文件夹")
         self.input_path_edit.setMinimumHeight(40)
         self.input_path_edit.pathDropped.connect(self.update_output_path)
         self.input_path_edit.textChanged.connect(self.update_output_path)
         
         input_btn = QPushButton("浏览...")
-        input_btn.clicked.connect(self.select_input_path)
         input_box = QHBoxLayout()
         input_box.addWidget(self.input_path_edit)
         input_box.addWidget(input_btn)
@@ -178,7 +187,30 @@ class VideoCutWidget(QWidget):
         self.output_path_edit.setPlaceholderText("输出目录将自动生成")
         self.output_path_edit.setReadOnly(True)
         path_layout.addWidget(self.output_path_edit)
-        main_layout.addWidget(path_group)
+        top_layout.addWidget(path_group, 5)
+
+        # 4. 进度与控制
+        progress_group = QGroupBox("状态与进度")
+        progress_layout = QVBoxLayout(progress_group)
+        self.status_label = QLabel("等待开始...")
+        self.status_label.setObjectName("StatusLabel")
+        
+        prog_row_1 = QHBoxLayout()
+        prog_row_1.addWidget(QLabel("总进度:"))
+        self.overall_progress_bar = QProgressBar()
+        prog_row_1.addWidget(self.overall_progress_bar)
+        
+        prog_row_2 = QHBoxLayout()
+        prog_row_2.addWidget(QLabel("当前文件:"))
+        self.file_progress_bar = QProgressBar()
+        prog_row_2.addWidget(self.file_progress_bar)
+        
+        progress_layout.addWidget(self.status_label)
+        progress_layout.addLayout(prog_row_1)
+        progress_layout.addLayout(prog_row_2)
+        top_layout.addWidget(progress_group, 4)
+
+        main_layout.addLayout(top_layout)
 
         # 2. 参数设置
         options_group = QGroupBox("参数设置")
@@ -191,6 +223,7 @@ class VideoCutWidget(QWidget):
         self.threshold_slider.setValue(20)
         self.threshold_label = QLabel("20%")
         self.threshold_slider.valueChanged.connect(lambda v: self.threshold_label.setText(f"{v}%"))
+        
         # 导出视频
         self.chk_export_video = QCheckBox("导出视频")
         self.chk_export_video.setChecked(True)
@@ -215,11 +248,10 @@ class VideoCutWidget(QWidget):
         options_layout.addWidget(QLabel("偏移量:"), 0, 5)
         options_layout.addWidget(self.spin_frame_offset, 0, 6)
 
-        # 水印
+        # ASS水印
         self.chk_add_watermark = QCheckBox("添加水印:")
         self.chk_add_watermark.setChecked(False)
         
-        # 修改为下拉菜单，读取 assets 中的 .ass 字幕作为列表
         self.combo_watermark_ass = QComboBox()
         if self.available_ass_files:
             self.combo_watermark_ass.addItems(self.available_ass_files.keys())
@@ -227,18 +259,15 @@ class VideoCutWidget(QWidget):
             self.combo_watermark_ass.addItem("无 .ass 文件")
             self.combo_watermark_ass.setEnabled(False)
 
-        self.btn_watermark_settings = QPushButton("水印设置")
-        self.btn_watermark_settings.clicked.connect(self.open_watermark_settings)
-        # 暂时封存按钮
-        self.btn_watermark_settings.setVisible(False)
-        
         self.chk_add_watermark.toggled.connect(self.combo_watermark_ass.setEnabled)
-        # self.chk_add_watermark.toggled.connect(self.btn_watermark_settings.setEnabled)
         self.combo_watermark_ass.setEnabled(False)
+
+        # 用户名水印
+        self.chk_add_username = QCheckBox("添加用户名")
 
         options_layout.addWidget(self.chk_add_watermark, 1, 0)
         options_layout.addWidget(self.combo_watermark_ass, 1, 1, 1, 2)
-        options_layout.addWidget(self.btn_watermark_settings, 1, 3)
+        options_layout.addWidget(self.chk_add_username, 1, 3, 1, 2)
 
         options_layout.setColumnStretch(1, 1)
         main_layout.addWidget(options_group)
@@ -248,32 +277,18 @@ class VideoCutWidget(QWidget):
         rename_layout = QVBoxLayout(rename_group)
         
         # 人员ID 取自全局设置，不再从 UI 输入
-
         rename_layout.addWidget(QLabel("自定义片段名称 (每行对应一个片段):"))
         self.rename_edit = QTextEdit()
         self.rename_edit.setPlaceholderText("第一段视频的名称\n第二段视频的名称\n...")
-        self.rename_edit.setMinimumHeight(60)
+        self.rename_edit.setMinimumHeight(150) # Taller edit area
+        self.rename_edit.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         rename_layout.addWidget(self.rename_edit)
 
         naming_info = QLabel("命名规则: 日期_用户名_自定义名称_序号.mp4")
         naming_info.setStyleSheet("color: palette(mid); font-size: 11px;")
         rename_layout.addWidget(naming_info)
 
-        main_layout.addWidget(rename_group)
-
-        # 3. 进度与控制
-        progress_group = QGroupBox("状态与控制")
-        progress_layout = QVBoxLayout(progress_group)
-        self.status_label = QLabel("等待开始...")
-        self.status_label.setObjectName("StatusLabel")
-        self.overall_progress_bar = QProgressBar()
-        self.file_progress_bar = QProgressBar()
-        progress_layout.addWidget(self.status_label)
-        progress_layout.addWidget(QLabel("总进度:"))
-        progress_layout.addWidget(self.overall_progress_bar)
-        progress_layout.addWidget(QLabel("当前文件进度:"))
-        progress_layout.addWidget(self.file_progress_bar)
-        main_layout.addWidget(progress_group)
+        main_layout.addWidget(rename_group, 1) # Give all expanding stretch to rename_group
 
         self.start_stop_button = QPushButton("🚀 开始处理")
         self.start_stop_button.setObjectName('StartStopButton')
@@ -281,6 +296,8 @@ class VideoCutWidget(QWidget):
         self.start_stop_button.setMinimumHeight(40)
         self.start_stop_button.clicked.connect(self.toggle_processing)
         main_layout.addWidget(self.start_stop_button)
+
+        input_btn.clicked.connect(self.select_input_path)
 
     def select_input_path(self):
         # 支持选单个文件或整个目录
@@ -354,20 +371,47 @@ class VideoCutWidget(QWidget):
             'rename_lines': rename_lines
         }
 
+        active_wms = []
+
+        if self.chk_add_username.isChecked():
+            user_settings = QSettings("pyMediaTools", "GlobalSettings")
+            user_name = user_settings.value("username", "")
+            if not user_name:
+                QMessageBox.warning(self, "错误", "请先在全局设置里配置用户名。")
+                return
+                
+            from ..utils import load_project_config
+            style_config = load_project_config().get("username", {})
+            font_path = style_config.get('font_path', 'assets/Roboto-Bold.ttf')
+            font_name = os.path.splitext(os.path.basename(font_path))[0]
+            
+            # fallback to generic front font
+            available_fonts = get_available_fonts()
+            if font_name not in available_fonts:
+                font_name = list(available_fonts.keys())[0] if available_fonts else "Roboto-Bold"
+                
+            active_wms.append({
+                'text': user_name,
+                'font_name': font_name,
+                'font_color': style_config.get('font_color', 'white'),
+                'font_size': style_config.get('font_size', 40),
+                'x': style_config.get('x', '(w-text_w)-40'),
+                'y': style_config.get('y', 40),
+                'use_box': style_config.get('use_box', True)
+            })
+
         if self.chk_add_watermark.isChecked():
             try:
-                # Update text from the main UI (selected .ass file)
                 self.watermark_settings['text'] = self.combo_watermark_ass.currentText()
-                
-                # 验证选择的字体是否存在
                 available_fonts = get_available_fonts()
                 if self.watermark_settings['font_name'] not in available_fonts:
                     raise ValueError(f"字体 '{self.watermark_settings['font_name']}' 未找到。可用字体: {', '.join(available_fonts.keys())}")
-                
-                options['watermark_params'] = self.watermark_settings.copy()
+                active_wms.append(self.watermark_settings.copy())
             except Exception as e:
                 QMessageBox.critical(self, "水印参数错误", str(e))
                 return
+                
+        options['watermark_params'] = active_wms if active_wms else None
 
         self.is_processing = True
         self.start_stop_button.setText("🛑 停止处理")
@@ -418,6 +462,11 @@ class VideoCutWidget(QWidget):
 
     @Slot(int, int, str)
     def update_overall_progress(self, current, total, status):
+        # truncate status if it's too long to prevent window expansion
+        max_len = 35
+        if len(status) > max_len:
+            status = status[:max_len-3] + "..."
+            
         # always update range first, then value
         self.overall_progress_bar.setRange(0, total)
         # clamp current to [0,total]

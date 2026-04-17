@@ -100,9 +100,9 @@ font_size = 24
 font_color = "white"
 font_path = "assets/Roboto-Bold.ttf"
 use_box = false
-box_color = "black"
-box_opacity = 0.5
-box_padding = 10
+# box_color = "black"
+# box_opacity = 0.5
+# box_padding = 10
 
 [modes.image]
 class = "AddCustomLogo"

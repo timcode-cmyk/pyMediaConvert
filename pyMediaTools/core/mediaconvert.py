@@ -683,7 +683,7 @@ class AddCustomLogo(MediaConverter):
         self.font_color = params.get('font_color')
         self.font_size = params.get('font_size')
         self.font_path = params.get('font_path')
-
+        self.use_box = params.get('use_box', True)
 
         super().__init__(support_exts=support_exts, output_ext=output_ext, init_checks=init_checks)
 
@@ -708,12 +708,13 @@ class AddCustomLogo(MediaConverter):
         escaped_font_path = self._format_ffmpeg_path(str(abs_font_path.absolute()))
 
         # 构造 filter_complex：
+        box_str = "box=1:boxcolor=black@0.5:boxborderw=10:" if self.use_box else ""
         filter_complex = (
             f"drawtext=fontfile='{escaped_font_path}':"
             f"text='{self.text}':text_shaping=1:"
             f"fontcolor={self.font_color}:"
             f"fontsize={self.font_size}:"
-            "box=1:boxcolor=black@0.5:boxborderw=10:"
+            f"{box_str}"
             f"x={self.x}:y={self.y}"
         )
 

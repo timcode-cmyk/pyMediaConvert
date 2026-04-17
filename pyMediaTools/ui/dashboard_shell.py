@@ -189,26 +189,13 @@ class DashboardWindow(QMainWindow):
 
         sidebar_layout.addSpacerItem(QSpacerItem(20, 40, QSizePolicy.Minimum, QSizePolicy.Expanding))
 
-        # --- 版本号与设置按钮 ---
-        ver_set_layout = QHBoxLayout()
-        ver_set_layout.setContentsMargins(20, 0, 20, 0)
-        
+        # --- 版本号与 GitHub 链接 (位于退出按钮上方) ---
         self.version_label = QLabel(f"v{self.version}")
+        self.version_label.setAlignment(Qt.AlignCenter)
         self.version_label.setStyleSheet("color: #718096; font-size: 11px; margin-bottom: 2px;")
         self.version_label.setCursor(Qt.PointingHandCursor)
         self.version_label.mousePressEvent = lambda e: self.show_update_dialog()
-        ver_set_layout.addWidget(self.version_label)
-        
-        ver_set_layout.addStretch()
-        
-        self.settings_btn = QPushButton("⚙️")
-        self.settings_btn.setFixedSize(24, 24)
-        self.settings_btn.setCursor(Qt.PointingHandCursor)
-        self.settings_btn.setStyleSheet("QPushButton { background: transparent; border: none; font-size: 15px; } QPushButton:hover { background: rgba(0,0,0,0.05); border-radius: 12px; }")
-        self.settings_btn.clicked.connect(self.show_settings_dialog)
-        ver_set_layout.addWidget(self.settings_btn)
-        
-        sidebar_layout.addLayout(ver_set_layout)
+        sidebar_layout.addWidget(self.version_label)
 
         github_link = QLabel("<a href='https://github.com/timcode-cmyk/pyMediaConvert' style='color: #4A5568; text-decoration: none;'>GitHub Project</a>")
         github_link.setAlignment(Qt.AlignCenter)
@@ -217,9 +204,22 @@ class DashboardWindow(QMainWindow):
         sidebar_layout.addWidget(github_link)
 
         # Bottom Exit button
+        exit_layout = QHBoxLayout()
+        exit_layout.setContentsMargins(10, 0, 10, 0)
+        
         exit_btn = SidebarButton("🚪 退出")
         exit_btn.clicked.connect(self.close)
-        sidebar_layout.addWidget(exit_btn)
+        exit_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        exit_layout.addWidget(exit_btn)
+        
+        self.settings_btn = QPushButton("⚙️")
+        self.settings_btn.setFixedSize(36, 36)
+        self.settings_btn.setCursor(Qt.PointingHandCursor)
+        self.settings_btn.setStyleSheet("QPushButton { background: transparent; border: none; font-size: 18px; } QPushButton:hover { background: rgba(0,0,0,0.05); border-radius: 8px; }")
+        self.settings_btn.clicked.connect(self.show_settings_dialog)
+        exit_layout.addWidget(self.settings_btn)
+
+        sidebar_layout.addLayout(exit_layout)
         sidebar_layout.addSpacing(20)
 
         main_layout.addWidget(self.sidebar)
