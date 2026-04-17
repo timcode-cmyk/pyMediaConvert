@@ -8,7 +8,7 @@ x = 720
 y = 1820
 scale = 100
 blur = true
-enabled = true
+enabled = false
 group = 1
 
 [[watermark.platforms]]

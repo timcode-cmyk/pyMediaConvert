@@ -155,6 +155,22 @@ class SceneCutter:
             self.log_dir.mkdir(parents=True, exist_ok=True)
             logger.debug(f"调试模式已启用，日志将保存至: {self.log_dir}")
 
+    def _verify_encoder_usability(self, name: str) -> bool:
+        """验证硬件编码器是否真的可用"""
+        cmd = [
+            get_ffmpeg_exe(), "-v", "error", "-f", "lavfi",
+            "-i", "nullsrc=s=64x64:d=0.01", "-c:v", name, "-f", "null", "-"
+        ]
+        creationflags = 0
+        if sys.platform == "win32":
+            creationflags = subprocess.CREATE_NO_WINDOW
+        try:
+            subprocess.run(cmd, capture_output=True, check=True, timeout=5, creationflags=creationflags)
+            return True
+        except Exception as e:
+            logger.warning(f"验证编码器可用性失败: {name} -> {e}")
+            return False
+
     def _detect_hardware_encoders(self):
         """探测可用的硬件编码器"""
         cmd = [get_ffmpeg_exe(), "-encoders"]
@@ -171,7 +187,9 @@ class SceneCutter:
                     flags = match.group(1)
                     name = match.group(2)
                     if ('V' in flags) and any(hw in name for hw in ['nvenc', 'qsv', 'amf', 'videotoolbox']):
-                        self.available_encoders[name] = match.group(3).strip()
+                        # 增加可用性校验
+                        if self._verify_encoder_usability(name):
+                            self.available_encoders[name] = match.group(3).strip()
         except Exception as e:
             logger.warning(f"硬件编码器探测失败: {e}")
 
@@ -506,36 +524,46 @@ class SceneCutter:
                             sanitized = re.sub(r'[\\/*?:"<>|]', "", raw_name[:30])
                             custom_name = f"_{sanitized}"
 
-                    person_id_str = f"_{re.sub(r'[\\/*?:\"<>|]', '', person_id.strip())}" if person_id else ""
+                    person_id_sanitized = re.sub(r'[\\/*?:"<>|]', "", person_id.strip()) if person_id else ""
+                    person_id_str = f"_{person_id_sanitized}" if person_id_sanitized else ""
 
                     clip_name = f"{date_str}{person_id_str}{custom_name}_{scene_idx:03d}.mp4"
                     clip_path = video_output_dir / clip_name
 
-                    # 硬件加速参数
-                    video_codec, extra_video_args = self._get_video_codec_params()
+                    def build_split_cmd(v_codec, v_args):
+                        cmd = [
+                            get_ffmpeg_exe(), '-y', '-hide_banner', '-loglevel', 'error',
+                            '-hwaccel', 'auto',
+                            '-i', str(video_path),
+                            '-ss', str(start_t),
+                            '-t', str(duration)
+                        ]
+                        if watermark_filter:
+                            cmd.extend(['-vf', watermark_filter])
+                        cmd.extend([
+                            '-c:v', v_codec,
+                            *v_args,
+                            '-c:a', 'aac',
+                            str(clip_path)
+                        ])
+                        return cmd
 
-                    # 为了保证帧级精度，把 -ss 放在输入之前，同时让 ffmpeg 进行精确寻帧。
-                    # 仅在不需要水印时才尝试直接复制流，否则重新编码。
-                    cmd_split = [
-                        get_ffmpeg_exe(), '-y', '-hide_banner', '-loglevel', 'error',
-                        '-hwaccel', 'auto',
-                        '-i', str(video_path),
-                        '-ss', str(start_t),
-                        '-t', str(duration)
-                    ]
-                    
-                    if watermark_filter:
-                        cmd_split.extend(['-vf', watermark_filter])
-                    
-                    cmd_split.extend([
-                        '-c:v', video_codec,
-                        *extra_video_args,
-                        '-c:a', 'aac',
-                        str(clip_path)
-                    ])
+                    video_codec, extra_video_args = self._get_video_codec_params()
+                    cmd_split = build_split_cmd(video_codec, extra_video_args)
                     
                     # 执行FFmpeg命令
                     success, output = self._execute_ffmpeg_command(cmd_split, debug_log_file)
+                    
+                    # 如果失败且使用了硬件加速，尝试回退到 libx264
+                    if not success and video_codec != "libx264":
+                        logger.warning(f"场景 {scene_idx} 硬件加速失败，尝试回退到 CPU: {output[:100]}")
+                        if self.monitor:
+                             self.monitor.update_file_progress((i / total_scenes) * 100, 100, f"回退重试 {scene_idx}/{total_scenes}")
+                        
+                        cpu_codec = "libx264"
+                        cpu_args = ["-preset", "fast", "-crf", "22"]
+                        retry_cmd = build_split_cmd(cpu_codec, cpu_args)
+                        success, output = self._execute_ffmpeg_command(retry_cmd, debug_log_file)
                     
                     # 验证输出文件是否存在
                     if success and clip_path.exists():

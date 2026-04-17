@@ -83,6 +83,40 @@ class MediaConverter(ABC):
             return path.replace("\\", "/").replace(":", "\\:")
         return path
 
+    def _verify_encoder_usability(self, name: str) -> bool:
+        """
+        通过运行一个极短的空转任务，验证硬件编码器是否真的可用。
+        防止出现 FFmpeg 编译支持但系统无硬件/无驱动的情况。
+        """
+        # 测试命令：产生一个 64x64 的黑块，编码 0.01 秒，输出到空设备
+        cmd = [
+            get_ffmpeg_exe(),
+            "-v", "error",
+            "-f", "lavfi",
+            "-i", "nullsrc=s=64x64:d=0.01",
+            "-c:v", name,
+            "-f", "null",
+            "-"
+        ]
+        
+        creationflags = 0
+        if sys.platform == "win32":
+            creationflags = subprocess.CREATE_NO_WINDOW
+
+        try:
+            # 设置 5 秒超时，防止卡死
+            subprocess.run(cmd, capture_output=True, check=True, timeout=5, creationflags=creationflags)
+            return True
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+            # 记录失败原因
+            err_msg = ""
+            if isinstance(e, subprocess.CalledProcessError):
+                err_msg = e.stderr.decode('utf-8', errors='ignore').strip()
+            logger.warning(f"验证编码器可用性失败: {name} -> {err_msg or '超时'}")
+            return False
+        except Exception:
+            return False
+
     def _detect_hardware_encoders(self):
         """
         运行 'ffmpeg -encoders' 并解析输出，找出可用的硬件加速编码器。
@@ -125,7 +159,11 @@ class MediaConverter(ABC):
                     is_hardware = any(hw in name for hw in ['nvenc', 'qsv', 'amf', 'videotoolbox', 'mediacodec'])
                     
                     if ('V' in flags or 'A' in flags) and is_hardware:
-                         self.available_encoders[name] = description
+                         # 增加硬编可用性探测 (动态校验)
+                         if self._verify_encoder_usability(name):
+                             self.available_encoders[name] = description
+                         else:
+                             logger.info(f"忽略不可用的硬件编码器: {name}")
                          
             # 调试信息：可以在开发阶段打印找到的编码器
             # print(f"检测到可用硬件编码器: {self.available_encoders}")
@@ -137,48 +175,71 @@ class MediaConverter(ABC):
 
     def _get_video_codec_params(self, force_codec: str = None) -> tuple[str, str, str]:
         """
-        根据检测到的可用编码器和优先级，返回最佳的 H.264 编码器和参数。
-        
-        :param force_codec: 如果指定，则强制使用该编码器（例如 'dnxhd'）。
-        :return: (video_codec, preset_key, preset_value)
+        获取最佳可用的视频编码器及对应的 preset 参数。
+        force_codec: 允许强制指定编码器 (如用户在 UI 中选择了特定项)
         """
-        # 如果强制指定，则不进行 H.264 硬件检测
-        if force_codec:
-            return force_codec, None, None
-
         video_codec = "libx264"
         preset_key = "-preset"
         preset_value = "medium"
-        
-        # 优先级：VideoToolbox (Mac) -> NVENC (Nvidia) -> QSV (Intel) -> libx264 (CPU)
 
-        # 1. 检查 macOS VideoToolbox
-        if "h264_videotoolbox" in self.available_encoders:
-            video_codec = "h264_videotoolbox"
-            # VideoToolbox 通常使用 -q:v (质量)
-            preset_key = "-q:v" 
-            preset_value = "70" 
-            
-        # 2. 检查 NVIDIA
-        elif "h264_nvenc" in self.available_encoders:
-            video_codec = "h264_nvenc"
-            preset_key = "-preset"
-            preset_value = "fast" 
+        if force_codec:
+            # 如果强制指定了编码器，优先探测它是否可用
+            if force_codec in self.available_encoders or force_codec == "libx264":
+                video_codec = force_codec
+            else:
+                logger.warning(f"强制指定的编码器 {force_codec} 不可用，回退探测最佳方案")
 
-        # 3. 检查 Intel QSV
-        elif "h264_qsv" in self.available_encoders:
-            video_codec = "h264_qsv"
-            preset_key = "-preset"
-            preset_value = "veryfast"
-            
-        # 4. 默认 CPU 编码器参数
-        else:
-            # libx264 使用 -crf 参数，但这不是 preset key，
-            # 我们返回 None，让子类知道使用 -crf 20
-            preset_key = "-crf"
-            preset_value = "20"
+        # 如果没有强制指定，或者指定的不可用，则按优先级自动选择
+        if not force_codec or video_codec == "libx264":
+            # 优先顺序: VideoToolbox (macOS) -> NVENC (NVIDIA) -> QSV (Intel)
+            if "h264_videotoolbox" in self.available_encoders:
+                video_codec = "h264_videotoolbox"
+            elif "h264_nvenc" in self.available_encoders:
+                video_codec = "h264_nvenc"
+            elif "h264_qsv" in self.available_encoders:
+                video_codec = "h264_qsv"
+
+        # 根据选择的编码器匹配 preset
+        if video_codec == "h264_nvenc":
+            preset_key, preset_value = "-preset", "p4"
+        elif video_codec == "h264_qsv":
+            preset_key, preset_value = "-preset", "veryfast"
+        elif video_codec == "h264_videotoolbox":
+            preset_key, preset_value = None, None # VT 通常不直接传 -preset
         
         return video_codec, preset_key, preset_value
+
+    def _get_extra_codec_args(self, video_codec: str) -> list[str]:
+        """根据编码器类型返回推荐的参数列表"""
+        extra_args = []
+        if video_codec == "h264_nvenc":
+            # Windows / NVIDIA：高质量 VBR
+            extra_args.extend([
+                "-preset", "p4",
+                "-rc", "vbr_hq",
+                "-b:v", "15M",
+                "-maxrate", "25M",
+                "-bufsize", "25M",
+                "-cq:v", "17",
+                "-pix_fmt", "yuv420p",
+            ])
+        elif video_codec == "h264_videotoolbox":
+            # macOS / VideoToolbox
+            extra_args.extend([
+                "-b:v", "15M",
+                "-maxrate", "25M",
+                "-bufsize", "25M",
+                "-profile:v", "high",
+                "-pix_fmt", "yuv420p",
+            ])
+        elif video_codec == "libx264":
+            # 纯 CPU
+            extra_args.extend([
+                "-preset", "medium",
+                "-crf", "20",
+                "-pix_fmt", "yuv420p",
+            ])
+        return extra_args
 
     def find_files(self, directory: Path):
         """
@@ -534,143 +595,108 @@ class LogoConverter(MediaConverter):
         super().__init__(support_exts=support_exts, output_ext=output_ext, init_checks=init_checks)
 
     def process_file(self, input_path: Path, output_path: Path, duration: float, monitor=None):
-        output_file_name = f"{output_path}{self.output_ext}" 
-        video_codec, preset_key, preset_value = self._get_video_codec_params(self.force_codec)
+        def build_cmd(v_codec):
+            output_file_name = f"{output_path}{self.output_ext}" 
+            # 核心修复点 1: 使用列表存储每一行 filter，最后用分号连接
+            parts = []
+            ratio = float(self.target_w) / float(self.target_h)
 
-        # 核心修复点 1: 使用列表存储每一行 filter，最后用分号连接
-        parts = []
-        ratio = float(self.target_w) / float(self.target_h)
-
-        # 基础画面缩放
-        # [0:v] 是主视频
-        parts.append(
-            f"[0:v]scale='if(gt(iw/ih,{ratio}),-2,{self.target_w})':'"
-            f"if(gt(iw/ih,{ratio}),{self.target_h},-2)',setsar=1,"
-            f"crop={self.target_w}:{self.target_h}[base]"
-        )
-        
-        current_link = 'base'
-
-        # 处理模糊层
-        for idx, logo in enumerate(self.logos):
-            if not logo.get('blur', True):
-                continue
-            w, h, x, y = logo.get('w') or 'iw', logo.get('h') or 'ih', logo['x'], logo['y']
-            
-            blur_out = f"b{idx}"
-            overlay_out = f"l_blur_{idx}"
-            
-            # 注意：这里的 [current_link] 会被 split 分发
-            parts.append(f"[{current_link}]split[vsplit{idx}1][vsplit{idx}2]")
-            parts.append(f"[vsplit{idx}1]crop={w}:{h}:{x}:{y},boxblur=10[{blur_out}]")
-            parts.append(f"[vsplit{idx}2][{blur_out}]overlay={x}:{y}:format=auto[{overlay_out}]")
-            current_link = overlay_out
-
-        # 叠加 Logo 图片
-        for idx, logo in enumerate(self.logos):
-            w, h, x, y = logo.get('w') or 'iw', logo.get('h') or 'ih', logo['x'], logo['y']
-            
-            logo_in = f"{idx+1}:v"  # 图标输入流索引
-            logo_scaled = f"logo_img_{idx}"
-            final_out = f"layer_{idx}"
-            
-            parts.append(f"[{logo_in}]scale={w}:{h}[{logo_scaled}]")
-            parts.append(f"[{current_link}][{logo_scaled}]overlay={x}:{y}:format=auto[{final_out}]")
-            current_link = final_out
-
-        # 添加文本水印层
-        for idx, text_cfg in enumerate(self.texts):
-            abs_font = get_resource_path(text_cfg['font_path'])
-            escaped_font = self._format_ffmpeg_path(str(abs_font.absolute()))
-            
-            # 安全转义 FFmpeg 文本
-            # 必须转义 \ , : 和 ' 
-            safe_text = str(text_cfg['text']).replace("\\", "\\\\\\\\").replace("'", "\\\\\\'").replace(":", "\\\\:")
-            
-            box_str = ":box=1:boxcolor=black@0.5:boxborderw=10" if text_cfg['use_box'] else ""
-            
-            drawtext_filter = (
-                f"drawtext=fontfile='{escaped_font}':"
-                f"text='{safe_text}':"
-                f"fontcolor={text_cfg['font_color']}:"
-                f"fontsize={text_cfg['font_size']}{box_str}:"
-                f"x={text_cfg['x']}:y={text_cfg['y']}"
+            # 基础画面缩放
+            parts.append(
+                f"[0:v]scale='if(gt(iw/ih,{ratio}),-2,{self.target_w})':'"
+                f"if(gt(iw/ih,{ratio}),{self.target_h},-2)',setsar=1,"
+                f"crop={self.target_w}:{self.target_h}[base]"
             )
             
-            text_out = f"text_layer_{idx}"
-            parts.append(f"[{current_link}]{drawtext_filter}[{text_out}]")
-            current_link = text_out
+            current_link = 'base'
 
-        # 添加 ASS 字幕层
-        for idx, ass_path in enumerate(self.ass_files):
-            abs_ass = get_resource_path(ass_path)
-            escaped_ass = self._format_ffmpeg_path(str(abs_ass.absolute()))
-            
-            ass_out = f"ass_layer_{idx}"
-            parts.append(f"[{current_link}]ass='{escaped_ass}'[{ass_out}]")
-            current_link = ass_out
+            # 处理模糊层
+            for idx, logo in enumerate(self.logos):
+                if not logo.get('blur', True):
+                    continue
+                w, h, x, y = logo.get('w') or 'iw', logo.get('h') or 'ih', logo['x'], logo['y']
+                blur_out = f"b{idx}"
+                overlay_out = f"l_blur_{idx}"
+                parts.append(f"[{current_link}]split[vsplit{idx}1][vsplit{idx}2]")
+                parts.append(f"[vsplit{idx}1]crop={w}:{h}:{x}:{y},boxblur=10[{blur_out}]")
+                parts.append(f"[vsplit{idx}2][{blur_out}]overlay={x}:{y}:format=auto[{overlay_out}]")
+                current_link = overlay_out
 
-        # 核心修复点 2: 必须用分号分隔每个滤镜声明
-        filter_complex = ";".join(parts)
+            # 叠加 Logo 图片
+            for idx, logo in enumerate(self.logos):
+                w, h, x, y = logo.get('w') or 'iw', logo.get('h') or 'ih', logo['x'], logo['y']
+                logo_in = f"{idx+1}:v"
+                logo_scaled = f"logo_img_{idx}"
+                final_out = f"layer_{idx}"
+                parts.append(f"[{logo_in}]scale={w}:{h}[{logo_scaled}]")
+                parts.append(f"[{current_link}][{logo_scaled}]overlay={x}:{y}:format=auto[{final_out}]")
+                current_link = final_out
 
-        cmd = [
-            "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
-            "-hwaccel", "auto",
-            "-i", str(input_path)
-        ]
-        for logo in self.logos:
-            lp = str(logo['path'])
-            if "%" in lp:
-                cmd.extend(["-stream_loop", "-1", "-framerate", "25", "-i", lp])
-            else:
-                cmd.extend(["-i", lp])
+            # 添加文本水印层
+            for idx, text_cfg in enumerate(self.texts):
+                abs_font = get_resource_path(text_cfg['font_path'])
+                escaped_font = self._format_ffmpeg_path(str(abs_font.absolute()))
+                safe_text = str(text_cfg['text']).replace("\\", "\\\\\\\\").replace("'", "\\\\\\'").replace(":", "\\\\:")
+                box_str = ":box=1:boxcolor=black@0.5:boxborderw=10" if text_cfg['use_box'] else ""
+                drawtext_filter = (
+                    f"drawtext=fontfile='{escaped_font}':"
+                    f"text='{safe_text}':"
+                    f"fontcolor={text_cfg['font_color']}:"
+                    f"fontsize={text_cfg['font_size']}{box_str}:"
+                    f"x={text_cfg['x']}:y={text_cfg['y']}"
+                )
+                text_out = f"text_layer_{idx}"
+                parts.append(f"[{current_link}]{drawtext_filter}[{text_out}]")
+                current_link = text_out
 
-        # 根据实际使用的编码器，附加合适的质量 / 码率参数，避免依赖各平台默认值
-        extra_video_args: list[str] = []
+            # 添加 ASS 字幕层
+            for idx, ass_path in enumerate(self.ass_files):
+                abs_ass = get_resource_path(ass_path)
+                escaped_ass = self._format_ffmpeg_path(str(abs_ass.absolute()))
+                ass_out = f"ass_layer_{idx}"
+                parts.append(f"[{current_link}]ass='{escaped_ass}'[{ass_out}]")
+                current_link = ass_out
 
-        if video_codec == "h264_nvenc":
-            # Windows / NVIDIA：高质量 VBR，控制在一个相对稳定的码率区间
-            extra_video_args.extend([
-                "-preset", "p4",          # 质量优先的预设，视显卡性能可改成 p5/p6
-                "-rc", "vbr_hq",
-                "-b:v", "15M",             # 目标码率
-                "-maxrate", "25M",
-                "-bufsize", "25M",
-                "-cq:v", "17",            # 质量档位，越小越清晰
-                "-pix_fmt", "yuv420p",
+            filter_complex = ";".join(parts)
+
+            cmd = [
+                "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+                "-hwaccel", "auto",
+                "-i", str(input_path)
+            ]
+            for logo in self.logos:
+                lp = str(logo['path'])
+                if "%" in lp:
+                    cmd.extend(["-stream_loop", "-1", "-framerate", "25", "-i", lp])
+                else:
+                    cmd.extend(["-i", lp])
+
+            extra_video_args = self._get_extra_codec_args(v_codec)
+            cmd.extend([
+                "-filter_complex", filter_complex,
+                "-map", f"[{current_link}]",
+                "-map", "0:a?", 
+                "-c:v", v_codec,
+                *extra_video_args,
+                output_file_name
             ])
-        elif video_codec == "h264_videotoolbox":
-            # macOS / VideoToolbox：建议使用目标码率模式，减小体积同时控制画质
-            extra_video_args.extend([
-                "-b:v", "15M",
-                "-maxrate", "25M",
-                "-bufsize", "25M",
-                "-profile:v", "high",
-                "-pix_fmt", "yuv420p",
-            ])
-        elif video_codec == "libx264":
-            # 纯 CPU：CRF 固定质量方案
-            extra_video_args.extend([
-                "-preset", "medium",
-                "-crf", "20",
-                "-pix_fmt", "yuv420p",
-            ])
-        else:
-            # 其他编码器：如果 _get_video_codec_params 返回了合法的 key/value，就原样拼进去
-            if preset_key and preset_value:
-                extra_video_args.extend([preset_key, preset_value])
+            return cmd
 
-        cmd.extend([
-            "-filter_complex", filter_complex,
-            "-map", f"[{current_link}]", # 映射最后一个输出标签
-            "-map", "0:a?", 
-            "-c:v", video_codec,
-            *extra_video_args,
-            output_file_name
-        ])
-
+        video_codec, _, _ = self._get_video_codec_params(self.force_codec)
         name = input_path.name
-        self.process_ffmpeg(cmd, duration, monitor, name)
+        try:
+            cmd = build_cmd(video_codec)
+            self.process_ffmpeg(cmd, duration, monitor, name)
+        except Exception as e:
+            # 如果不是 libx264 且允许自动回退，则重试
+            if video_codec != "libx264" and not self.force_codec:
+                logger.warning(f"硬件加速编码失败，尝试回退到 CPU (libx264): {e}")
+                if monitor:
+                    monitor.update_file_progress(0, duration, f"回退重试: {name}")
+                retry_cmd = build_cmd("libx264")
+                self.process_ffmpeg(retry_cmd, duration, monitor, name)
+            else:
+                raise e
 
 class AddCustomLogo(MediaConverter):
     """
@@ -684,6 +710,7 @@ class AddCustomLogo(MediaConverter):
         self.font_size = params.get('font_size')
         self.font_path = params.get('font_path')
         self.use_box = params.get('use_box', True)
+        self.force_codec = params.get('video_codec', None)
 
         super().__init__(support_exts=support_exts, output_ext=output_ext, init_checks=init_checks)
 
@@ -692,41 +719,51 @@ class AddCustomLogo(MediaConverter):
             raise FileNotFoundError(f"Logo not found: {self.font_path}")
 
     def process_file(self, input_path: Path, output_path: Path, duration: float, monitor=None):
-        """
-        添加logo
-        :param input_path: 输入路径
-        :param output_path: 输出基本路径 (不含后缀)
-        :param duration: 当前文件的总时长 (用于计算百分比)
-        """
-        inpput_ext = input_path.suffix.lower()
-        if self.output_ext is None:
-            self.output_ext = f"_ai{inpput_ext}"
+        def build_cmd(v_codec):
+            inpput_ext = input_path.suffix.lower()
+            if self.output_ext is None:
+                self.output_ext = f"_ai{inpput_ext}"
+            output_file_name = f"{output_path}{self.output_ext}" 
 
-        output_file_name = f"{output_path}{self.output_ext}" 
+            abs_font_path = get_resource_path(self.font_path)
+            escaped_font_path = self._format_ffmpeg_path(str(abs_font_path.absolute()))
 
-        abs_font_path = get_resource_path(self.font_path)
-        escaped_font_path = self._format_ffmpeg_path(str(abs_font_path.absolute()))
+            box_str = "box=1:boxcolor=black@0.5:boxborderw=10:" if self.use_box else ""
+            filter_complex = (
+                f"drawtext=fontfile='{escaped_font_path}':"
+                f"text='{self.text}':text_shaping=1:"
+                f"fontcolor={self.font_color}:"
+                f"fontsize={self.font_size}:"
+                f"{box_str}"
+                f"x={self.x}:y={self.y}"
+            )
+            extra_video_args = self._get_extra_codec_args(v_codec)
+            cmd = [
+                "ffmpeg", "-y", "-hide_banner", "-nostats", "-loglevel", "error",
+                "-hwaccel", "auto",
+                "-i", str(input_path),
+                "-vf", filter_complex,
+                "-c:v", v_codec,
+                *extra_video_args,
+                output_file_name
+            ]
+            return cmd
 
-        # 构造 filter_complex：
-        box_str = "box=1:boxcolor=black@0.5:boxborderw=10:" if self.use_box else ""
-        filter_complex = (
-            f"drawtext=fontfile='{escaped_font_path}':"
-            f"text='{self.text}':text_shaping=1:"
-            f"fontcolor={self.font_color}:"
-            f"fontsize={self.font_size}:"
-            f"{box_str}"
-            f"x={self.x}:y={self.y}"
-        )
-
-        cmd = [
-            "ffmpeg", "-y", "-hide_banner", "-nostats", "-loglevel", "error",
-            "-i", str(input_path),
-            "-vf", filter_complex,
-            output_file_name
-        ]
-
-        name = input_path.name # 确保获取到文件名
-        self.process_ffmpeg(cmd, duration, monitor, name)
+        video_codec, _, _ = self._get_video_codec_params(self.force_codec)
+        name = input_path.name
+        try:
+            cmd = build_cmd(video_codec)
+            self.process_ffmpeg(cmd, duration, monitor, name)
+        except Exception as e:
+            # 如果不是 libx264 且允许自动回退，则重试
+            if video_codec != "libx264" and not self.force_codec:
+                logger.warning(f"硬件加速编码失败，尝试回退到 CPU (libx264): {e}")
+                if monitor:
+                    monitor.update_file_progress(0, duration, f"回退重试: {name}")
+                retry_cmd = build_cmd("libx264")
+                self.process_ffmpeg(retry_cmd, duration, monitor, name)
+            else:
+                raise e
 
 class AddAssText(MediaConverter):
     """
@@ -734,6 +771,7 @@ class AddAssText(MediaConverter):
     """
     def __init__(self, params: dict, support_exts=None, output_ext: str = None, init_checks: bool = True):
         self.ass = params.get('ass')
+        self.force_codec = params.get('video_codec', None)
 
         super().__init__(support_exts=support_exts, output_ext=output_ext, init_checks=init_checks)
 
@@ -743,34 +781,43 @@ class AddAssText(MediaConverter):
         # self.ass = Path(get_resource_path(params.get('ass')))
 
     def process_file(self, input_path: Path, output_path: Path, duration: float, monitor=None):
-        """
-        添加ASS字幕
-        :param input_path: 输入路径
-        :param output_path: 输出基本路径 (不含后缀)
-        :param duration: 当前文件的总时长 (用于计算百分比)
-        """
-        inpput_ext = input_path.suffix.lower()
-        if self.output_ext is None:
-            self.output_ext = f"_ai{inpput_ext}"
+        def build_cmd(v_codec):
+            inpput_ext = input_path.suffix.lower()
+            if self.output_ext is None:
+                self.output_ext = f"_ai{inpput_ext}"
+            output_file_name = f"{output_path}{self.output_ext}" 
 
-        output_file_name = f"{output_path}{self.output_ext}" 
+            abs_ass_path = get_resource_path(self.ass)
+            escaped_ass_path = self._format_ffmpeg_path(str(abs_ass_path.absolute()))
 
-        abs_ass_path = get_resource_path(self.ass)
-        escaped_ass_path = self._format_ffmpeg_path(str(abs_ass_path.absolute()))
+            input_ass = f"ass='{escaped_ass_path}'"
+            extra_video_args = self._get_extra_codec_args(v_codec)
+            cmd = [
+                "ffmpeg", "-y", "-hide_banner", "-nostats", "-loglevel", "error",
+                "-hwaccel", "auto",
+                "-i", str(input_path),
+                "-vf", input_ass,
+                "-c:v", v_codec,
+                *extra_video_args,
+                output_file_name
+            ]
+            return cmd
 
-        input_ass = (
-            f"ass='{escaped_ass_path}'"
-        )
-
-        cmd = [
-            "ffmpeg", "-y", "-hide_banner", "-nostats", "-loglevel", "error",
-            "-i", str(input_path),
-            "-vf", input_ass,
-            output_file_name
-        ]
-
-        name = input_path.name # 确保获取到文件名
-        self.process_ffmpeg(cmd, duration, monitor, name)
+        video_codec, _, _ = self._get_video_codec_params(self.force_codec)
+        name = input_path.name
+        try:
+            cmd = build_cmd(video_codec)
+            self.process_ffmpeg(cmd, duration, monitor, name)
+        except Exception as e:
+            # 如果不是 libx264 且允许自动回退，则重试
+            if video_codec != "libx264" and not self.force_codec:
+                logger.warning(f"硬件加速编码失败，尝试回退到 CPU (libx264): {e}")
+                if monitor:
+                    monitor.update_file_progress(0, duration, f"回退重试: {name}")
+                retry_cmd = build_cmd("libx264")
+                self.process_ffmpeg(retry_cmd, duration, monitor, name)
+            else:
+                raise e
 
 class H264Converter(MediaConverter):
     """
@@ -782,52 +829,34 @@ class H264Converter(MediaConverter):
         super().__init__(support_exts=support_exts, output_ext=output_ext, init_checks=init_checks)
 
     def process_file(self, input_path: Path, output_path: Path, duration: float, monitor=None):
-        output_file_name = f"{output_path}{self.output_ext}"
-        video_codec, preset_key, preset_value = self._get_video_codec_params(self.force_codec)
-        cmd = [
-            "ffmpeg", "-y", "-hide_banner", "-nostats", "-loglevel", "error",
-            "-hwaccel", "auto",
-            "-i", str(input_path),
-            "-c:v", video_codec,
-        ]
-        # 根据编码器类型，附加对应的质量 / 码率参数
-        extra_video_args: list[str] = []
+        def build_cmd(v_codec):
+            output_file_name = f"{output_path}{self.output_ext}"
+            extra_video_args = self._get_extra_codec_args(v_codec)
+            cmd = [
+                "ffmpeg", "-y", "-hide_banner", "-nostats", "-loglevel", "error",
+                "-hwaccel", "auto",
+                "-i", str(input_path),
+                "-c:v", v_codec,
+                *extra_video_args,
+                "-c:a", "copy", "-movflags", "+faststart",
+                output_file_name
+            ]
+            return cmd
 
-        if video_codec == "h264_nvenc":
-            extra_video_args.extend([
-                "-preset", "p6",
-                "-rc", "vbr_hq",
-                "-b:v", "15M",
-                "-maxrate", "25M",
-                "-bufsize", "25M",
-                "-cq:v", "17",
-                "-pix_fmt", "yuv420p",
-            ])
-        elif video_codec == "h264_videotoolbox":
-            extra_video_args.extend([
-                "-b:v", "15M",
-                "-maxrate", "25M",
-                "-bufsize", "25M",
-                "-profile:v", "high",
-                "-pix_fmt", "yuv420p",
-            ])
-        elif video_codec == "libx264":
-            extra_video_args.extend([
-                "-preset", "medium",
-                "-crf", "20",
-                "-pix_fmt", "yuv420p",
-            ])
-        else:
-            if preset_key and preset_value:
-                extra_video_args.extend([preset_key, preset_value])
-        
-        cmd.extend([
-            *extra_video_args,
-            "-c:a", "copy", "-movflags", "+faststart",
-            output_file_name
-        ])
-        name = input_path.name # 确保获取到文件名
-        self.process_ffmpeg(cmd, duration, monitor, name)
+        video_codec, _, _ = self._get_video_codec_params(self.force_codec)
+        name = input_path.name
+        try:
+            cmd = build_cmd(video_codec)
+            self.process_ffmpeg(cmd, duration, monitor, name)
+        except Exception as e:
+            if video_codec != "libx264" and not self.force_codec:
+                logger.warning(f"硬件加速编码失败，尝试回退到 CPU (libx264): {e}")
+                if monitor:
+                    monitor.update_file_progress(0, duration, f"回退重试: {name}")
+                retry_cmd = build_cmd("libx264")
+                self.process_ffmpeg(retry_cmd, duration, monitor, name)
+            else:
+                raise e
 
 class DnxhrConverter(MediaConverter):
     """
