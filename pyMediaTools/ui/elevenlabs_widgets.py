@@ -240,8 +240,15 @@ class EmotionTagManager(QWidget):
             QMessageBox.information(self, "提示", "请先输入需要分析的文本。")
             return
 
-        # 获取父窗口的 Groq 设置
-        parent_ui = self.window()
+        # 查找提供 Groq 设置的祖先组件 (通常是 ElevenLabsWidget)
+        parent_ui = self.parent()
+        while parent_ui and not hasattr(parent_ui, 'get_groq_settings'):
+            parent_ui = parent_ui.parent()
+            
+        if not parent_ui:
+            # 如果在父级树中没找到，回退到 window()
+            parent_ui = self.window()
+            
         if not hasattr(parent_ui, 'get_groq_settings'):
             QMessageBox.warning(self, "错误", "无法获取 Groq 配置。")
             return

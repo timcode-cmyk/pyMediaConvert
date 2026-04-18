@@ -36,7 +36,7 @@
 #     nuitka-project: --include-data-files={MAIN_DIRECTORY}/bin/ffprobe=bin/ffprobe
 """
 
-__version__ = "1.16.1"
+__version__ = "1.16.2"
 __author__ = "timcode-cmyk"
 __description__ = "A professional media toolkit built with Python and PySide6, offering a suite of utilities for video editing, audio processing, and more."
 __license__ = "GPL License"

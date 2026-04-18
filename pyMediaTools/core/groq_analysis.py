@@ -105,111 +105,48 @@ def generate_emotion_for_sentence(text, api_key, model="openai/gpt-oss-120b"):
     # 使用用户给出的提示模板，简化为要求返回 JSON 对象 {"emotion": "tag"}
     system_prompt = (
         """
-        # Instructions
+        请严格按照以下规范处理我接下来发给你的文本，以便用于 ElevenLabs 高质量语音合成：
+        📌 1. 数字处理（数值情境自然融入朗读节奏）
+        所有阿拉伯数字必须全部转换为对应语言的书写形式（例：3 → 三，37 → 三十七）。
+        即使在年份、年龄、时间等情境中也要转换（如 „2023年” → „二零二三年”）。
+        📌 2. 表情符号处理
+        文本中如有 emoji 或任何图形符号，一律彻底删除，不保留空格或替代字符。
+        禁止出现残留的符号如“⭐”、“😭”或“❤️”。
+        📌 3. 文本保持完整无损
+        保持原文大小写、标点与结构完全一致。
+        不做任何语义改写、删减或意译。
+        所有逗号、句号、引号等必须完整保留，不可丢失。
+        📌 4. 情绪标签设计与添加（专用于 ElevenLabs 情感调控）
+        根据文本语义与叙述情境，准确判断并添加情绪标签，标签必须放在应读出该情绪的词前。
+        标签格式为方括号英文标签，如：
+        [Sad]（伤感）
+        [Crying]（哽咽/哭腔）
+        [Hopeful]（充满希望）
+        [Whispering]（低声祷告）
+        [Happy]（开心）
+        [Gentle]（温柔）
+        标签紧贴其后单词（中间无空格），如：
+        Ea[whispering]se roagă...
+        标签只用于引导语音语气，不要读出。
+        情绪标签可结合段落节奏灵活调整，每段落可混合多种情绪，增强表达层次。
+        对于重大情绪波动（如事故、祈祷、思念、痛苦），适当加入强标签如 [Sad crying voice]、[sobs] 等，引导合成器表达人类感受。
+        📌 5. 段落格式与朗读节奏控制
+        所有段落必须合并为一个整体段落，确保朗读连贯、节奏自然。
+        不要插入空行，句子之间仅用正常标点断句。
+        避免朗读中出现不自然停顿或跳段。
+        📌 6. 结尾特殊处理
+        文本最后一句最后一个标点后必须添加三个英文句号 ...（即使句子已经完整结束），防止 ElevenLabs 在尾句被意外截断。输入...有时候会读出来一些语气词，也可以回车键空两行可以起延时作用。
+        📌 7. 最终检查要求（务必执行）
+        在输出最终文本前，请严格进行以下核查：
+        ✅ 所有数字是否已正确转换为罗马尼亚语拼写
+        ✅ 所有 emoji 是否已移除干净
+        ✅ 文本语义是否 100% 保持无改动
+        ✅ 所有情绪标签位置、格式、语境是否合适
+        ✅ 文本是否合并为一整段，无中断、无断行
+        ✅ 尾句是否已添加 ... 做朗读保护
+        🔄 返回要求：
+        请返回只包含处理后的纯净文本本体，不包含解释、不附带注释或额外说明。
 
-        ## 1. Role and Goal
-
-        You are an AI assistant specializing in enhancing dialogue text for speech generation.
-
-        Your **PRIMARY GOAL** is to dynamically integrate **audio tags** (e.g., `[laughing]`, `[sighs]`) into dialogue, making it more expressive and engaging for auditory experiences, while **STRICTLY** preserving the original text and meaning.
-
-        It is imperative that you follow these system instructions to the fullest.
-
-        ## 2. Core Directives
-
-        Follow these directives meticulously to ensure high-quality output.
-
-        ### Positive Imperatives (DO):
-
-        * DO integrate **audio tags** from the "Audio Tags" list (or similar contextually appropriate **audio tags**) to add expression, emotion, and realism to the dialogue. These tags MUST describe something auditory.
-        * DO ensure that all **audio tags** are contextually appropriate and genuinely enhance the emotion or subtext of the dialogue line they are associated with.
-        * DO strive for a diverse range of emotional expressions (e.g., energetic, relaxed, casual, surprised, thoughtful) across the dialogue, reflecting the nuances of human conversation.
-        * DO place **audio tags** strategically to maximize impact, typically immediately before the dialogue segment they modify or immediately after. (e.g., `[annoyed] This is hard.` or `This is hard. [sighs]`).
-        * DO ensure **audio tags** contribute to the enjoyment and engagement of spoken dialogue.
-
-        ### Negative Imperatives (DO NOT):
-
-        * DO NOT alter, add, or remove any words from the original dialogue text itself. Your role is to *prepend* **audio tags**, not to *edit* the speech. **This also applies to any narrative text provided; you must *never* place original text inside brackets or modify it in any way.**
-        * DO NOT create **audio tags** from existing narrative descriptions. **Audio tags** are *new additions* for expression, not reformatting of the original text. (e.g., if the text says "He laughed loudly," do not change it to "[laughing loudly] He laughed." Instead, add a tag if appropriate, e.g., "He laughed loudly [chuckles].")
-        * DO NOT use tags such as `[standing]`, `[grinning]`, `[pacing]`, `[music]`.
-        * DO NOT use tags for anything other than the voice such as music or sound effects.
-        * DO NOT invent new dialogue lines.
-        * DO NOT select **audio tags** that contradict or alter the original meaning or intent of the dialogue.
-        * DO NOT introduce or imply any sensitive topics, including but not limited to: politics, religion, child exploitation, profanity, hate speech, or other NSFW content.
-
-        ## 3. Workflow
-
-        1. **Analyze Dialogue**: Carefully read and understand the mood, context, and emotional tone of **EACH** line of dialogue provided in the input.
-        2. **Select Tag(s)**: Based on your analysis, choose one or more suitable **audio tags**. Ensure they are relevant to the dialogue's specific emotions and dynamics.
-        3. **Integrate Tag(s)**: Place the selected **audio tag(s)** in square brackets `[]` strategically before or after the relevant dialogue segment, or at a natural pause if it enhances clarity.
-        4. **Add Emphasis:** You cannot change the text at all, but you can add emphasis by making some words capital, adding a question mark or adding an exclamation mark where it makes sense, or adding ellipses as well too.
-        5. **Verify Appropriateness**: Review the enhanced dialogue to confirm:
-            * The **audio tag** fits naturally.
-            * It enhances meaning without altering it.
-            * It adheres to all Core Directives.
-
-        ## 4. Output Format
-
-        * Present ONLY the enhanced dialogue text in a conversational format.
-        * **Audio tags** **MUST** be enclosed in square brackets (e.g., `[laughing]`).
-        * The output should maintain the narrative flow of the original dialogue.
-
-        ## 5. Audio Tags (Non-Exhaustive)
-
-        Use these as a guide. You can infer similar, contextually appropriate **audio tags**.
-
-        **Directions:**
-        * `[happy]`
-        * `[sad]`
-        * `[excited]`
-        * `[angry]`
-        * `[whisper]`
-        * `[annoyed]`
-        * `[appalled]`
-        * `[thoughtful]`
-        * `[surprised]`
-        * *(and similar emotional/delivery directions)*
-
-        **Non-verbal:**
-        * `[laughing]`
-        * `[chuckles]`
-        * `[sighs]`
-        * `[clears throat]`
-        * `[short pause]`
-        * `[long pause]`
-        * `[exhales sharply]`
-        * `[inhales deeply]`
-        * *(and similar non-verbal sounds)*
-
-        ## 6. Examples of Enhancement
-
-        **Input**:
-        "Are you serious? I can't believe you did that!"
-
-        **Enhanced Output**:
-        "[appalled] Are you serious? [sighs] I can't believe you did that!"
-
-        ---
-
-        **Input**:
-        "That's amazing, I didn't know you could sing!"
-
-        **Enhanced Output**:
-        "[laughing] That's amazing, [singing] I didn't know you could sing!"
-
-        ---
-
-        **Input**:
-        "I guess you're right. It's just... difficult."
-
-        **Enhanced Output**:
-        "I guess you're right. [sighs] It's just... [muttering] difficult."
-
-        # Instructions Summary
-
-        1. Add audio tags from the audio tags list. These must describe something auditory but only for the voice.
-        2. Enhance emphasis without altering meaning or text.
-        3. Reply ONLY with the enhanced text.
         """
     )
 
@@ -237,29 +174,27 @@ def generate_emotion_for_sentence(text, api_key, model="openai/gpt-oss-120b"):
             if response.status_code == 200:
                 res_json = response.json()
                 content = res_json['choices'][0]['message']['content']
+                # 尝试解析为 JSON
                 try:
                     parsed = json.loads(content)
                     if isinstance(parsed, dict) and 'emotion' in parsed:
                         val = parsed['emotion']
-                        if isinstance(val, str):
-                            return val.strip()
-                        else:
-                            return str(val)
-                    else:
-                        # 尝试简单提取第一个字符串
-                        if isinstance(parsed, str):
-                            return parsed.strip()
-                        return None
+                        return str(val).strip()
+                    elif isinstance(parsed, str):
+                        return parsed.strip()
                 except Exception:
-                    # 解析失败，使用正则提取
-                    m = re.search(r'"emotion"\s*:\s*"([^"]+)"', content)
-                    if m:
-                        return m.group(1).strip()
-                    # 尝试提取裸词
-                    matches = re.findall(r'\b(happy|sad|excited|angry|whisper|annoyed|appalled|thoughtful|surprised|laughing|chuckles|sighs|clears throat|short pause|long pause|exhales sharply|inhales deeply|neutral)\b', content, flags=re.IGNORECASE)
-                    if matches:
-                        return matches[0].lower()
-                    return None
+                    pass
+
+                # 如果不是标准 JSON，尝试查找到 "emotion": "..." 这种正则匹配
+                m = re.search(r'"emotion"\s*:\s*"([^"]+)"', content)
+                if m:
+                    return m.group(1).strip()
+                
+                # ⭐ 最终回退：直接返回全文。
+                # 之前的代码会尝试通过正则提取 happy/sad 等裸词，
+                # 这会导致在“优化情绪”时，如果文案中包含这些词，整段活文案会被截断只剩一个词。
+                # 现在我们默认返回 AI 返回的所有内容，因为它遵循 system_prompt 的“返回全文”指令。
+                return content.strip()
             elif response.status_code == 429:
                 retry_count += 1
                 if retry_count > max_retries:

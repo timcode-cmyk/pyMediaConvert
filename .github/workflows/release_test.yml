@@ -1,0 +1,159 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 't*'
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  build:
+    name: Build for ${{ matrix.platform_tag }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # - os: macos-latest # Apple Silicon Mac
+          #   platform: macos-arm64
+          #   platform_tag: mac-AppleSilicon
+          - os: macos-15-intel # Intel Mac
+            platform: macos-x86_64
+            platform_tag: mac-Intel
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nuitka
+          python install_dependencies.py
+
+      - name: Extract Version from Tag
+        shell: bash
+        run: |
+          # 将 v1.13.5 转换为 1.13.5
+          VERSION=${GITHUB_REF_NAME#v}
+          echo "APP_VERSION=$VERSION" >> $GITHUB_ENV
+          echo "BASENAME=MediaTools-v$VERSION-${{ matrix.platform_tag }}" >> $GITHUB_ENV
+
+      # --- 平台差异化准备步骤 ---
+
+
+      - name: Prepare Binaries (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          chmod +x bin/ffmpeg bin/ffprobe || true
+
+      # --- Nuitka 构建步骤 ---
+
+
+
+      - name: Workaround OpenSSL scan bug (macOS Intel)
+        if: matrix.platform == 'macos-x86_64'
+        run: |
+          # Nuitka 4.0+ has a dependency scan bug with brew-installed openssl@3 on Intel Macs.
+          # Unlinking it forces Nuitka to use the OpenSSL bundled with the Python distribution.
+          brew unlink openssl@3 || true
+
+      - name: Build with Nuitka (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          python -m nuitka --macos-app-version=${{ env.APP_VERSION }} MediaTools.py
+
+      # --- 拷贝依赖库 ---
+
+
+      - name: Copy Dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          cp -R yt_dlp/ dist-nuitka/MediaTools.app/Contents/MacOS/yt_dlp/
+          
+      # --- 打包安装程序 ---
+
+  
+      # --- 统一打包逻辑 (已移除冗余，修复 mkdir) ---
+      - name: Final Package
+        shell: bash
+        run: |
+          mkdir -p out
+          
+          if [ "${{ runner.os }}" == "Windows" ]; then
+            powershell.exe -Command "Compress-Archive -Path 'dist-nuitka/MediaTools.dist/*' -DestinationPath 'out/${{ env.BASENAME }}.zip' -Force"
+            
+            if [ -f "${{ env.BASENAME }}.exe" ]; then
+              mv "${{ env.BASENAME }}.exe" out/
+            fi
+          else
+            xattr -cr dist-nuitka/MediaTools.app
+            chmod -R +x dist-nuitka/MediaTools.app/Contents/MacOS/
+            codesign --force --deep --sign - dist-nuitka/MediaTools.app
+            mkdir -p dist-dmg
+            cp -R dist-nuitka/MediaTools.app dist-dmg/
+            ln -s /Applications dist-dmg/Applications
+            hdiutil create -srcfolder dist-dmg \
+                           -volname "MediaTools" \
+                           -format UDZO \
+                           -ov \
+                           "out/${{ env.BASENAME }}.dmg"
+          fi
+
+      - name: Debug Output
+        shell: bash
+        run: |
+          echo "Checking out directory content:"
+          ls -R out/
+
+      # --- 新增：上传产物 ---
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: artifacts-${{ matrix.platform_tag }}
+          path: out/*
+
+  release:
+    needs: [build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v8
+        with:
+          # 不指定 name 会下载所有 artifact
+          path: release-dist
+          merge-multiple: true
+
+      - name: Generate Artifact Attestation
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: 'release-dist/*'
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v3
+        with:
+          # 修正：添加了 .dmg 并确保路径正确
+          files: |
+            release-dist/*.zip
+            release-dist/*.exe
+            release-dist/*.dmg
+          generate_release_notes: true

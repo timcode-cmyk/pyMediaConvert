@@ -196,12 +196,12 @@ class VideoCutWidget(QWidget):
         self.status_label.setObjectName("StatusLabel")
         
         prog_row_1 = QHBoxLayout()
-        prog_row_1.addWidget(QLabel("总进度:"))
+        prog_row_1.addWidget(QLabel("进度:"))
         self.overall_progress_bar = QProgressBar()
         prog_row_1.addWidget(self.overall_progress_bar)
         
         prog_row_2 = QHBoxLayout()
-        prog_row_2.addWidget(QLabel("当前文件:"))
+        prog_row_2.addWidget(QLabel("文件:"))
         self.file_progress_bar = QProgressBar()
         prog_row_2.addWidget(self.file_progress_bar)
         
