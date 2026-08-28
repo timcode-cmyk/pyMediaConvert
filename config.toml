@@ -95,7 +95,7 @@ group = 4
 
 [username]
 x = "(w-text_w)-40"
-y = 80
+y = 90
 font_size = 24
 font_color = "white"
 font_path = "assets/Roboto-Bold.ttf"
