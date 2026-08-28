@@ -22,6 +22,11 @@ logger = get_logger(__name__)
 class MediaConverter(ABC):
     """
     视频转换器的抽象基类。负责文件I/O、依赖检查和FFMPEG执行。
+
+    files: list[Path]：待处理的文件列表。
+    support_exts: set[str]：支持的输入后缀名集合。
+    output_ext: str：输出后缀名。
+    available_encoders: dict：当前机器支持的硬件编码器。
     """
     # 默认扩展名
     DEFAULT_SUPPORT_EXTS = {".mp4", ".mkv", ".mov", ".avi", ".webm"}
@@ -517,6 +522,9 @@ class MediaConverter(ABC):
             overall_pbar.close()
 
 class LogoConverter(MediaConverter):
+    """
+    视频转换器：添加 Logo 和文本水印
+    """
     def __init__(self, params: dict, support_exts=None, output_ext: str = None, init_checks: bool = True):
         self.target_w = params.get('target_w', 1080)
         self.target_h = params.get('target_h', 1920)
@@ -700,7 +708,7 @@ class LogoConverter(MediaConverter):
 
 class AddCustomLogo(MediaConverter):
     """
-    添加logo并模糊背景
+    添加自定义logo or文本水印
     """
     def __init__(self, params: dict, support_exts=None, output_ext: str = None, init_checks: bool = True):
         self.x = params.get('x', 10)

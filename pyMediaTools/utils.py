@@ -1,3 +1,19 @@
+'''utils.py - 通用实用程序函数
+
+    BASE_DIR: Path：项目根目录路径。
+    BIN_DIR: Path：内置二进制工具目录 (BASE_DIR / "bin")。
+    ASSET_DIR: Path：内置静态资源目录 (BASE_DIR / "assets")。
+    get_base_dir() -> Path：跨环境（开发环境、PyInstaller 解包目录 sys._MEIPASS、Nuitka 可执行文件目录）识别项目真实基准路径。
+    find_config_path() -> Optional[Path]：按环境变量 PYMEDIA_CONFIG_PATH -> 项目根目录 -> 当前工作目录 -> 父目录链顺序查找 config.toml。
+    load_project_config() -> dict：加载并全局缓存 config.toml 配置字典。
+    save_project_config(config_dict: dict)：将更新后的配置字典写回 config.toml。
+    get_elevenlabs_config() -> dict：快捷获取 ElevenLabs 相关子配置。
+    get_resource_path(*parts) -> Path：拼接获取 assets 或其他静态资源的绝对路径。
+    get_ffmpeg_exe() -> str：返回当前操作系统平台对应的 ffmpeg 可执行文件绝对路径，并在 Unix 平台确保赋予可执行权限 (+x)。
+    get_ffprobe_exe() -> str：返回当前平台对应的 ffprobe 可执行文件绝对路径。
+    get_default_download_dir() -> Path：获取默认下载目录（优先读取配置文件，默认回退到系统 Downloads 目录）。
+'''
+
 import sys
 import os
 from pathlib import Path

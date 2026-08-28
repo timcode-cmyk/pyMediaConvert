@@ -44,6 +44,7 @@ CLASS_MAP = {
 
 
 def _load_toml(path: Path):
+    """跨版本解析 TOML 数据"""
     data = path.read_bytes()
     # tomllib expects bytes, the toml package expects str
     try:
@@ -54,6 +55,7 @@ def _load_toml(path: Path):
 
 
 def _build_modes(toml_data: dict):
+    """从 TOML 数据构建 MODES 字典"""
     modes = {}
     raw_modes = toml_data.get('modes', {})
     for key, cfg in raw_modes.items():
