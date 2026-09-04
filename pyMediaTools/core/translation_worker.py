@@ -14,7 +14,7 @@ from typing import List
 from PySide6.QtCore import QObject, Signal
 
 from .translation_manager import TranslationManager
-from .whisper_transcription import _detect_cjk, SENTENCE_BOUNDARIES, TRANSLATE_TARGET_LANGUAGES
+from .gladia_transcription import _detect_cjk, SENTENCE_BOUNDARIES, TRANSLATE_TARGET_LANGUAGES
 
 
 class TranslationWorker(QObject):

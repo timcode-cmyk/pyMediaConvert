@@ -15,7 +15,8 @@ from PySide6.QtCore import QProcess, QEventLoop, QCoreApplication
 from abc import ABC, abstractmethod
 import re
 import time
-_GLOBAL_ENCODER_CACHE = None
+from .ffmpeg_utils import detect_hardware_encoders, format_ffmpeg_path, get_video_duration
+
 
 logger = get_logger(__name__)
 
@@ -55,14 +56,7 @@ class MediaConverter(ABC):
         # Only run heavy checks if requested (GUI file-count helper will pass init_checks=False)
         if init_checks:
             self._check_ffmpeg_path()
-            global _GLOBAL_ENCODER_CACHE
-            if _GLOBAL_ENCODER_CACHE is None:
-                # 第一次运行：执行探测
-                self._detect_hardware_encoders()
-                _GLOBAL_ENCODER_CACHE = self.available_encoders
-            else:
-                # 之后直接用缓存，不再运行 ffmpeg -encoders
-                self.available_encoders = _GLOBAL_ENCODER_CACHE
+            self.available_encoders = detect_hardware_encoders()
     
 
     def _check_ffmpeg_path(self):
@@ -78,105 +72,6 @@ class MediaConverter(ABC):
             logger.critical(f"绑定的 ffprobe 可执行文件未找到: {ffprobe_path}")
             raise FileNotFoundError(f"ffprobe not found: {ffprobe_path}")
 
-    def _format_ffmpeg_path(self, path: str) -> str:
-        r"""
-        格式化路径以适配 FFmpeg 过滤器 (ass, drawtext)
-        - Windows 下需要将 \ 替换为 /，并将 C: 替换为 C\:
-        """
-        if sys.platform == "win32":
-            # 替换反斜杠为正斜杠，并转义冒号
-            return path.replace("\\", "/").replace(":", "\\:")
-        return path
-
-    def _verify_encoder_usability(self, name: str) -> bool:
-        """
-        通过运行一个极短的空转任务，验证硬件编码器是否真的可用。
-        防止出现 FFmpeg 编译支持但系统无硬件/无驱动的情况。
-        """
-        # 测试命令：产生一个 64x64 的黑块，编码 0.01 秒，输出到空设备
-        cmd = [
-            get_ffmpeg_exe(),
-            "-v", "error",
-            "-f", "lavfi",
-            "-i", "nullsrc=s=64x64:d=0.01",
-            "-c:v", name,
-            "-f", "null",
-            "-"
-        ]
-        
-        creationflags = 0
-        if sys.platform == "win32":
-            creationflags = subprocess.CREATE_NO_WINDOW
-
-        try:
-            # 设置 5 秒超时，防止卡死
-            subprocess.run(cmd, capture_output=True, check=True, timeout=5, creationflags=creationflags)
-            return True
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-            # 记录失败原因
-            err_msg = ""
-            if isinstance(e, subprocess.CalledProcessError):
-                err_msg = e.stderr.decode('utf-8', errors='ignore').strip()
-            logger.warning(f"验证编码器可用性失败: {name} -> {err_msg or '超时'}")
-            return False
-        except Exception:
-            return False
-
-    def _detect_hardware_encoders(self):
-        """
-        运行 'ffmpeg -encoders' 并解析输出，找出可用的硬件加速编码器。
-        
-        FFmpeg 输出格式示例:
-        V.F... h264                  H.264 / AVC (High Efficiency)
-        V..... h264_nvenc            NVIDIA NVENC H.264 Encoder (codec h264)
-        """
-        cmd = [get_ffmpeg_exe(), "-encoders"]
-
-        creationflags = 0
-        if sys.platform == "win32":
-            creationflags = subprocess.CREATE_NO_WINDOW
-
-        try:
-            result = subprocess.run(cmd, 
-                                    capture_output=True, 
-                                    text=True, 
-                                    check=True, 
-                                    encoding='utf-8', 
-                                    errors='ignore',
-                                    creationflags=creationflags)
-            
-            # 正则表达式用于匹配编码器行：
-            # 1. 匹配起始标志：六个字符的旗帜 (如 VFS---)
-            # 2. 匹配编码器名称 (如 h264_nvenc)
-            # 3. 匹配描述
-            # 并且只查找带有 'V' (Video) 或 'A' (Audio) 旗帜的行
-            encoder_regex = re.compile(r"([VASDEV.]{6})\s+(\S+)\s+(.*)")
-            
-            for line in result.stdout.splitlines():
-                match = encoder_regex.search(line)
-                if match:
-                    flags = match.group(1)
-                    name = match.group(2)
-                    description = match.group(3).strip()
-                    
-                    # 检查 flags，如果第一个字符是 'V' 或 'A' 且不是内置软件编码器
-                    # 硬件加速编码器通常名称中包含 'nvenc', 'qsv', 'amf', 'videotoolbox' 等
-                    is_hardware = any(hw in name for hw in ['nvenc', 'qsv', 'amf', 'videotoolbox', 'mediacodec'])
-                    
-                    if ('V' in flags or 'A' in flags) and is_hardware:
-                         # 增加硬编可用性探测 (动态校验)
-                         if self._verify_encoder_usability(name):
-                             self.available_encoders[name] = description
-                         else:
-                             logger.info(f"忽略不可用的硬件编码器: {name}")
-                         
-            # 调试信息：可以在开发阶段打印找到的编码器
-            # print(f"检测到可用硬件编码器: {self.available_encoders}")
-
-        except subprocess.CalledProcessError as e:
-            logger.warning(f"无法运行 FFmpeg -encoders: {e.stderr.strip()}")
-        except Exception as e:
-            logger.exception(f"编码器检测过程中发生未知错误: {e}")
 
     def _get_video_codec_params(self, force_codec: str = None) -> tuple[str, str, str]:
         """
@@ -277,49 +172,6 @@ class MediaConverter(ABC):
         # 去重并排序
         unique_sorted = sorted({str(p): p for p in candidates}.items(), key=lambda x: x[0])
         self.files = [p for _, p in unique_sorted]
-    
-    def get_duration(self, file_path: Path) -> float:
-        """使用 QProcess 安全地获取视频时长，防止打包环境下的死锁"""
-        ffprobe_exe = get_ffprobe_exe()
-        
-        args = [
-            "-v", "error",
-            "-show_entries", "format=duration",
-            "-of", "default=noprint_wrappers=1:nokey=1",
-            str(file_path)
-        ]
-
-        process = QProcess()
-        # 强制不使用缓冲
-        env = process.processEnvironment()
-        env.insert("PYTHONUNBUFFERED", "1")
-        process.setProcessEnvironment(env)
-
-        process.start(ffprobe_exe, args)
-        
-        # 给予一定的超时时间，同时保持 UI 刷新
-        # 这能解决双击运行时，系统因校验二进制文件导致的瞬间卡顿
-        if not process.waitForStarted(5000):
-            logger.error("ffprobe 启动失败")
-            return 0.0
-
-        # 等待进程结束
-        if not process.waitForFinished(10000): # 10秒超时
-            logger.error("ffprobe 执行超时")
-            process.kill()
-            return 0.0
-
-        if process.exitCode() != 0:
-            logger.error(f"ffprobe 运行出错，错误码: {process.exitCode()}")
-            return 0.0
-
-        output = str(process.readAllStandardOutput(), encoding='utf-8').strip()
-        
-        try:
-            return float(output) if output else 0.0
-        except ValueError:
-            logger.error(f"无法解析时长输出: {output}")
-            return 0.0
     
     def _parse_ffmpeg_output(self):
         """实时解析 FFmpeg 的 -progress pipe:1 输出"""
@@ -485,7 +337,7 @@ class MediaConverter(ABC):
                  monitor.update_overall_progress(idx - 1, total, f"总进度 ({idx-1}/{total})")
 
             # 获取时长
-            duration = self.get_duration(file_path)
+            duration = get_video_duration(file_path, use_qprocess=True)
             
             # 创建当前文件进度条（仅在 CLI 模式下）
             try:
@@ -643,7 +495,7 @@ class LogoConverter(MediaConverter):
             # 添加文本水印层
             for idx, text_cfg in enumerate(self.texts):
                 abs_font = get_resource_path(text_cfg['font_path'])
-                escaped_font = self._format_ffmpeg_path(str(abs_font.absolute()))
+                escaped_font = format_ffmpeg_path(str(abs_font.absolute()))
                 safe_text = str(text_cfg['text']).replace("\\", "\\\\\\\\").replace("'", "\\\\\\'").replace(":", "\\\\:")
                 box_str = ":box=1:boxcolor=black@0.5:boxborderw=10" if text_cfg['use_box'] else ""
                 drawtext_filter = (
@@ -660,7 +512,7 @@ class LogoConverter(MediaConverter):
             # 添加 ASS 字幕层
             for idx, ass_path in enumerate(self.ass_files):
                 abs_ass = get_resource_path(ass_path)
-                escaped_ass = self._format_ffmpeg_path(str(abs_ass.absolute()))
+                escaped_ass = format_ffmpeg_path(str(abs_ass.absolute()))
                 ass_out = f"ass_layer_{idx}"
                 parts.append(f"[{current_link}]ass='{escaped_ass}'[{ass_out}]")
                 current_link = ass_out
@@ -734,7 +586,7 @@ class AddCustomLogo(MediaConverter):
             output_file_name = f"{output_path}{self.output_ext}" 
 
             abs_font_path = get_resource_path(self.font_path)
-            escaped_font_path = self._format_ffmpeg_path(str(abs_font_path.absolute()))
+            escaped_font_path = format_ffmpeg_path(str(abs_font_path.absolute()))
 
             box_str = "box=1:boxcolor=black@0.5:boxborderw=10:" if self.use_box else ""
             filter_complex = (
@@ -796,7 +648,7 @@ class AddAssText(MediaConverter):
             output_file_name = f"{output_path}{self.output_ext}" 
 
             abs_ass_path = get_resource_path(self.ass)
-            escaped_ass_path = self._format_ffmpeg_path(str(abs_ass_path.absolute()))
+            escaped_ass_path = format_ffmpeg_path(str(abs_ass_path.absolute()))
 
             input_ass = f"ass='{escaped_ass_path}'"
             extra_video_args = self._get_extra_codec_args(v_codec)

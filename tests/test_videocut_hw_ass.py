@@ -5,7 +5,7 @@ from pathlib import Path
 # Add project root to path
 sys.path.append(str(Path(__file__).parent.parent))
 
-from pyMediaTools.core.vidoecut import SceneCutter, get_available_ass_files, get_available_fonts
+from pyMediaTools.core.videocut import SceneCutter, get_available_ass_files, get_available_fonts
 
 def test_ass_scanning():
     print("Testing ASS scanning...")

@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, QThread, QSettings, QMimeData, QUrl, QSize, QObject, Signal
 from PySide6.QtGui import QFont, QDragEnterEvent, QDropEvent, QColor, QPalette
 
-from ..core.whisper_transcription import (
+from ..core.gladia_transcription import (
     LANGUAGE_OPTIONS,
     TRANSLATE_TARGET_LANGUAGES,
     DEFAULT_WORDS_PER_SEGMENT,

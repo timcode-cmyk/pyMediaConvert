@@ -19,6 +19,7 @@ from datetime import datetime
 
 from ..utils import get_ffmpeg_exe, get_ffprobe_exe, get_resource_path
 from ..logging_config import get_logger
+from .ffmpeg_utils import get_video_duration, get_video_fps, format_ffmpeg_path, detect_hardware_encoders
 
 logger = get_logger(__name__)
 
@@ -72,64 +73,6 @@ def get_available_fonts() -> dict:
     return fonts
 
 
-def _get_video_duration(file_path: Path, debug: bool = False) -> float:
-    """使用 ffprobe 安全地获取视频时长"""
-    ffprobe_exe = get_ffprobe_exe()
-    cmd = [
-        ffprobe_exe,
-        "-v", "error",
-        "-show_entries", "format=duration",
-        "-of", "default=noprint_wrappers=1:nokey=1",
-        str(file_path)
-    ]
-    
-    # Windows 下隐藏 cmd 窗口
-    creationflags = 0
-    if sys.platform == "win32":
-        creationflags = subprocess.CREATE_NO_WINDOW
-    
-    if debug:
-        logger.debug(f"执行 ffprobe 命令获取时长: {' '.join(cmd)}")
-    
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True, 
-                               encoding='utf-8', creationflags=creationflags)
-        duration = float(result.stdout.strip())
-        if debug:
-            logger.debug(f"视频时长: {duration}s")
-        return duration
-    except (subprocess.CalledProcessError, ValueError) as e:
-        logger.error(f"无法获取视频时长 {file_path}: {e}")
-        return 0.0
-
-
-def get_video_fps(video_path, debug: bool = False):
-    """获取视频帧率，用于计算偏移时间"""
-    cmd = [
-        get_ffmpeg_exe(), '-i', str(video_path),
-        '-an', '-f', 'null', '-'
-    ]
-    
-    # Windows 下隐藏 cmd 窗口
-    creationflags = 0
-    if sys.platform == "win32":
-        creationflags = subprocess.CREATE_NO_WINDOW
-    
-    if debug:
-        logger.debug(f"执行 ffmpeg 命令获取帧率: {' '.join(cmd)}")
-    
-    result = subprocess.run(cmd, stderr=subprocess.PIPE, text=True, encoding='utf-8',
-                           creationflags=creationflags)
-    # 从输出中匹配 fps，例如 "23.98 fps"
-    match = re.search(r"(\d+(\.\d+)?) fps", result.stderr)
-    fps = float(match.group(1)) if match else 25.0
-    
-    if debug:
-        logger.debug(f"视频帧率: {fps} FPS")
-    
-    return fps
-
-
 class SceneCutter:
     def __init__(self, monitor=None, debug: bool = False, log_dir: Path = None, font_name: str = None):
         self.monitor = monitor
@@ -139,8 +82,7 @@ class SceneCutter:
         self.font_name = font_name
         
         # 硬件加速探测
-        self.available_encoders = {}
-        self._detect_hardware_encoders()
+        self.available_encoders = detect_hardware_encoders()
         
         # 加载可用的资源
         self.available_fonts = get_available_fonts()
@@ -154,44 +96,6 @@ class SceneCutter:
         if self.debug and self.log_dir:
             self.log_dir.mkdir(parents=True, exist_ok=True)
             logger.debug(f"调试模式已启用，日志将保存至: {self.log_dir}")
-
-    def _verify_encoder_usability(self, name: str) -> bool:
-        """验证硬件编码器是否真的可用"""
-        cmd = [
-            get_ffmpeg_exe(), "-v", "error", "-f", "lavfi",
-            "-i", "nullsrc=s=64x64:d=0.01", "-c:v", name, "-f", "null", "-"
-        ]
-        creationflags = 0
-        if sys.platform == "win32":
-            creationflags = subprocess.CREATE_NO_WINDOW
-        try:
-            subprocess.run(cmd, capture_output=True, check=True, timeout=5, creationflags=creationflags)
-            return True
-        except Exception as e:
-            logger.warning(f"验证编码器可用性失败: {name} -> {e}")
-            return False
-
-    def _detect_hardware_encoders(self):
-        """探测可用的硬件编码器"""
-        cmd = [get_ffmpeg_exe(), "-encoders"]
-        creationflags = 0
-        if sys.platform == "win32":
-            creationflags = subprocess.CREATE_NO_WINDOW
-
-        try:
-            result = subprocess.run(cmd, capture_output=True, text=True, check=True, encoding='utf-8', errors='ignore', creationflags=creationflags)
-            encoder_regex = re.compile(r"([VASDEV.]{6})\s+(\S+)\s+(.*)")
-            for line in result.stdout.splitlines():
-                match = encoder_regex.search(line)
-                if match:
-                    flags = match.group(1)
-                    name = match.group(2)
-                    if ('V' in flags) and any(hw in name for hw in ['nvenc', 'qsv', 'amf', 'videotoolbox']):
-                        # 增加可用性校验
-                        if self._verify_encoder_usability(name):
-                            self.available_encoders[name] = match.group(3).strip()
-        except Exception as e:
-            logger.warning(f"硬件编码器探测失败: {e}")
 
     def _get_video_codec_params(self) -> tuple[str, list]:
         """获取最佳硬件编码器及参数"""
@@ -386,16 +290,6 @@ class SceneCutter:
         
         self.files = sorted(list(set(candidates)))
 
-    def _format_ffmpeg_path(self, path: str) -> str:
-        r"""
-        格式化路径以适配 FFmpeg 过滤器 (ass, drawtext)
-        - Windows 下需要将 \ 替换为 /，并将 C: 替换为 C\:
-        """
-        if sys.platform == "win32":
-            # 替换反斜杠为正斜杠，并转义冒号
-            return path.replace("\\", "/").replace(":", "\\:")
-        return path
-
     def _build_watermark_filter(self, watermark_params):
         """
         构建水印过滤器
@@ -413,7 +307,7 @@ class SceneCutter:
             if text.lower().endswith('.ass'):
                 ass_path = self.available_ass_files.get(text)
                 if ass_path:
-                    escaped_path = self._format_ffmpeg_path(ass_path)
+                    escaped_path = format_ffmpeg_path(ass_path)
                     filters.append(f"ass='{escaped_path}'")
                 continue
             
@@ -422,7 +316,7 @@ class SceneCutter:
                 continue
             
             font_absolute_path = self.available_fonts[font_name]
-            escaped_font_path = self._format_ffmpeg_path(font_absolute_path)
+            escaped_font_path = format_ffmpeg_path(font_absolute_path)
             use_box = params.get('use_box', True)
             box_str = "box=1:boxcolor=black@0.5:boxborderw=10:" if use_box else ""
             
@@ -453,7 +347,7 @@ class SceneCutter:
 
         logger.info(f"开始处理: {video_path.name}")
         fps = get_video_fps(video_path, debug=self.debug)
-        video_duration = _get_video_duration(video_path, debug=self.debug)
+        video_duration = get_video_duration(video_path, debug=self.debug)
         # offset_time 仅用于截图；视频片段的起止时间使用场景检测结果并且会对齐到最接近的帧，
         # 以避免出现 "下一场景画面残留" 的情况。
         offset_time = frame_offset / fps

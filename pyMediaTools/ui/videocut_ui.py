@@ -8,7 +8,7 @@ from PySide6.QtGui import QFont, QColor
 
 from .styles import apply_common_style
 from .media_tools_ui import DropLineEdit, ProgressMonitor
-from ..core.vidoecut import SceneCutter, get_available_fonts, get_available_ass_files
+from ..core.videocut import SceneCutter, get_available_fonts, get_available_ass_files
 from ..utils import get_resource_path
 from pyMediaTools import get_logger
 
