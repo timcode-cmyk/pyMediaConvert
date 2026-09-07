@@ -179,7 +179,7 @@ class ElevenLabsWidget(QWidget):
         
         self.key_input = QLineEdit(initial_key)
         self.key_input.setEchoMode(QLineEdit.Password)
-        self.key_input.setPlaceholderText("sk-...")
+        self.key_input.setPlaceholderText("sk_...（API Key 以 sk_ 开头）")
         self.key_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         
         self.btn_save_key = QPushButton("💾 保存")
@@ -496,6 +496,21 @@ class ElevenLabsWidget(QWidget):
                 QMessageBox.warning(self, "缺少 Key", "请输入 API Key (或在 config.toml / 环境变量中配置)")
             return
 
+        # ElevenLabs 2025 起要求 API Key 必须以 sk_ 开头（完整密钥，非 Key ID）
+        if not api_key.startswith("sk_"):
+            if show_errors:
+                QMessageBox.warning(
+                    self, "API Key 格式错误",
+                    "您的 API Key 格式无效。\n\n"
+                    "ElevenLabs 现要求 API Key 以 'sk_' 开头（完整密钥）。\n"
+                    "您当前保存的可能是 Key ID（仅用于标识，非密钥本身）。\n\n"
+                    "请前往 ElevenLabs 控制台 → API Keys → 创建新 Key 或轮换现有 Key，"
+                    "复制以 'sk_' 开头的完整密钥后重新保存。"
+                )
+            else:
+                logger.warning("(suppressed) ElevenLabs API Key 格式无效：Key 必须以 'sk_' 开头，当前 Key 可能是 Key ID。")
+            return
+
         self.set_ui_busy(True, "正在加载模型、声音和额度...")
         
         # ⭐ 新增：用于追踪两个 worker 是否都完成
@@ -756,6 +771,19 @@ class ElevenLabsWidget(QWidget):
         
     def save_api_key(self):
         key = self.key_input.text().strip()
+        # ElevenLabs 2025 起要求 API Key 必须以 sk_ 开头
+        if key and not key.startswith("sk_"):
+            ret = QMessageBox.warning(
+                self, "API Key 格式警告",
+                "您输入的 Key 不以 'sk_' 开头，可能不是有效的 ElevenLabs API Key。\n\n"
+                "有效的 API Key 以 'sk_' 开头，可在 ElevenLabs 控制台 → API Keys 中获取。\n"
+                "您当前输入的可能是 Key ID（仅用于标识），而非实际密钥。\n\n"
+                "仍要继续保存吗？",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No
+            )
+            if ret == QMessageBox.No:
+                return
         self.settings.setValue("api_key", key)
         QMessageBox.information(self, "保存成功", "API Key 已保存到本地配置，下次启动将自动加载。")
 
