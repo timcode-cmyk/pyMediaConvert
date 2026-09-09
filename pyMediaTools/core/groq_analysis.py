@@ -1,6 +1,6 @@
 import time
 import requests
-import json
+import json  # extract_keywords 仍然需要解析 JSON 响应
 import re
 from PySide6.QtCore import QThread, Signal
 from ..logging_config import get_logger
@@ -174,26 +174,8 @@ def generate_emotion_for_sentence(text, api_key, model="openai/gpt-oss-120b"):
             if response.status_code == 200:
                 res_json = response.json()
                 content = res_json['choices'][0]['message']['content']
-                # 尝试解析为 JSON
-                try:
-                    parsed = json.loads(content)
-                    if isinstance(parsed, dict) and 'emotion' in parsed:
-                        val = parsed['emotion']
-                        return str(val).strip()
-                    elif isinstance(parsed, str):
-                        return parsed.strip()
-                except Exception:
-                    pass
-
-                # 如果不是标准 JSON，尝试查找到 "emotion": "..." 这种正则匹配
-                m = re.search(r'"emotion"\s*:\s*"([^"]+)"', content)
-                if m:
-                    return m.group(1).strip()
-                
-                # ⭐ 最终回退：直接返回全文。
-                # 之前的代码会尝试通过正则提取 happy/sad 等裸词，
-                # 这会导致在“优化情绪”时，如果文案中包含这些词，整段活文案会被截断只剩一个词。
-                # 现在我们默认返回 AI 返回的所有内容，因为它遵循 system_prompt 的“返回全文”指令。
+                # system_prompt 要求模型直接返回处理后的纯文本全文，
+                # 无需 JSON 解析，直接返回内容即可。
                 return content.strip()
             elif response.status_code == 429:
                 retry_count += 1
