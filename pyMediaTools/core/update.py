@@ -1,6 +1,6 @@
 import requests
 
-def check_latest_release(repo="secure-artifacts/pyMediaTools", current_version="1.0.0"):
+def check_latest_release(repo="timcode-cmyk/pyMediaConvert", current_version="1.0.0"):
     """
     使用 Requests 获取 GitHub 最新 Release 信息
     """
