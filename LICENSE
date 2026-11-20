@@ -678,7 +678,7 @@ Public License instead of this License.  But first, please read
 # 项目协议合规报告
 > 本文件由 AI 助手自动生成，旨在帮助了解项目的协议合规情况。
 > 本文件为合规参考，不构成法律建议。如有疑问请咨询法律专业人士。
-> 生成时间：2026-03-24
+> 更新时间：2026-11-20
 > 审计工具：AI 依赖协议审计 (https://tpscsm-docs.pages.dev/license-audit/)
 
 ## 项目协议
@@ -691,7 +691,7 @@ Public License instead of this License.  But first, please read
 
 ### ✅ 合规 — 可开源分发
 
-项目协议 `GPL-3.0-only` 与所有 12 个直接依赖的协议兼容，满足开源分发要求。
+项目协议 `GPL-3.0-only` 与所有 7 个直接依赖的协议兼容，满足开源分发要求。
 
 分发时须满足以下义务：
 - 在分发时随附完整 GPL-3.0 协议文本（本文件）
@@ -701,15 +701,14 @@ Public License instead of this License.  But first, please read
 
 ## 依赖协议摘要
 
-- 宽松协议 (Apache-2.0): 3 个 — ✅ 需保留版权声明和 NOTICE
-- 宽松协议 (MIT): 3 个 — ✅ 需保留版权声明
-- 宽松协议 (BSD-3-Clause): 2 个 — ✅ 需保留版权声明
+- 宽松协议 (Apache-2.0): 2 个 — ✅ 需保留版权声明和 NOTICE
+- 宽松协议 (MIT): 1 个 — ✅ 需保留版权声明
+- 宽松协议 (BSD-3-Clause): 1 个 — ✅ 需保留版权声明
 - 公共领域 (Unlicense): 1 个 — ✅ 无限制
-- 宽松协议 (HPND): 1 个 — ✅ 需保留版权声明
 - 弱 Copyleft (LGPL-3.0, via PySide6): 1 个 — ⚠️ 动态链接时修改须开源
 - 强 Copyleft (GPL-3.0): 1 个 — ⚠️ 与项目同协议，兼容
 
-**总计：** 12 个直接依赖
+**总计：** 7 个直接依赖
 
 ## 协议兼容性详情
 
@@ -717,35 +716,30 @@ Public License instead of this License.  But first, please read
 
 | 依赖名称 | 依赖协议 | 兼容性 | 分发义务 |
 |---------|---------|--------|---------|
-| Requests | Apache-2.0 | ✅ 兼容 | 保留版权声明 |
-| yt_dlp | Unlicense | ✅ 兼容 | 无 |
+| requests | Apache-2.0 | ✅ 兼容 | 保留版权声明 |
+| yt-dlp | Unlicense | ✅ 兼容 | 无 |
 | PySide6 | LGPL-3.0 OR GPL-2.0 OR GPL-3.0 | ✅ 兼容 | 以 LGPL-3.0 使用时须动态链接 |
 | pysrt | GPL-3.0-only | ✅ 兼容（同协议） | 随项目分发 |
 | toml | MIT | ✅ 兼容 | 保留版权声明 |
 | opencv-python | Apache-2.0 | ✅ 兼容 | 保留版权声明 |
-| Pillow | HPND | ✅ 兼容 | 保留版权声明 |
-| rembg | MIT | ✅ 兼容 | 保留版权声明 |
-| huggingface_hub | Apache-2.0 | ✅ 兼容 | 保留版权声明 |
 | numpy | BSD-3-Clause | ✅ 兼容 | 保留版权声明 |
-| onnxruntime | MIT | ✅ 兼容 | 保留版权声明 |
-| PySceneDetect | BSD-3-Clause | ✅ 兼容 | 保留版权声明 |
 
 ## 第三方协议声明
 
 ### Apache License 2.0
-- **Requests**, **opencv-python**, **huggingface_hub**
+- **requests**, **opencv-python**
 全文见：https://www.apache.org/licenses/LICENSE-2.0
 
-### MIT License / HPND
-- **toml**, **rembg**, **onnxruntime**, **Pillow** (HPND)
+### MIT License
+- **toml**
 MIT 协议要求保留版权声明。
 
 ### BSD 3-Clause
-- **numpy**, **PySceneDetect**
+- **numpy**
 要求保留版权声明。
 
 ### Unlicense
-- **yt_dlp**
+- **yt-dlp**
 
 ### Copyleft (GPL/LGPL)
 - **pysrt** (GPL-3.0), **PySide6** (LGPL-3.0/GPL)

@@ -55,8 +55,13 @@ def get_base_dir() -> Path:
         return Path(meipass)
 
     if getattr(sys, "frozen", False):
-        # 其他打包器：可执行文件所在目录
-        return Path(sys.executable).parent
+        exe_dir = Path(sys.executable).parent
+        # macOS .app bundle（PyInstaller 等将资源放在 Contents/Resources，而 Nuitka 放在 Contents/MacOS）
+        if sys.platform == "darwin" and exe_dir.name == "MacOS":
+            resources = exe_dir.parent / "Resources"
+            if resources.exists() and not (exe_dir / "config.toml").exists():
+                return resources
+        return exe_dir
     else:
         # 开发环境
         return Path(__file__).resolve().parent.parent

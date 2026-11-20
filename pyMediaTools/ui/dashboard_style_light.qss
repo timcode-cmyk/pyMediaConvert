@@ -63,19 +63,6 @@ QMainWindow {
     color: #4A5568;
 }
 
-#HeaderSearch {
-    background-color: #FFFFFF;
-    border: 1px solid #E2E8F0;
-    border-radius: 18px;
-    padding: 8px 15px;
-    font-size: 13px;
-    color: #4A5568;
-}
-
-#HeaderSearch:focus {
-    border: 1px solid #3182CE;
-}
-
 /* Base Card Style for internal widgets */
 QWidget#MainContentArea > QWidget {
     background-color: transparent;

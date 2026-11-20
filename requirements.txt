@@ -1,12 +1,12 @@
-Requests
-yt_dlp
+# 核心框架与网络
 PySide6
+requests
+yt-dlp
+
+# 字幕与配置
 pysrt
 toml
 
-# 图片处理
-
-# 视频处理
+# 视频与图像处理
 opencv-python
-
-# 模型下载
+numpy

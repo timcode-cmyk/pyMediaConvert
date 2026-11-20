@@ -472,6 +472,8 @@ class AudioPlayerBar(QWidget):
     def stop(self):
         self.update_timer.stop()
         self.player.stop()
+        self.player.setSource(QUrl())
+        self.player.setAudioOutput(None)
 
     def _on_playback_state_changed(self, state):
         if state == QMediaPlayer.PlayingState:
