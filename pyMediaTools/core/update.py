@@ -1,4 +1,7 @@
 import requests
+from ..logging_config import get_logger
+
+logger = get_logger(__name__)
 
 def check_latest_release(repo="timcode-cmyk/pyMediaConvert", current_version="1.0.0"):
     """
@@ -38,7 +41,7 @@ def check_latest_release(repo="timcode-cmyk/pyMediaConvert", current_version="1.
                 "assets": data.get("assets", [])
             }
     except Exception as e:
-        print(f"Update check failed: {e}")
+        logger.warning(f"Update check failed: {e}")
     
     return {
         "has_update": False,

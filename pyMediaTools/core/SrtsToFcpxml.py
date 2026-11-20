@@ -112,7 +112,7 @@ def get_style_attributes(style_dict, prefix, subtitle_setting):
         try:
             parts = str(shadow_offset_raw).split()
             x, y = float(parts[0]), float(parts[1])
-        except:
+        except (ValueError, IndexError):
             x, y = 2, 2
     
     dist = math.sqrt(x*x + y*y)

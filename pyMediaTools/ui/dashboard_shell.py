@@ -239,7 +239,10 @@ class DashboardWindow(QMainWindow):
 
         self.header_title = QLabel("Dashboard")
         self.header_title.setObjectName("HeaderTitleText")
-        self.header_title.setFont(QFont("Segoe UI", 16, QFont.Bold))
+        title_font = self.header_title.font()
+        title_font.setPointSize(16)
+        title_font.setBold(True)
+        self.header_title.setFont(title_font)
 
         header_layout.addWidget(self.header_title)
         header_layout.addStretch()
@@ -425,8 +428,15 @@ class DashboardWindow(QMainWindow):
     def apply_stylesheet(self, scheme=None):
         from PySide6.QtCore import Qt
         from .qss_resources import DARK_STYLE, LIGHT_STYLE
-        
+        from .styles import apply_common_style
+
         if scheme == Qt.ColorScheme.Dark:
             self.setStyleSheet(DARK_STYLE)
         else:
             self.setStyleSheet(LIGHT_STYLE)
+
+        for _, widget in getattr(self, "modules", []):
+            if hasattr(widget, "apply_styles") and callable(widget.apply_styles):
+                widget.apply_styles()
+            else:
+                apply_common_style(widget)

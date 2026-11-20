@@ -1,10 +1,11 @@
 import re
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
                                QPushButton, QTextEdit, QScrollArea, QFrame,
-                               QSizePolicy, QMessageBox)
-from PySide6.QtCore import Qt, QMimeData, QSettings, QRectF
+                               QSizePolicy, QMessageBox, QSlider)
+from PySide6.QtCore import Qt, QMimeData, QSettings, QRectF, QTimer, QUrl
 from PySide6.QtGui import (QDrag, QSyntaxHighlighter, QTextCharFormat, QColor, 
                            QPainter, QPainterPath, QPen, QBrush, QFontMetrics, QFont)
+from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 
 from ..logging_config import get_logger
 from ..core.groq_analysis import EmotionAnalysisWorker
@@ -388,3 +389,131 @@ class SubtitlePreviewLabel(QLabel):
         painter.setPen(Qt.NoPen)
         painter.setBrush(QBrush(font_color))
         painter.drawPath(path)
+
+
+class AudioPlayerBar(QWidget):
+    """独立音频播放控制条（含播放/暂停、进度拖动、状态显示）。"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("BottomPanel")
+        self.player = QMediaPlayer(self)
+        self.audio_output = QAudioOutput(self)
+        self.player.setAudioOutput(self.audio_output)
+
+        self.is_seeking = False
+        self.updating_slider = False
+        self._init_ui()
+        self._connect_signals()
+
+    def _init_ui(self):
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(10, 5, 10, 5)
+
+        self.btn_play = QPushButton("▶ 播放")
+        self.btn_play.setEnabled(False)
+        self.btn_play.setFixedWidth(80)
+        self.btn_play.setCursor(Qt.PointingHandCursor)
+
+        self.lbl_current_time = QLabel("00:00")
+        self.slider_seek = QSlider(Qt.Orientation.Horizontal)
+        self.slider_seek.setRange(0, 0)
+        self.slider_seek.setEnabled(False)
+        self.lbl_total_time = QLabel("00:00")
+
+        self.lbl_status = QLabel("就绪")
+        self.lbl_status.setStyleSheet("color: palette(mid); font-style: italic;")
+        self.lbl_status.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.lbl_status.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
+
+        layout.addWidget(self.btn_play)
+        layout.addWidget(self.lbl_current_time)
+        layout.addWidget(self.slider_seek, 3)
+        layout.addWidget(self.lbl_total_time)
+        layout.addWidget(self.lbl_status, 1)
+
+        self.update_timer = QTimer(self)
+        self.update_timer.setInterval(50)
+
+    def _connect_signals(self):
+        self.btn_play.clicked.connect(self.toggle_play)
+        self.slider_seek.sliderPressed.connect(self._on_slider_pressed)
+        self.slider_seek.sliderReleased.connect(self._on_slider_released)
+        self.slider_seek.valueChanged.connect(self._on_slider_value_changed)
+        self.update_timer.timeout.connect(self._update_ui_from_player)
+        self.player.durationChanged.connect(self._on_duration_changed)
+        self.player.mediaStatusChanged.connect(self._on_media_status_changed)
+        self.player.playbackStateChanged.connect(self._on_playback_state_changed)
+
+    def load_local_file(self, file_path: str):
+        self.btn_play.setEnabled(True)
+        self.slider_seek.setEnabled(True)
+        self.player.stop()
+        self.player.setSource(QUrl())
+        self.player.setSource(QUrl.fromLocalFile(file_path))
+
+    def play_url(self, url: str):
+        self.set_status("正在试听...")
+        self.player.setSource(QUrl(url))
+        self.player.play()
+        self.btn_play.setEnabled(True)
+
+    def set_status(self, text: str, tooltip: str | None = None):
+        self.lbl_status.setText(text)
+        if tooltip is not None:
+            self.lbl_status.setToolTip(tooltip)
+
+    def toggle_play(self):
+        if self.player.playbackState() == QMediaPlayer.PlayingState:
+            self.player.pause()
+        else:
+            self.player.play()
+
+    def stop(self):
+        self.update_timer.stop()
+        self.player.stop()
+
+    def _on_playback_state_changed(self, state):
+        if state == QMediaPlayer.PlayingState:
+            self.update_timer.start()
+            self.btn_play.setText("⏸ 暂停")
+        elif state == QMediaPlayer.PausedState:
+            self.update_timer.stop()
+            self.btn_play.setText("▶ 继续")
+        else:
+            self.update_timer.stop()
+            self.btn_play.setText("▶ 播放")
+
+    def _update_ui_from_player(self):
+        if not self.is_seeking and self.player.playbackState() == QMediaPlayer.PlayingState:
+            self.updating_slider = True
+            pos = self.player.position()
+            self.slider_seek.setValue(pos)
+            self.lbl_current_time.setText(self._format_time(pos))
+            self.updating_slider = False
+
+    def _on_media_status_changed(self, status):
+        if status == QMediaPlayer.EndOfMedia:
+            self.slider_seek.setValue(0)
+            self.lbl_current_time.setText("00:00")
+
+    def _on_slider_pressed(self):
+        self.is_seeking = True
+
+    def _on_slider_released(self):
+        self.is_seeking = False
+        self.player.setPosition(self.slider_seek.value())
+
+    def _on_slider_value_changed(self, value):
+        if not self.updating_slider:
+            self.lbl_current_time.setText(self._format_time(value))
+
+    def _on_duration_changed(self, duration):
+        self.slider_seek.setRange(0, duration)
+        self.lbl_total_time.setText(self._format_time(duration))
+
+    @staticmethod
+    def _format_time(ms: int) -> str:
+        seconds = (ms // 1000) % 60
+        minutes = ms // 60000
+        return f"{minutes:02d}:{seconds:02d}"

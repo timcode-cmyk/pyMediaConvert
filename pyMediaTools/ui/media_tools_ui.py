@@ -150,7 +150,10 @@ class LogoConfigWidget(QFrame):
         controls_layout.setContentsMargins(0, 3, 0, 0)
         
         self.lbl_name = QLabel(platform_name)
-        self.lbl_name.setFont(QFont("Segoe UI", 10, QFont.Bold))
+        name_font = self.lbl_name.font()
+        name_font.setPointSize(10)
+        name_font.setBold(True)
+        self.lbl_name.setFont(name_font)
         self.lbl_name.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
         
         self.chk_blur = QCheckBox("背景模糊")

@@ -250,7 +250,7 @@ class YtDlpVersionManager:
                 try:
                     with open(self.metadata_file, 'r', encoding='utf-8') as f:
                         metadata = json.load(f)
-                except:
+                except (json.JSONDecodeError, OSError):
                     pass
             
             metadata[backup_name] = {

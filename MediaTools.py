@@ -41,7 +41,11 @@ __author__ = "timcode-cmyk"
 __description__ = "A professional media toolkit built with Python and PySide6, offering a suite of utilities for video editing, audio processing, and more."
 __license__ = "GPL License"
 
+import os
 import sys
+
+# 抑制 macOS Qt 字体数据库探测无害日志（如 script 12/16 OpenType support missing）
+os.environ.setdefault("QT_LOGGING_RULES", "qt.text.font.db=false")
 
 # --- 2. 编码修复 ---
 if sys.stdout and hasattr(sys.stdout, 'reconfigure'):

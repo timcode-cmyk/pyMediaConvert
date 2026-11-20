@@ -187,7 +187,7 @@ class YtDlpDownloadWorker(QThread):
                     try:
                         h = int(str(quality).lower().replace('p', ''))
                         ydl_opts['format'] = f'bestvideo[height<={h}]+bestaudio/best[height<={h}]'
-                    except:
+                    except ValueError:
                         ydl_opts['format'] = 'bestvideo+bestaudio/best'
                 
                 if str(target_ext).lower() in ['mp4', 'mkv', 'webm', 'mov']:

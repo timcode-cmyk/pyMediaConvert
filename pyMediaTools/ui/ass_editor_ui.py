@@ -13,6 +13,9 @@ from PySide6.QtGui import (
 from PySide6.QtCore import Qt, Signal
 
 from pyMediaTools.ui.styles import apply_common_style
+from pyMediaTools.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 class ColorPicker(QPushButton):
     colorChanged = Signal(str)
@@ -317,7 +320,7 @@ class ASSEditorWidget(QWidget):
             style = self.get_current_style()
             self.preview_widget.update_preview(style)
         except Exception as e:
-            print("Preview generation error:", e)
+            logger.warning(f"Preview generation error: {e}")
 
     def import_subtitle(self):
         filepath, _ = QFileDialog.getOpenFileName(self, "选择字幕文件", "", "Subtitle files (*.srt *.vtt *.ass);;All Files (*)")
