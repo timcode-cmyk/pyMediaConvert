@@ -1,8 +1,8 @@
 import os
 import sys
 from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
-                               QPushButton, QLabel, QStackedWidget, QLineEdit, QSpacerItem, 
-                               QSizePolicy, QDialog, QTextEdit, QFrame)
+                               QPushButton, QLabel, QStackedWidget, QSpacerItem, 
+                               QSizePolicy, QDialog, QTextEdit)
 from PySide6.QtCore import Qt, QSize, QPoint, QThread, Signal, Slot, QUrl
 from PySide6.QtGui import QFont, QIcon, QDesktopServices
 from pyMediaTools.core.update import check_latest_release
@@ -239,60 +239,9 @@ class DashboardWindow(QMainWindow):
         self.header_title = QLabel("Dashboard")
         self.header_title.setObjectName("HeaderTitleText")
         self.header_title.setFont(QFont("Segoe UI", 16, QFont.Bold))
-        
-        # --- Search Bar with Icon Styling ---
-        self.search_container = QFrame()
-        self.search_container.setObjectName("SearchContainer")
-        self.search_container.setAttribute(Qt.WA_StyledBackground, True)
-        self.search_container.setFixedWidth(320)
-        search_layout = QHBoxLayout(self.search_container)
-        search_layout.setContentsMargins(10, 0, 10, 0)
-        search_layout.setSpacing(5)
-        
-        search_icon = QLabel("Q")
-        search_icon.setStyleSheet("color: #718096; font-size: 14px;")
-        
-        self.search_bar = QLineEdit()
-        self.search_bar.setObjectName("HeaderSearch")
-        self.search_bar.setPlaceholderText("关键词查找工具...")
-        self.search_bar.setFrame(False)
-        self.search_bar.setStyleSheet("background: transparent; border: none; padding: 5px;")
-        
-        search_layout.addWidget(search_icon)
-        search_layout.addWidget(self.search_bar)
-
-        # --- Header Action Icons ---
-        actions_layout = QHBoxLayout()
-        actions_layout.setSpacing(15)
-        
-        btn_feedback = QPushButton("💬")
-        btn_feedback.setToolTip("反馈建议")
-        btn_notif = QPushButton("🔔")
-        btn_notif.setToolTip("通知中心")
-        btn_user = QPushButton("👤")
-        btn_user.setToolTip("用户中心")
-        
-        for b in [btn_feedback, btn_notif, btn_user]:
-            b.setFixedSize(32, 32)
-            b.setCursor(Qt.PointingHandCursor)
-            b.setStyleSheet("""
-                QPushButton {
-                    background-color: transparent;
-                    border-radius: 16px;
-                    font-size: 16px;
-                    color: #4A5568;
-                }
-                QPushButton:hover {
-                    background-color: rgba(0, 0, 0, 0.05);
-                }
-            """)
-            actions_layout.addWidget(b)
 
         header_layout.addWidget(self.header_title)
         header_layout.addStretch()
-        header_layout.addWidget(self.search_container)
-        header_layout.addSpacing(10)
-        header_layout.addLayout(actions_layout)
         
         # --- Windows 风格控制按钮 (放在 Header 右侧) ---
         if sys.platform != "darwin":
