@@ -91,6 +91,25 @@ class TestUtils(unittest.TestCase):
                 self.assertFalse(user_cfg_file.exists())
                 utils.load_project_config(force_reload=True)
 
+    def test_videodownloader_helpers(self):
+        from pyMediaTools.core.videodownloader import (
+            build_locale_ydl_opts,
+            is_youtube_radio_mix_url,
+            strip_ansi,
+        )
+
+        mix_url = "https://www.youtube.com/watch?v=U-ZSLPlaGhA&list=RDU-ZSLPlaGhA&start_radio=1"
+        normal_pl = "https://www.youtube.com/playlist?list=PL123456789"
+        self.assertTrue(is_youtube_radio_mix_url(mix_url))
+        self.assertFalse(is_youtube_radio_mix_url(normal_pl))
+
+        locale_opts = build_locale_ydl_opts("zh-CN")
+        self.assertEqual(locale_opts["extractor_args"]["youtube"]["lang"], ["zh-CN"])
+        self.assertIn("zh-CN", locale_opts["http_headers"]["Accept-Language"])
+        self.assertEqual(build_locale_ydl_opts(""), {})
+
+        self.assertEqual(strip_ansi("\x1b[0;31mERROR:\x1b[0m failed"), "ERROR: failed")
+
 
 if __name__ == "__main__":
     unittest.main()

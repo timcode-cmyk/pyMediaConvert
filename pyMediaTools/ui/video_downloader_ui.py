@@ -6,7 +6,12 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineE
 from PySide6.QtCore import Qt, QPoint, Signal, QSettings
 from PySide6.QtGui import QAction, QFont
 
-from ..core.videodownloader import YtDlpInfoWorker, YtDlpDownloadWorker
+from ..core.videodownloader import (
+    METADATA_LANGUAGE_OPTIONS,
+    YtDlpDownloadWorker,
+    YtDlpInfoWorker,
+    is_youtube_radio_mix_url,
+)
 from ..core.ytdlp_updater import YtDlpVersionManager
 from ..core.ytdlp_update_worker import YtDlpCheckUpdateWorker, YtDlpUpdateWorker
 from .styles import apply_common_style
@@ -61,12 +66,49 @@ class VideoDownloadWidget(QWidget):
         url_layout.addWidget(self.btn_analyze)
         parse_list_layout.addLayout(url_layout)
 
-        # Table Tools
+        # Table Tools (全选、单视频/合辑过滤、列表数量上限、标题语言)
         tool_layout = QHBoxLayout()
         self.chk_select_all = QCheckBox("全选/取消全选")
         self.chk_select_all.setChecked(True)
         self.chk_select_all.toggled.connect(self.toggle_select_all)
         tool_layout.addWidget(self.chk_select_all)
+
+        tool_layout.addSpacing(12)
+        self.chk_noplaylist = QCheckBox("仅单视频 (忽略列表/合辑)")
+        saved_noplaylist = self.settings.value("noplaylist", False)
+        if isinstance(saved_noplaylist, str):
+            saved_noplaylist = saved_noplaylist.lower() == "true"
+        self.chk_noplaylist.setChecked(bool(saved_noplaylist))
+        self.chk_noplaylist.setToolTip("勾选后，对于带 &list= 的视频链接仅解析当前单个视频，忽略后续播放列表或电台合辑")
+        tool_layout.addWidget(self.chk_noplaylist)
+
+        tool_layout.addSpacing(12)
+        tool_layout.addWidget(QLabel("列表上限:"))
+        self.spin_playlist_limit = QSpinBox()
+        self.spin_playlist_limit.setRange(0, 500)
+        self.spin_playlist_limit.setSpecialValueText("不限")
+        self.spin_playlist_limit.setValue(int(self.settings.value("playlist_limit", 30)))
+        self.spin_playlist_limit.setFixedWidth(75)
+        self.spin_playlist_limit.setToolTip(
+            "限制播放列表/YouTube Mix 合辑单次最多解析的视频数量（默认 30 条，避免拉取上千条推荐视频导致卡顿；0 为不限）"
+        )
+        self.chk_noplaylist.toggled.connect(lambda checked: self.spin_playlist_limit.setEnabled(not checked))
+        self.spin_playlist_limit.setEnabled(not self.chk_noplaylist.isChecked())
+        tool_layout.addWidget(self.spin_playlist_limit)
+
+        tool_layout.addSpacing(12)
+        tool_layout.addWidget(QLabel("标题语言:"))
+        self.combo_meta_lang = QComboBox()
+        self.combo_meta_lang.setMinimumWidth(135)
+        for label, code in METADATA_LANGUAGE_OPTIONS:
+            self.combo_meta_lang.addItem(label, code)
+        saved_meta_lang = self.settings.value("meta_lang", "zh-CN")
+        lang_idx = self.combo_meta_lang.findData(saved_meta_lang)
+        if lang_idx >= 0:
+            self.combo_meta_lang.setCurrentIndex(lang_idx)
+        self.combo_meta_lang.setToolTip("指定解析 YouTube 等视频标题与元数据时使用的语言（解决中文视频标题被解析为英文的问题）")
+        tool_layout.addWidget(self.combo_meta_lang)
+
         tool_layout.addStretch()
         parse_list_layout.addLayout(tool_layout)
 
@@ -234,15 +276,37 @@ class VideoDownloadWidget(QWidget):
 
     def analyze_url(self):
         url = self.url_input.text().strip()
-        if not url: return
-        
+        if not url:
+            return
+
+        noplaylist = self.chk_noplaylist.isChecked()
+        playlist_limit = self.spin_playlist_limit.value()
+        meta_lang = self.combo_meta_lang.currentData()
+
+        self.settings.setValue("noplaylist", noplaylist)
+        self.settings.setValue("playlist_limit", playlist_limit)
+        self.settings.setValue("meta_lang", meta_lang)
+
+        effective_limit = playlist_limit
+        if not noplaylist and is_youtube_radio_mix_url(url) and effective_limit == 0:
+            # YouTube 电台合辑 (RD...) 是无限生成列表（通常 1500+ 条），未设上限时自动保护为前 50 条
+            effective_limit = 50
+
         self.btn_analyze.setEnabled(False)
-        self.status_label.setText("正在解析链接信息...")
+        if not noplaylist and is_youtube_radio_mix_url(url):
+            self.status_label.setText(f"检测到 YouTube 电台合辑，正在按上限 ({effective_limit} 条) 快速解析...")
+        else:
+            self.status_label.setText("正在解析链接信息...")
         self.table.setRowCount(0)
         self.video_list_data = []
         self.chk_select_all.setChecked(True)
-        
-        self.info_worker = YtDlpInfoWorker(url)
+
+        parse_options = {
+            "meta_lang": meta_lang,
+            "noplaylist": noplaylist,
+            "playlist_limit": effective_limit,
+        }
+        self.info_worker = YtDlpInfoWorker(url, options=parse_options)
         self.info_worker.finished.connect(self.on_info_loaded)
         self.info_worker.error.connect(self.on_info_error)
         self.info_worker.start()
@@ -394,6 +458,7 @@ class VideoDownloadWidget(QWidget):
             'subtitles': self.chk_subs.isChecked(),
             'sub_lang': self.combo_sub_lang.currentText(),
             'concurrency': self.spin_concurrency.value(),
+            'meta_lang': self.combo_meta_lang.currentData(),
         }
         
         self.is_downloading = True
@@ -578,6 +643,17 @@ class VideoDownloadWidget(QWidget):
         # 重新启用按钮
         self.btn_analyze.setEnabled(True)
         self.btn_download.setEnabled(True)
+
+    def cleanup(self):
+        """窗口关闭时安全停止后台解析、下载与更新检测线程。"""
+        if self.download_worker and self.download_worker.isRunning():
+            self.download_worker.stop()
+        for worker in (self.info_worker, self.download_worker, self.check_update_worker, self.update_worker):
+            if worker is not None and worker.isRunning():
+                worker.quit()
+                if not worker.wait(400):
+                    worker.terminate()
+                    worker.wait(200)
 
 
 class YtDlpUpdateDialog(QDialog):

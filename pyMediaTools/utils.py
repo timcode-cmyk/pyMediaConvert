@@ -297,6 +297,9 @@ def get_subprocess_creation_flags() -> int:
     return 0
 
 
+_BINARY_USABILITY_CACHE: dict[str, bool] = {}
+
+
 def _ensure_executable(path: Path):
     try:
         if sys.platform != 'win32' and path.exists():
@@ -309,18 +312,68 @@ def _ensure_executable(path: Path):
         pass
 
 
+def is_binary_executable(path: str | Path | None) -> bool:
+    """检测二进制文件是否真实存在且可在当前操作系统与 CPU 架构下正常启动运行。"""
+    if not path:
+        return False
+    p = Path(path)
+    key = str(p)
+    if key in _BINARY_USABILITY_CACHE:
+        return _BINARY_USABILITY_CACHE[key]
+
+    if not p.exists() or not p.is_file():
+        return False
+
+    _ensure_executable(p)
+    try:
+        res = subprocess.run(
+            [key, "-version"],
+            capture_output=True,
+            timeout=3,
+            creationflags=get_subprocess_creation_flags(),
+        )
+        ok = res.returncode == 0
+    except Exception:
+        ok = False
+
+    _BINARY_USABILITY_CACHE[key] = ok
+    return ok
+
+
+def _resolve_media_binary(tool_base_name: str) -> str:
+    """优先使用内置 bin/ 目录下的可执行文件；若不存在或架构不兼容（如 Apple Silicon 下无 Rosetta 运行 x86_64），自动回退至系统 PATH / Homebrew。"""
+    import shutil
+
+    exe_name = f"{tool_base_name}.exe" if sys.platform == "win32" else tool_base_name
+    bundled = BIN_DIR / exe_name
+    _ensure_executable(bundled)
+    if is_binary_executable(bundled):
+        return str(bundled)
+
+    # 回退查找系统环境或常见包管理器路径
+    candidates = []
+    which_path = shutil.which(exe_name)
+    if which_path:
+        candidates.append(Path(which_path))
+    if sys.platform == "darwin":
+        candidates.extend([
+            Path("/opt/homebrew/bin") / exe_name,
+            Path("/usr/local/bin") / exe_name,
+        ])
+
+    for cand in candidates:
+        if is_binary_executable(cand):
+            return str(cand)
+
+    return str(bundled)
+
+
 def get_ffmpeg_exe() -> str:
-    exe_name = "ffmpeg.exe" if sys.platform == "win32" else "ffmpeg"
-    path = BIN_DIR / exe_name
-    _ensure_executable(path)
-    return str(path)
+    return _resolve_media_binary("ffmpeg")
 
 
 def get_ffprobe_exe() -> str:
-    exe_name = "ffprobe.exe" if sys.platform == "win32" else "ffprobe"
-    path = BIN_DIR / exe_name
-    _ensure_executable(path)
-    return str(path)
+    return _resolve_media_binary("ffprobe")
 
 
 def get_default_download_dir() -> Path:
