@@ -26,7 +26,7 @@ import requests
 from difflib import SequenceMatcher
 from pathlib import Path
 from ..logging_config import get_logger
-from ..utils import get_ffmpeg_exe, get_ffprobe_exe
+from ..utils import get_ffmpeg_exe, get_ffprobe_exe, get_subprocess_creation_flags
 
 logger = get_logger(__name__)
 
@@ -134,7 +134,15 @@ def extract_audio_with_ffmpeg(
 
     logger.info(f"ffmpeg 命令: {' '.join(cmd)}")
 
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+    result = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=300,
+        creationflags=get_subprocess_creation_flags(),
+    )
     if result.returncode != 0:
         raise RuntimeError(f"ffmpeg 音频提取失败:\n{result.stderr[-2000:]}")
 
@@ -161,7 +169,15 @@ def get_audio_duration(media_path: str) -> float:
         media_path,
     ]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=30,
+            creationflags=get_subprocess_creation_flags(),
+        )
         return float(result.stdout.strip())
     except Exception:
         return 0.0
@@ -202,7 +218,12 @@ def split_wav_into_chunks(
             "-c", "copy",
             chunk_path,
         ]
-        subprocess.run(cmd, capture_output=True, timeout=120)
+        subprocess.run(
+            cmd,
+            capture_output=True,
+            timeout=120,
+            creationflags=get_subprocess_creation_flags(),
+        )
         chunks.append((chunk_path, t, end_t))
         t = end_t
         chunk_idx += 1

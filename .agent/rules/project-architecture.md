@@ -52,12 +52,15 @@ pyMediaTools/
 ### 2.3 异步线程与子进程规范
 - **防阻塞**：主 UI 线程禁止任何网络请求（`requests`）、`time.sleep` 或同步子进程阻塞。
 - **统一线程模型**：推荐使用 `QObject` Worker + `QThread.moveToThread` 模式；窗口销毁或退出时必须安全停止并等待后台线程结束。
-- **Windows 子进程无窗口**：所有调用外部 CLI（`ffmpeg`、`ffprobe`、`yt-dlp`）的 `subprocess.run` 在 `sys.platform == "win32"` 时必须传入 `creationflags=subprocess.CREATE_NO_WINDOW`。
+- **Windows 子进程无窗口**：所有调用外部 CLI（`ffmpeg`、`ffprobe`、`yt-dlp`）的 `subprocess.run` 必须传入 `creationflags=get_subprocess_creation_flags()`（Windows 下自动启用 `CREATE_NO_WINDOW`），并指定 `encoding="utf-8", errors="replace"`。
 
 ### 2.4 配置、日志与异常处理
-- **配置持久化**：
-  - 用户偏好与 API Keys 统一通过 `QSettings("pyMediaTools", "<ModuleGroup>")` 存储，全局设置保存后应通过信号通知已加载模块热更新。
-  - `config.toml` 写入操作不得依赖 Python 3.11+ 只读标准库 `tomllib.dump`（需回退到 `toml` 或 `tomli_w`）。
+- **三层配置体系（严禁写入 `config.toml`）**：
+  - `config.toml` 仅作为**只读的初始化出厂默认配置**，任何运行期逻辑严禁修改或写回 `config.toml`。
+  - **优先级（低 -> 高）**：
+    1. **Layer 1（只读默认）**：`config.toml`（通过标准库 `tomllib` 解析）。
+    2. **Layer 2（用户持久化配置）**：系统标准用户配置目录下的 `user_config.json`（由 `utils.get_user_config_path()` 管理，仅保存相对默认值的 diff 差集），以及界面偏好/API Key 的 `QSettings("pyMediaTools", "<ModuleGroup>")`。全局设置保存后应发射信号触发已加载模块热更新（`reload_settings()`）。
+    3. **Layer 3（环境变量覆写）**：支持通过 `PYMEDIA_*` 及标准密钥环境变量（如 `PYMEDIA_ELEVENLABS_API_KEY` / `ELEVENLABS_API_KEY`、`PYMEDIA_GROQ_API_KEY` / `GROQ_API_KEY`、`PYMEDIA_GLADIA_API_KEY` / `GLADIA_API_KEY`、`PYMEDIA_DOWNLOAD_DIR`）以最高优先级动态覆写。
 - **日志与异常**：禁止使用 `print()` 输出运行日志，统一使用 `get_logger(__name__)`；禁止使用裸 `except:`，必须捕获明确异常并记录上下文。
 
 ### 2.5 测试规范

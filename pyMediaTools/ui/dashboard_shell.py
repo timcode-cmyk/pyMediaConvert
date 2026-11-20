@@ -11,14 +11,15 @@ class UpdateCheckWorker(QThread):
     """异步检测 GitHub Release 更新"""
     finished = Signal(dict)
 
-    def __init__(self, current_version):
-        super().__init__()
+    def __init__(self, current_version, parent=None):
+        super().__init__(parent)
         self.current_version = current_version
 
     def run(self):
         # 调用核心逻辑
         info = check_latest_release(current_version=self.current_version)
-        self.finished.emit(info)
+        if not self.isInterruptionRequested():
+            self.finished.emit(info)
 
 class UpdateDialog(QDialog):
     """更新检测子窗口"""
@@ -357,7 +358,10 @@ class DashboardWindow(QMainWindow):
 
     def check_for_updates(self):
         """启动后台更新检测"""
-        self.update_worker = UpdateCheckWorker(self.version)
+        existing = getattr(self, "update_worker", None)
+        if existing is not None and existing.isRunning():
+            return
+        self.update_worker = UpdateCheckWorker(self.version, self)
         self.update_worker.finished.connect(self.on_update_checked)
         self.update_worker.start()
 
@@ -381,7 +385,33 @@ class DashboardWindow(QMainWindow):
         """弹出全局设置面板"""
         from pyMediaTools.ui.settings_dialog import GlobalSettingsDialog
         dialog = GlobalSettingsDialog(self)
+        dialog.settings_saved.connect(self.on_settings_saved)
         dialog.exec()
+
+    def on_settings_saved(self):
+        """全局设置变更后热通知各业务模块刷新配置"""
+        for _, widget in self.modules:
+            if hasattr(widget, "reload_settings") and callable(widget.reload_settings):
+                widget.reload_settings()
+
+    def closeEvent(self, event):
+        """安全释放后台更新检测线程及模块资源"""
+        worker = getattr(self, "update_worker", None)
+        if worker is not None and worker.isRunning():
+            worker.requestInterruption()
+            try:
+                worker.finished.disconnect(self.on_update_checked)
+            except (RuntimeError, TypeError):
+                pass
+            if not worker.wait(500):
+                worker.terminate()
+                worker.wait(200)
+
+        for _, widget in self.modules:
+            if hasattr(widget, "cleanup") and callable(widget.cleanup):
+                widget.cleanup()
+
+        super().closeEvent(event)
 
     def init_stylesheet_listener(self):
         from PySide6.QtGui import QGuiApplication

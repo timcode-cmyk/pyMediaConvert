@@ -1316,3 +1316,15 @@ class ElevenLabsWidget(QWidget):
         style_type = 'source'  # 默认使用原文样式
         if style_type in self.xml_styles:
             self.preview_label.update_style(self.xml_styles[style_type])
+
+    def reload_settings(self):
+        """响应全局设置变更，热刷新 ElevenLabs 与 Groq API Key"""
+        saved_el_key = self.settings.value("api_key", "")
+        el_key = os.getenv("PYMEDIA_ELEVENLABS_API_KEY") or os.getenv("ELEVENLABS_API_KEY") or saved_el_key
+        if hasattr(self, "key_input") and el_key:
+            self.key_input.setText(el_key)
+
+        groq_qsettings = QSettings("pyMediaTools", "Groq")
+        groq_key = os.getenv("PYMEDIA_GROQ_API_KEY") or os.getenv("GROQ_API_KEY") or groq_qsettings.value("api_key", "")
+        if hasattr(self, "groq_settings"):
+            self.groq_settings["api_key"] = groq_key

@@ -581,8 +581,9 @@ class WhisperWidget(QWidget):
             QMessageBox.warning(self, "请选择文件", "请先拖拽或浏览选择一个媒体文件。")
             return
 
-        # 从全局 QSettings 读取 API Key
-        api_key = self._gladia_settings.value("api_key", "").strip()
+        # 从环境变量或全局 QSettings 读取 API Key（环境变量优先级更高）
+        from ..utils import get_env_override
+        api_key = get_env_override(("PYMEDIA_GLADIA_API_KEY", "GLADIA_API_KEY")) or self._gladia_settings.value("api_key", "").strip()
         if not api_key:
             QMessageBox.warning(
                 self, "缺少 API Key",
@@ -675,7 +676,8 @@ class WhisperWidget(QWidget):
         """调用 TranslationManager 翻译 segments（使用 Groq API Key）。"""
         self.log_panel.append_log("🌍 正在调用翻译 API...")
         self.progress_bar.setVisible(True)
-        api_key = self._groq_settings.value("api_key", "").strip()
+        from ..utils import get_env_override
+        api_key = get_env_override(("PYMEDIA_GROQ_API_KEY", "GROQ_API_KEY")) or self._groq_settings.value("api_key", "").strip()
         target_lang = self.trans_lang_combo.currentData()
 
         self._translate_worker = TranslationWorker(
