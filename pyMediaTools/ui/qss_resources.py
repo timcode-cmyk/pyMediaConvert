@@ -67,23 +67,6 @@ QMainWindow {
     color: #858585;
 }
 
-#SearchContainer {
-    background-color: #3C3C3C;
-    border: 1px solid #3C3C3C;
-    border-radius: 18px;
-}
-
-#SearchContainer:focus-within {
-    border: 1px solid #007ACC;
-}
-
-#HeaderSearch {
-    background-color: transparent;
-    border: none;
-    font-size: 13px;
-    color: #CCCCCC;
-}
-
 /* Base Card Style for internal widgets */
 QWidget#MainContentArea > QWidget {
     background-color: transparent;
@@ -225,23 +208,6 @@ QMainWindow {
 }
 
 #HeaderIcons {
-    color: #4A5568;
-}
-
-#SearchContainer {
-    background-color: #FFFFFF;
-    border: 1px solid #E2E8F0;
-    border-radius: 18px;
-}
-
-#SearchContainer:focus-within {
-    border: 1px solid #3182CE;
-}
-
-#HeaderSearch {
-    background-color: transparent;
-    border: none;
-    font-size: 13px;
     color: #4A5568;
 }
 

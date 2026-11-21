@@ -250,7 +250,7 @@ class YtDlpVersionManager:
                 try:
                     with open(self.metadata_file, 'r', encoding='utf-8') as f:
                         metadata = json.load(f)
-                except:
+                except (json.JSONDecodeError, OSError):
                     pass
             
             metadata[backup_name] = {
@@ -604,10 +604,14 @@ class YtDlpUpdater(YtDlpVersionManager):
             logger.info(f"正在通过pip安装版本 {remote_version}...")
             
             # 使用pip安装
+            creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0
             result = subprocess.run(
                 [sys.executable, "-m", "pip", "install", f"yt-dlp=={remote_version}", "-U"],
                 capture_output=True,
-                text=True
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                creationflags=creationflags,
             )
             
             if result.returncode != 0:

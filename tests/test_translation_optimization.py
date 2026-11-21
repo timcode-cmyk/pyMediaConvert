@@ -21,7 +21,7 @@ class TestTranslationOptimization(unittest.TestCase):
         mock_response.json.return_value = {
             "choices": [{
                 "message": {
-                    "content": "翻译1\n---\n翻译2\n---\n翻译3"
+                    "content": "1. 翻译1\n###SEG_SEP###\n2. 翻译2\n###SEG_SEP###\n3. 翻译3"
                 }
             }]
         }

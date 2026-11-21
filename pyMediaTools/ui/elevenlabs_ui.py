@@ -3,12 +3,9 @@ import datetime
 import uuid
 import re
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, 
-                               QPushButton, QTextEdit, QComboBox, QMessageBox, QProgressBar, QFileDialog, QSlider,
-                               QGroupBox, QSizePolicy, QSpinBox, QCheckBox, QTabWidget, QScrollArea, QFrame,
-                               QFontComboBox, QColorDialog, QDoubleSpinBox, QGridLayout, QDialog, QDialogButtonBox, QInputDialog)
-from PySide6.QtCore import Qt, QUrl, QSettings, QTimer, QSize, QRectF, QMimeData, QPoint
-from PySide6.QtGui import QFont, QColor, QPainter, QPainterPath, QPen, QBrush, QFontMetrics, QDrag, QTextCharFormat, QSyntaxHighlighter
-from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
+                               QPushButton, QTextEdit, QComboBox, QMessageBox, QProgressBar, QFileDialog,
+                               QGroupBox, QSizePolicy, QSpinBox, QCheckBox, QTabWidget, QDialog)
+from PySide6.QtCore import Qt, QUrl, QSettings
 
 from ..core.elevenlabs import (QuotaWorker, TTSWorker, SFXWorker, VoiceListWorker, 
                                ModelListWorker, LibrarySearchWorker, LibraryAddWorker)
@@ -20,23 +17,18 @@ from ..logging_config import get_logger
 # Import extracted components
 from .elevenlabs_widgets import (EmotionTagButton, EmotionHighlightTextEdit, 
                                 EmotionSyntaxHighlighter, EmotionTagManager, 
-                                SubtitlePreviewLabel)
+                                SubtitlePreviewLabel, AudioPlayerBar)
 from .elevenlabs_dialogs import (VoiceSettingsDialog, SubtitleSettingsDialog, 
                                 VoiceLibraryDialog)
+from .elevenlabs_style_panel import build_default_xml_styles
 
 logger = get_logger(__name__)
-
-
-
 
 
 class ElevenLabsWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.current_audio_path = None
-        self.player = QMediaPlayer()
-        self.audio_output = QAudioOutput()
-        self.player.setAudioOutput(self.audio_output)
         
         # ⭐ 新增：存储从API获取的模型信息
         self.models_info = {}  # { model_id: {model_data} }
@@ -46,65 +38,7 @@ class ElevenLabsWidget(QWidget):
         }
         
         # XML 样式设置字典
-        self.xml_styles = {
-            'source': {
-                'alignment': 'center',
-                'fontColor': (1.0, 1.0, 1.0, 1.0),
-                'font': 'Arial',
-                'fontSize': 50,
-                'bold': False,
-                'italic': False,
-                'strokeColor': (0.0, 0.0, 0.0, 1.0),
-                'strokeWidth': 2.0,
-                'useStroke': False,
-                'lineSpacing': 0,
-                'pos': -45,
-                'shadowColor': (0.0, 0.0, 0.0, 0.5),
-                'shadowOffset': (2, 2),
-                'useShadow': True,
-                'backgroundColor': (0.0, 0.0, 0.0, 0.0),
-                'useBackground': False,
-                'backgroundPadding': 0,
-            },
-            'translate': {
-                'alignment': 'center',
-                'fontColor': (1.0, 1.0, 1.0, 1.0),
-                'font': 'Arial',
-                'fontSize': 40,
-                'bold': False,
-                'italic': False,
-                'strokeColor': (0.0, 0.0, 0.0, 1.0),
-                'strokeWidth': 2.0,
-                'useStroke': True,
-                'lineSpacing': 0,
-                'pos': -38,
-                'shadowColor': (0.0, 0.0, 0.0, 0.5),
-                'shadowOffset': (2, 2),
-                'useShadow': True,
-                'backgroundColor': (0.0, 0.0, 0.0, 0.0),
-                'useBackground': True,
-                'backgroundPadding': 0,
-            },
-            'highlight': {
-                'alignment': 'center',
-                'fontColor': (1.0, 1.0, 0.0, 1.0),
-                'font': 'Arial',
-                'fontSize': 50,
-                'bold': True,
-                'italic': False,
-                'strokeColor': (0.0, 0.0, 0.0, 1.0),
-                'strokeWidth': 2.0,
-                'useStroke': False,
-                'lineSpacing': 0,
-                'pos': -45,
-                'shadowColor': (0.0, 0.0, 0.0, 0.5),
-                'shadowOffset': (2, 2),
-                'useShadow': True,
-                'backgroundColor': (0.0, 0.0, 0.0, 0.0),
-                'useBackground': False,
-                'backgroundPadding': 0,
-            }
-        }
+        self.xml_styles = build_default_xml_styles()
         
         # 视频设置 (默认竖屏)
         self.video_settings = {
@@ -411,53 +345,14 @@ class ElevenLabsWidget(QWidget):
         main_layout.addWidget(tabs_widget)
 
         # 3. 底部播放控制条
-        bottom_panel = QWidget()
-        bottom_panel.setObjectName("BottomPanel")
-        bottom_layout = QHBoxLayout(bottom_panel)
-        bottom_layout.setContentsMargins(10, 5, 10, 5)
-        
-        self.btn_play = QPushButton("▶ 播放")
-        self.btn_play.setEnabled(False)
-        self.btn_play.setFixedWidth(80)
-        self.btn_play.clicked.connect(self.play_audio)
-        
-        # 4. 播放按钮可以在右侧增加一个播放条显示时长和实时进度并且可以交互
-        self.lbl_current_time = QLabel("00:00")
-        self.slider_seek = QSlider(Qt.Orientation.Horizontal)
-        self.slider_seek.setRange(0, 0)
-        self.slider_seek.setEnabled(False)
-        
-        # 交互优化：按下暂停更新，释放跳转，拖动/点击更新UI
-        self.slider_seek.sliderPressed.connect(self.on_slider_pressed)
-        self.slider_seek.sliderReleased.connect(self.on_slider_released)
-        self.slider_seek.valueChanged.connect(self.on_slider_value_changed)
-        
-        self.lbl_total_time = QLabel("00:00")
-        
-        self.lbl_status = QLabel("就绪")
-        self.lbl_status.setStyleSheet("color: palette(mid); font-style: italic;")
-        self.lbl_status.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        self.lbl_status.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
-        
-        bottom_layout.addWidget(self.btn_play)
-        bottom_layout.addWidget(self.lbl_current_time)
-        bottom_layout.addWidget(self.slider_seek, 3)
-        bottom_layout.addWidget(self.lbl_total_time)
-        bottom_layout.addWidget(self.lbl_status, 1)
-        main_layout.addWidget(bottom_panel)
-        
-        # 定时器用于平滑更新进度 (50ms = 20fps)
-        self.update_timer = QTimer(self)
-        self.update_timer.setInterval(50)
-        self.update_timer.timeout.connect(self.update_ui_from_player)
-        
-        self.is_seeking = False
-        self.updating_slider = False
-
-        # 连接播放器信号
-        self.player.durationChanged.connect(self.on_duration_changed)
-        self.player.mediaStatusChanged.connect(self.on_media_status_changed)
-        self.player.playbackStateChanged.connect(self.on_playback_state_changed)
+        self.player_bar = AudioPlayerBar(self)
+        self.player = self.player_bar.player
+        self.btn_play = self.player_bar.btn_play
+        self.slider_seek = self.player_bar.slider_seek
+        self.lbl_current_time = self.player_bar.lbl_current_time
+        self.lbl_total_time = self.player_bar.lbl_total_time
+        self.lbl_status = self.player_bar.lbl_status
+        main_layout.addWidget(self.player_bar)
 
     def _generate_filename(self, prefix):
         return f"{prefix}_{datetime.date.today()}_{str(uuid.uuid4())[:4]}.mp3"
@@ -806,10 +701,7 @@ class ElevenLabsWidget(QWidget):
             QMessageBox.information(self, "无样本", "该声音模型未提供预览样本。")
             return
             
-        self.lbl_status.setText("正在试听...")
-        self.player.setSource(QUrl(preview_url))
-        self.player.play()
-        self.btn_play.setEnabled(True)
+        self.player_bar.play_url(preview_url)
 
     def on_quota_loaded(self, usage, limit):
         if limit == 0:
@@ -948,16 +840,8 @@ class ElevenLabsWidget(QWidget):
     def on_generation_success(self, file_path):
         self.set_ui_busy(False, "生成成功")
         self.current_audio_path = file_path
-        self.btn_play.setEnabled(True)
-        self.slider_seek.setEnabled(True)
-        
-        # 3. 解决同名文件缓存问题：先置空再加载
-        self.player.stop()
-        self.player.setSource(QUrl())
-        self.player.setSource(QUrl.fromLocalFile(file_path))
-        
-        self.lbl_status.setText("已保存")
-        self.lbl_status.setToolTip(f"文件保存在: {file_path}")
+        self.player_bar.load_local_file(file_path)
+        self.player_bar.set_status("已保存", f"文件保存在: {file_path}")
         
         # 自动刷新文件名以防覆盖
         if "tts" in os.path.basename(file_path):
@@ -993,307 +877,19 @@ class ElevenLabsWidget(QWidget):
             self.setCursor(Qt.ArrowCursor)
 
     def play_audio(self):
-        if self.player.playbackState() == QMediaPlayer.PlayingState:
-            self.player.pause()
-        else:
-            self.player.play()
+        self.player_bar.toggle_play()
 
-    def on_playback_state_changed(self, state):
-        if state == QMediaPlayer.PlayingState:
-            self.update_timer.start()
-            self.btn_play.setText("⏸ 暂停")
-        elif state == QMediaPlayer.PausedState:
-            self.update_timer.stop()
-            self.btn_play.setText("▶ 继续")
-        else:
-            self.update_timer.stop()
-            self.btn_play.setText("▶ 播放")
-
-    def update_ui_from_player(self):
-        if not self.is_seeking and self.player.playbackState() == QMediaPlayer.PlayingState:
-            self.updating_slider = True
-            pos = self.player.position()
-            self.slider_seek.setValue(pos)
-            self.lbl_current_time.setText(self._format_time(pos))
-            self.updating_slider = False
-
-    def on_media_status_changed(self, status):
-        if status == QMediaPlayer.EndOfMedia:
-            self.slider_seek.setValue(0)
-            self.lbl_current_time.setText("00:00")
-
-    def on_slider_pressed(self):
-        self.is_seeking = True
-
-    def on_slider_released(self):
-        self.is_seeking = False
-        self.player.setPosition(self.slider_seek.value())
-
-    def on_slider_value_changed(self, value):
-        if not self.updating_slider:
-            self.lbl_current_time.setText(self._format_time(value))
-
-    def on_duration_changed(self, duration):
-        self.slider_seek.setRange(0, duration)
-        self.lbl_total_time.setText(self._format_time(duration))
-
-    def _format_time(self, ms):
-        seconds = (ms // 1000) % 60
-        minutes = (ms // 60000)
-        return f"{minutes:02d}:{seconds:02d}"
-
-    # ========== XML 样式设置相关方法 ==========
-    
-    def create_style_settings_panel(self, style_type):
-        """创建样式设置面板 (原文/翻译)"""
-        widget = QWidget()
-        main_layout = QVBoxLayout(widget)
-        main_layout.setSpacing(10)
-        main_layout.setContentsMargins(5, 5, 5, 5)
-        
-        # --- 1. 基础字体设置 ---
-        font_group = QGroupBox("基础字体")
-        font_layout = QGridLayout(font_group)
-        font_layout.setSpacing(8)
-        
-        # 字体选择
-        font_combo = QFontComboBox()
-        font_combo.setCurrentFont(QFont(self.xml_styles[style_type]['font']))
-        font_combo.setToolTip("选择字体")
-        font_combo.currentFontChanged.connect(
-            lambda font: self.update_style(style_type, 'font', font.family())
-        )
-        font_layout.addWidget(QLabel("字体:"), 0, 0)
-        font_layout.addWidget(font_combo, 0, 1, 1, 3)
-        
-        # 大小 & 颜色
-        size_spin = QSpinBox()
-        size_spin.setRange(10, 200)
-        size_spin.setValue(self.xml_styles[style_type]['fontSize'])
-        size_spin.setSuffix(" px")
-        size_spin.setToolTip("字体大小")
-        size_spin.valueChanged.connect(
-            lambda val: self.update_style(style_type, 'fontSize', val)
-        )
-        font_layout.addWidget(QLabel("大小:"), 1, 0)
-        font_layout.addWidget(size_spin, 1, 1)
-        
-        font_color_btn = QPushButton()
-        font_color_btn.setToolTip("字体颜色")
-        self.set_button_color(font_color_btn, self.xml_styles[style_type]['fontColor'])
-        font_color_btn.clicked.connect(
-            lambda: self.pick_color(style_type, 'fontColor', font_color_btn)
-        )
-        font_layout.addWidget(QLabel("颜色:"), 1, 2)
-        font_layout.addWidget(font_color_btn, 1, 3)
-        
-        # 样式 (粗体/斜体)
-        style_layout = QHBoxLayout()
-        bold_chk = QCheckBox("加粗")
-        bold_chk.setToolTip("加粗")
-        bold_chk.setChecked(self.xml_styles[style_type]['bold'])
-        bold_chk.toggled.connect(
-            lambda checked: self.update_style(style_type, 'bold', checked)
-        )
-        italic_chk = QCheckBox("斜体")
-        italic_chk.setToolTip("斜体")
-        italic_chk.setChecked(self.xml_styles[style_type]['italic'])
-        italic_chk.toggled.connect(
-            lambda checked: self.update_style(style_type, 'italic', checked)
-        )
-        style_layout.addWidget(bold_chk)
-        style_layout.addWidget(italic_chk)
-        style_layout.addStretch()
-        font_layout.addWidget(QLabel("样式:"), 2, 0)
-        font_layout.addLayout(style_layout, 2, 1, 1, 3)
-        
-        # 对齐 & Y轴位置
-        align_combo = QComboBox()
-        align_combo.addItems(['left', 'center', 'right'])
-        align_combo.setCurrentText(self.xml_styles[style_type]['alignment'])
-        align_combo.currentTextChanged.connect(
-            lambda val: self.update_style(style_type, 'alignment', val)
-        )
-        font_layout.addWidget(QLabel("对齐:"), 3, 0)
-        font_layout.addWidget(align_combo, 3, 1)
-        
-        pos_spin = QSpinBox()
-        pos_spin.setRange(-1000, 1000)
-        pos_spin.setValue(self.xml_styles[style_type]['pos'])
-        pos_spin.setToolTip("Y轴位置 (向上为负，向下为正)")
-        pos_spin.valueChanged.connect(
-            lambda val: self.update_style(style_type, 'pos', val)
-        )
-        font_layout.addWidget(QLabel("Y轴位置:"), 3, 2)
-        font_layout.addWidget(pos_spin, 3, 3)
-        
-        main_layout.addWidget(font_group)
-        
-        # --- 2. 效果设置 (描边 + 阴影) ---
-        effect_group = QGroupBox("效果设置 (描边 & 阴影)")
-        effect_layout = QVBoxLayout(effect_group)
-        effect_layout.setSpacing(10)
-        
-        # 描边行
-        stroke_layout = QHBoxLayout()
-        stroke_chk = QCheckBox("描边")
-        stroke_chk.setChecked(self.xml_styles[style_type].get('useStroke', False))
-        stroke_chk.toggled.connect(
-            lambda checked: self.update_style(style_type, 'useStroke', checked)
-        )
-        stroke_layout.addWidget(stroke_chk)
-        
-        stroke_width_spin = QDoubleSpinBox()
-        stroke_width_spin.setRange(0, 20)
-        stroke_width_spin.setValue(self.xml_styles[style_type]['strokeWidth'])
-        stroke_width_spin.setSingleStep(0.5)
-        stroke_width_spin.setSuffix(" px")
-        stroke_width_spin.valueChanged.connect(
-            lambda val: self.update_style(style_type, 'strokeWidth', val)
-        )
-        stroke_chk.toggled.connect(stroke_width_spin.setEnabled)
-        stroke_width_spin.setEnabled(stroke_chk.isChecked())
-        stroke_layout.addWidget(stroke_width_spin)
-        
-        stroke_color_btn = QPushButton()
-        stroke_color_btn.setToolTip("描边颜色")
-        stroke_color_btn.setFixedWidth(40)
-        self.set_button_color(stroke_color_btn, self.xml_styles[style_type]['strokeColor'])
-        stroke_color_btn.clicked.connect(
-            lambda: self.pick_color(style_type, 'strokeColor', stroke_color_btn)
-        )
-        stroke_chk.toggled.connect(stroke_color_btn.setEnabled)
-        stroke_color_btn.setEnabled(stroke_chk.isChecked())
-        stroke_layout.addWidget(stroke_color_btn)
-        stroke_layout.addStretch()
-        
-        # 阴影行
-        shadow_layout = QHBoxLayout()
-        shadow_chk = QCheckBox("阴影")
-        shadow_chk.setChecked(self.xml_styles[style_type].get('useShadow', False))
-        shadow_chk.toggled.connect(
-            lambda checked: self.update_style(style_type, 'useShadow', checked)
-        )
-        shadow_layout.addWidget(shadow_chk)
-        
-        shadow_x = QSpinBox()
-        shadow_x.setRange(-50, 50)
-        shadow_x.setValue(self.xml_styles[style_type]['shadowOffset'][0])
-        shadow_x.setPrefix("X:")
-        shadow_x.setFixedWidth(60)
-        shadow_x.valueChanged.connect(
-            lambda val: self.update_shadow_offset(style_type, val, None)
-        )
-        shadow_chk.toggled.connect(shadow_x.setEnabled)
-        shadow_x.setEnabled(shadow_chk.isChecked())
-        shadow_layout.addWidget(shadow_x)
-        
-        shadow_y = QSpinBox()
-        shadow_y.setRange(-50, 50)
-        shadow_y.setValue(self.xml_styles[style_type]['shadowOffset'][1])
-        shadow_y.setPrefix("Y:")
-        shadow_y.setFixedWidth(60)
-        shadow_y.valueChanged.connect(
-            lambda val: self.update_shadow_offset(style_type, None, val)
-        )
-        shadow_chk.toggled.connect(shadow_y.setEnabled)
-        shadow_y.setEnabled(shadow_chk.isChecked())
-        shadow_layout.addWidget(shadow_y)
-        
-        shadow_color_btn = QPushButton()
-        shadow_color_btn.setToolTip("阴影颜色")
-        shadow_color_btn.setFixedWidth(40)
-        self.set_button_color(shadow_color_btn, self.xml_styles[style_type]['shadowColor'])
-        shadow_color_btn.clicked.connect(
-            lambda: self.pick_color(style_type, 'shadowColor', shadow_color_btn)
-        )
-        shadow_chk.toggled.connect(shadow_color_btn.setEnabled)
-        shadow_color_btn.setEnabled(shadow_chk.isChecked())
-        shadow_layout.addWidget(shadow_color_btn)
-        shadow_layout.addStretch()
-        
-        effect_layout.addLayout(stroke_layout)
-        effect_layout.addLayout(shadow_layout)
-        main_layout.addWidget(effect_group)
-        
-        main_layout.addStretch()
-        return widget
-        
-        main_layout.addStretch()
-        
-        return widget
-    
-    def set_button_color(self, button, color_tuple):
-        """设置按钮的背景颜色以反映 RGBA 颜色"""
-        if isinstance(color_tuple, (list, tuple)) and len(color_tuple) >= 4:
-            r, g, b, a = int(color_tuple[0]*255), int(color_tuple[1]*255), int(color_tuple[2]*255), int(color_tuple[3]*255)
-        else:
-            r, g, b, a = 255, 255, 255, 255
-        
-        qcolor = QColor(r, g, b, a)
-        button.setStyleSheet(f"background-color: {qcolor.name()}; border-radius: 4px;")
-        button.setFixedHeight(32)
-    
-    def pick_color(self, style_type, key, button):
-        """打开颜色选择对话框"""
-        current_color = self.xml_styles[style_type][key]
-        if isinstance(current_color, (list, tuple)):
-            r, g, b, a = int(current_color[0]*255), int(current_color[1]*255), int(current_color[2]*255), int(current_color[3]*255)
-            initial_color = QColor(r, g, b, a)
-        else:
-            initial_color = QColor(255, 255, 255, 255)
-        
-        color = QColorDialog.getColor(initial_color, self, f"选择{key}颜色")
-        if color.isValid():
-            r, g, b, a = color.getRgb()
-            color_tuple = (r/255.0, g/255.0, b/255.0, a/255.0)
-            self.update_style(style_type, key, color_tuple)
-            self.set_button_color(button, color_tuple)
-    
-    def update_style(self, style_type, key, value):
-        """更新样式设置并刷新预览"""
-        self.xml_styles[style_type][key] = value
-        self.update_preview()
-    
-    def update_shadow_offset(self, style_type, x=None, y=None):
-        """更新阴影偏移"""
-        current = list(self.xml_styles[style_type]['shadowOffset'])
-        if x is not None:
-            current[0] = x
-        if y is not None:
-            current[1] = y
-        self.xml_styles[style_type]['shadowOffset'] = tuple(current)
-        self.update_preview()
-    
-    def on_video_settings_changed(self):
-        """更新视频设置"""
-        try:
-            self.video_settings['fps'] = int(self.combo_fps.currentText())
-        except:
-            self.video_settings['fps'] = 30
-
-    def on_resolution_preset_changed(self, index):
-        preset = self.combo_res.currentText()
-        is_vertical = self.chk_vertical.isChecked()
-        
-        w, h = 1920, 1080 # Default
-        
-        if "1080p" in preset:
-            w, h = 1920, 1080
-        elif "2K" in preset:
-            w, h = 2560, 1440
-        elif "4K" in preset:
-            w, h = 3840, 2160
-
-        if is_vertical:
-            w, h = h, w
-            
-        self.video_settings['width'] = w
-        self.video_settings['height'] = h
-
-    def on_vertical_toggled(self, checked):
-        # 重新触发一次分辨率选择逻辑以应用翻转
-        self.on_resolution_preset_changed(self.combo_res.currentIndex())
+    def cleanup(self):
+        """窗口关闭时停止音频播放与定时器，并安全回收后台 QThread。"""
+        if hasattr(self, "player_bar"):
+            self.player_bar.stop()
+        for attr in ("quota_worker", "voice_worker", "model_worker", "tts_worker", "sfx_worker"):
+            w = getattr(self, attr, None)
+            if w is not None and hasattr(w, "isRunning") and w.isRunning():
+                w.quit()
+                if not w.wait(300):
+                    w.terminate()
+                    w.wait(200)
 
     def update_preview(self):  
         """更新预览窗口 - 支持对话框和主窗口"""
@@ -1316,3 +912,15 @@ class ElevenLabsWidget(QWidget):
         style_type = 'source'  # 默认使用原文样式
         if style_type in self.xml_styles:
             self.preview_label.update_style(self.xml_styles[style_type])
+
+    def reload_settings(self):
+        """响应全局设置变更，热刷新 ElevenLabs 与 Groq API Key"""
+        saved_el_key = self.settings.value("api_key", "")
+        el_key = os.getenv("PYMEDIA_ELEVENLABS_API_KEY") or os.getenv("ELEVENLABS_API_KEY") or saved_el_key
+        if hasattr(self, "key_input") and el_key:
+            self.key_input.setText(el_key)
+
+        groq_qsettings = QSettings("pyMediaTools", "Groq")
+        groq_key = os.getenv("PYMEDIA_GROQ_API_KEY") or os.getenv("GROQ_API_KEY") or groq_qsettings.value("api_key", "")
+        if hasattr(self, "groq_settings"):
+            self.groq_settings["api_key"] = groq_key

@@ -150,7 +150,10 @@ class LogoConfigWidget(QFrame):
         controls_layout.setContentsMargins(0, 3, 0, 0)
         
         self.lbl_name = QLabel(platform_name)
-        self.lbl_name.setFont(QFont("Segoe UI", 10, QFont.Bold))
+        name_font = self.lbl_name.font()
+        name_font.setPointSize(10)
+        name_font.setBold(True)
+        self.lbl_name.setFont(name_font)
         self.lbl_name.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
         
         self.chk_blur = QCheckBox("背景模糊")
@@ -839,3 +842,14 @@ class MediaConverterWidget(QWidget):
                     QMessageBox.critical(self, "错误", f"转换失败: {first_line}\n详情请查看日志。")
             else:
                 QMessageBox.critical(self, "错误", "转换失败，请查看日志获取详情。")
+
+    def reload_settings(self):
+        """响应全局设置变更，热刷新创作者用户名与水印选项状态"""
+        user_settings = QSettings("pyMediaTools", "GlobalSettings")
+        user_name = user_settings.value("username", "")
+        if hasattr(self, "username_display"):
+            self.username_display.setText(f"当前用户: {user_name}" if user_name else "请先在全局设置中配置用户名")
+        if hasattr(self, "chk_username"):
+            self.chk_username.setEnabled(bool(user_name))
+            if not user_name:
+                self.chk_username.setChecked(False)

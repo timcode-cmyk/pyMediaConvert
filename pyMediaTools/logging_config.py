@@ -6,7 +6,7 @@ from logging.handlers import RotatingFileHandler
 from .utils import get_base_dir
 
 
-def setup_logging(log_level=logging.INFO, filename="pyMediaConvert.log"):
+def setup_logging(log_level=logging.INFO, filename="pyMediaTools.log"):
     base = get_base_dir()
     log_path = base / filename
 

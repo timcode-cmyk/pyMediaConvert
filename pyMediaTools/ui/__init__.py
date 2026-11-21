@@ -6,7 +6,6 @@ from .elevenlabs_ui import ElevenLabsWidget
 from .media_tools_ui import MediaConverterWidget
 from .video_downloader_ui import VideoDownloadWidget
 from .videocut_ui import VideoCutWidget
-# from .rembg_ui import RembgWidget
 from .ass_editor_ui import ASSEditorWidget
 from .dashboard_shell import DashboardWindow
 from .whisper_ui import WhisperWidget
@@ -16,7 +15,6 @@ __all__ = [
     "MediaConverterWidget",
     "VideoDownloadWidget",
     "VideoCutWidget",
-    # "RembgWidget",
     "ASSEditorWidget",
     "DashboardWindow",
     "WhisperWidget",

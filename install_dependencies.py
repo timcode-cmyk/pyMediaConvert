@@ -85,11 +85,11 @@ def setup_binaries():
     bin_dir = os.path.join(root_dir, 'bin')
     os.makedirs(bin_dir, exist_ok=True)
     
-    # URLs
+    # URLs (macOS arm64 使用原生 Apple Silicon 构建，避免在未安装 Rosetta 2 的机器上报 bad CPU type)
     urls = {
         'ffmpeg': {
             'darwin': {
-                'arm64': 'https://evermeet.cx/ffmpeg/ffmpeg-8.1.zip',
+                'arm64': 'https://ffmpeg.martin-riedl.de/redirect/latest/macos/arm64/release/ffmpeg.zip',
                 'x86_64': 'https://evermeet.cx/ffmpeg/ffmpeg-8.1.zip',
             },
             'windows': {
@@ -98,7 +98,7 @@ def setup_binaries():
         },
         'ffprobe': {
             'darwin': {
-                'arm64': 'https://evermeet.cx/ffmpeg/ffprobe-8.1.zip',
+                'arm64': 'https://ffmpeg.martin-riedl.de/redirect/latest/macos/arm64/release/ffprobe.zip',
                 'x86_64': 'https://evermeet.cx/ffmpeg/ffprobe-8.1.zip',
             }
         },
@@ -111,11 +111,20 @@ def setup_binaries():
     try:
         # 1. Download and Setup ffmpeg/ffprobe
         if os_name == 'darwin':
+            import subprocess
             for tool in ['ffmpeg', 'ffprobe']:
                 target_path = os.path.join(bin_dir, tool)
                 if os.path.exists(target_path):
-                    print(f"{tool} already exists, skipping download.")
-                    continue
+                    make_executable(target_path)
+                    try:
+                        res = subprocess.run([target_path, "-version"], capture_output=True, timeout=3)
+                        if res.returncode == 0:
+                            print(f"{tool} already exists and is runnable, skipping download.")
+                            continue
+                    except Exception:
+                        pass
+                    print(f"{tool} exists but is not runnable on {arch} (incompatible CPU architecture), replacing...")
+                    os.remove(target_path)
                 
                 # Default to arm64 and fallback to x86_64 if not found (though they are same URL here)
                 url = urls[tool]['darwin'].get(arch, urls[tool]['darwin'].get('x86_64'))

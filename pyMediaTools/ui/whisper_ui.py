@@ -20,19 +20,20 @@ from PySide6.QtWidgets import (
     QGridLayout, QStackedWidget,
 )
 from PySide6.QtCore import Qt, QThread, QSettings, QMimeData, QUrl, QSize, QObject, Signal
-from PySide6.QtGui import QFont, QDragEnterEvent, QDropEvent, QColor, QPalette
+from PySide6.QtGui import QFont, QFontDatabase, QDragEnterEvent, QDropEvent, QColor, QPalette
 
 from ..core.gladia_transcription import (
     LANGUAGE_OPTIONS,
     TRANSLATE_TARGET_LANGUAGES,
-    DEFAULT_WORDS_PER_SEGMENT,
-    WhisperWorker,
+)
+from ..core.subtitle_writer import (
     export_srt,
     export_vtt,
     export_ass,
     export_fcpxml,
     segments_to_srt_text,
 )
+from ..core.whisper_worker import WhisperWorker
 from ..core.translation_worker import TranslationWorker
 from .styles import apply_common_style
 from ..logging_config import get_logger
@@ -60,6 +61,7 @@ class DropZoneWidget(QFrame):
         self.setAcceptDrops(True)
         self.setObjectName("DropZone")
         self.file_path = ""
+        self._hovering = False
         self._setup_ui()
         self._apply_style(hovering=False)
 
@@ -79,12 +81,12 @@ class DropZoneWidget(QFrame):
 
         self.sub_label = QLabel("支持: .mp4 .mov .mkv .mp3 .m4a .wav .flac 等")
         self.sub_label.setAlignment(Qt.AlignCenter)
-        self.sub_label.setStyleSheet("font-size: 11px; color: #888; background: transparent;")
+        self.sub_label.setStyleSheet("font-size: 11px; color: palette(mid); background: transparent;")
 
         self.file_label = QLabel("")
         self.file_label.setAlignment(Qt.AlignCenter)
         self.file_label.setWordWrap(True)
-        self.file_label.setStyleSheet("font-size: 11px; color: #4CAF50; font-weight: bold; background: transparent;")
+        self.file_label.setStyleSheet("font-size: 11px; color: palette(highlight); font-weight: bold; background: transparent;")
 
         self.btn_browse = QPushButton("📂 浏览文件")
         self.btn_browse.setCursor(Qt.PointingHandCursor)
@@ -103,15 +105,32 @@ class DropZoneWidget(QFrame):
         self.setMaximumHeight(220)
 
     def _apply_style(self, hovering: bool):
-        border_color = "#4CAF50" if self.file_path else ("#6DD3C3" if hovering else "#555")
-        bg = "rgba(109, 211, 195, 0.08)" if hovering else "transparent"
+        self._hovering = hovering
+        palette = self.palette()
+        is_dark = palette.color(QPalette.Window).lightness() < 128
+        accent = palette.color(QPalette.Highlight)
+        default_border = "rgba(255, 255, 255, 0.22)" if is_dark else "rgba(0, 0, 0, 0.22)"
+
+        if self.file_path:
+            border_color = "#22c55e"
+            bg = "rgba(34, 197, 94, 0.08)"
+        elif hovering:
+            border_color = accent.name()
+            bg = f"rgba({accent.red()}, {accent.green()}, {accent.blue()}, 0.10)"
+        else:
+            border_color = default_border
+            bg = "rgba(255, 255, 255, 0.02)" if is_dark else "rgba(0, 0, 0, 0.02)"
+
         self.setStyleSheet(f"""
             QFrame#DropZone {{
                 border: 2px dashed {border_color};
-                border-radius: 12px;
+                border-radius: 10px;
                 background-color: {bg};
             }}
         """)
+
+    def apply_theme(self):
+        self._apply_style(hovering=self._hovering)
 
     def dragEnterEvent(self, event: QDragEnterEvent):
         if event.mimeData().hasUrls():
@@ -171,17 +190,10 @@ class LogPanel(QTextEdit):
         self.setReadOnly(True)
         self.setObjectName("LogPanel")
         self.setMaximumHeight(160)
-        self.setFont(QFont("Courier New", 10))
+        fixed_font = QFontDatabase.systemFont(QFontDatabase.FixedFont)
+        fixed_font.setPointSize(11)
+        self.setFont(fixed_font)
         self.setPlaceholderText("识别进度日志将显示在此处...")
-        self.setStyleSheet("""
-            QTextEdit#LogPanel {
-                background: rgba(0, 0, 0, 0.25);
-                border-radius: 8px;
-                border: 1px solid #444;
-                color: #ccc;
-                padding: 8px;
-            }
-        """)
 
     def append_log(self, message: str):
         from datetime import datetime
@@ -202,21 +214,6 @@ class ConfigCard(QGroupBox):
         self._layout = QVBoxLayout(self)
         self._layout.setSpacing(8)
         self._layout.setContentsMargins(12, 14, 12, 12)
-        self.setStyleSheet("""
-            QGroupBox#ConfigCard {
-                font-weight: bold;
-                font-size: 12px;
-                border: 1px solid #444;
-                border-radius: 10px;
-                margin-top: 8px;
-                padding-top: 6px;
-            }
-            QGroupBox#ConfigCard::title {
-                subcontrol-origin: margin;
-                left: 12px;
-                padding: 0 4px;
-            }
-        """)
 
     def inner_layout(self):
         return self._layout
@@ -228,10 +225,10 @@ class ConfigCard(QGroupBox):
 
 class WhisperWidget(QWidget):
     """
-    Groq Whisper 语音识别主界面。
+    Gladia Whisper 语音识别主界面。
 
     布局：
-      左侧 (340px) — 配置面板
+      左侧 (310px) — 配置面板
       右侧 (弹性) — 进度 + 结果
     """
 
@@ -241,6 +238,8 @@ class WhisperWidget(QWidget):
 
         self._worker: WhisperWorker | None = None
         self._worker_thread: QThread | None = None
+        self._translate_worker = None
+        self._translate_thread: QThread | None = None
         self._current_segments = []
         self._translated_segments = []
 
@@ -252,7 +251,64 @@ class WhisperWidget(QWidget):
 
         self._setup_ui()
         self._load_settings()
+        self.apply_styles()
+
+    def apply_styles(self):
+        """基于当前 QPalette 动态应用并刷新深/浅色主题样式。"""
         apply_common_style(self)
+
+        palette = self.palette()
+        is_dark = palette.color(QPalette.Window).lightness() < 128
+        accent = palette.color(QPalette.Highlight).name()
+        border = "rgba(255, 255, 255, 0.14)" if is_dark else "rgba(0, 0, 0, 0.12)"
+        panel_bg = "rgba(255, 255, 255, 0.03)" if is_dark else "rgba(0, 0, 0, 0.02)"
+
+        if hasattr(self, "left_panel"):
+            self.left_panel.setStyleSheet(f"QWidget#LeftPanel {{ border-right: 1px solid {border}; }}")
+        if hasattr(self, "title_label_main"):
+            self.title_label_main.setStyleSheet(f"color: {accent};")
+        if hasattr(self, "api_notice"):
+            self.api_notice.setText(
+                f'🔑 Gladia API Key 请在 <a href="settings" style="color:{accent}; text-decoration:none;">⚙️ 全局设置</a> 中配置'
+            )
+        if hasattr(self, "drop_zone"):
+            self.drop_zone.apply_theme()
+
+        for editor in (
+            getattr(self, "log_panel", None),
+            getattr(self, "srt_preview", None),
+            getattr(self, "json_preview", None),
+            getattr(self, "trans_preview", None),
+        ):
+            if editor is not None:
+                editor.setStyleSheet(
+                    f"background-color: {panel_bg}; border: 1px solid {border}; border-radius: 8px; padding: 8px;"
+                )
+
+        if hasattr(self, "run_btn"):
+            self.run_btn.setStyleSheet(f"""
+                QPushButton#RunButton {{
+                    background-color: {accent};
+                    color: white;
+                    border: none;
+                    border-radius: 8px;
+                    font-size: 14px;
+                    font-weight: bold;
+                }}
+                QPushButton#RunButton:hover {{
+                    background-color: palette(link-visited);
+                }}
+                QPushButton#RunButton:disabled {{
+                    background-color: {border};
+                    color: palette(mid);
+                }}
+                QPushButton#RunButton[running="true"] {{
+                    background-color: #ef4444;
+                }}
+                QPushButton#RunButton[running="true"]:hover {{
+                    background-color: #dc2626;
+                }}
+            """)
 
     # -----------------------------------------------------------------------
     # UI 构建
@@ -283,11 +339,7 @@ class WhisperWidget(QWidget):
         panel = QWidget()
         panel.setObjectName("LeftPanel")
         panel.setFixedWidth(310)
-        panel.setStyleSheet("""
-            QWidget#LeftPanel {
-                border-right: 1px solid #333;
-            }
-        """)
+        self.left_panel = panel
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -300,25 +352,27 @@ class WhisperWidget(QWidget):
         layout.setSpacing(10)
 
         # ------- 标题 -------
-        title = QLabel("🎤  语音识别")
-        title.setFont(QFont("Segoe UI", 16, QFont.Bold))
-        title.setStyleSheet("color: #6DD3C3;")
+        self.title_label_main = QLabel("🎤  语音识别")
+        title_font = self.title_label_main.font()
+        title_font.setPointSize(16)
+        title_font.setBold(True)
+        self.title_label_main.setFont(title_font)
+
         subtitle = QLabel("Gladia 词级精度识别 · 文案对齐纠错 · 字幕导出")
         subtitle.setWordWrap(True)
-        subtitle.setStyleSheet("color: #888; font-size: 11px;")
-        layout.addWidget(title)
+        subtitle.setStyleSheet("color: palette(mid); font-size: 11px;")
+        layout.addWidget(self.title_label_main)
         layout.addWidget(subtitle)
 
         # ------- 文件区 -------
         self.drop_zone = DropZoneWidget()
         layout.addWidget(self.drop_zone)
 
-        # ------- API Key 提示（从全局设置读取，不在此配置）-------
-        api_notice = QLabel(
-            '🔑 Gladia API Key 请在 <a href="#" style="color:#6DD3C3;">⚙️ 全局设置</a> 中配置'
-        )
-        api_notice.setStyleSheet("font-size: 10px; color: #aaa; padding: 4px 0;")
-        layout.addWidget(api_notice)
+        # ------- API Key 提示（支持点击打开全局设置）-------
+        self.api_notice = QLabel()
+        self.api_notice.setStyleSheet("font-size: 11px; color: palette(mid); padding: 4px 0;")
+        self.api_notice.linkActivated.connect(self._open_global_settings)
+        layout.addWidget(self.api_notice)
 
         # ------- 识别语言 -------
         lang_card = ConfigCard("🌐 识别语言")
@@ -338,10 +392,10 @@ class WhisperWidget(QWidget):
 
         script_hint = QLabel(
             "输入参考文案可大幅提升识别准确率，并纠正漏词/错词。\n"
-            "留空则直接使用 Whisper 原始识别结果。"
+            "留空则直接使用 Gladia 原始识别结果。"
         )
         script_hint.setWordWrap(True)
-        script_hint.setStyleSheet("font-size: 10px; color: #888;")
+        script_hint.setStyleSheet("font-size: 11px; color: palette(mid);")
         script_layout.addWidget(script_hint)
 
         self.script_edit = QTextEdit()
@@ -397,32 +451,9 @@ class WhisperWidget(QWidget):
         # ------- 开始按钮 -------
         self.run_btn = QPushButton("▶  开始识别")
         self.run_btn.setObjectName("RunButton")
-        self.run_btn.setMinimumHeight(48)
+        self.run_btn.setMinimumHeight(46)
         self.run_btn.setCursor(Qt.PointingHandCursor)
-        self.run_btn.setFont(QFont("Segoe UI", 13, QFont.Bold))
         self.run_btn.clicked.connect(self._toggle_run)
-        self.run_btn.setStyleSheet("""
-            QPushButton#RunButton {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 #4CAF50, stop:1 #2196F3);
-                color: white;
-                border: none;
-                border-radius: 10px;
-                font-size: 14px;
-            }
-            QPushButton#RunButton:hover {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 #56c75a, stop:1 #42a5f5);
-            }
-            QPushButton#RunButton:disabled {
-                background: #555;
-                color: #888;
-            }
-            QPushButton#RunButton[running="true"] {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 #e53e3e, stop:1 #c62828);
-            }
-        """)
         layout.addWidget(self.run_btn)
 
         scroll.setWidget(content)
@@ -442,7 +473,10 @@ class WhisperWidget(QWidget):
         # ------- 标题行 -------
         header_row = QHBoxLayout()
         result_title = QLabel("识别结果")
-        result_title.setFont(QFont("Segoe UI", 15, QFont.Bold))
+        result_font = result_title.font()
+        result_font.setPointSize(15)
+        result_font.setBold(True)
+        result_title.setFont(result_font)
         header_row.addWidget(result_title)
         header_row.addStretch()
 
@@ -453,22 +487,11 @@ class WhisperWidget(QWidget):
         self.copy_btn.setEnabled(False)
 
         self.save_btn = QPushButton("💾 导出文件")
+        self.save_btn.setObjectName("PrimaryButton")
         self.save_btn.setCursor(Qt.PointingHandCursor)
         self.save_btn.setFixedHeight(32)
         self.save_btn.clicked.connect(self._export_all)
         self.save_btn.setEnabled(False)
-        self.save_btn.setStyleSheet("""
-            QPushButton {
-                background: rgba(109, 211, 195, 0.15);
-                border: 1px solid #6DD3C3;
-                border-radius: 6px;
-                color: #6DD3C3;
-                padding: 0 12px;
-                font-weight: bold;
-            }
-            QPushButton:hover { background: rgba(109, 211, 195, 0.25); }
-            QPushButton:disabled { opacity: 0.3; border-color: #555; color: #555; }
-        """)
 
         header_row.addWidget(self.copy_btn)
         header_row.addWidget(self.save_btn)
@@ -478,19 +501,7 @@ class WhisperWidget(QWidget):
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 0)  # indeterminate
         self.progress_bar.setVisible(False)
-        self.progress_bar.setFixedHeight(6)
-        self.progress_bar.setStyleSheet("""
-            QProgressBar {
-                border: none;
-                border-radius: 3px;
-                background: #333;
-            }
-            QProgressBar::chunk {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 #4CAF50, stop:1 #2196F3);
-                border-radius: 3px;
-            }
-        """)
+        self.progress_bar.setFixedHeight(8)
         layout.addWidget(self.progress_bar)
 
         # ------- 日志 -------
@@ -501,6 +512,11 @@ class WhisperWidget(QWidget):
         self.result_tabs = QTabWidget()
         self.result_tabs.setObjectName("ResultTabs")
 
+        fixed_font_11 = QFontDatabase.systemFont(QFontDatabase.FixedFont)
+        fixed_font_11.setPointSize(11)
+        fixed_font_10 = QFontDatabase.systemFont(QFontDatabase.FixedFont)
+        fixed_font_10.setPointSize(10)
+
         # Tab 1: SRT 预览
         self.srt_preview = QTextEdit()
         self.srt_preview.setObjectName("SrtPreview")
@@ -508,58 +524,47 @@ class WhisperWidget(QWidget):
             "识别完成后，SRT 格式预览将显示在此处。\n"
             "您可以直接在此编辑字幕内容。"
         )
-        self.srt_preview.setFont(QFont("Courier New", 11))
-        self.srt_preview.setStyleSheet("""
-            QTextEdit#SrtPreview {
-                background: rgba(0,0,0,0.15);
-                border: 1px solid #444;
-                border-radius: 8px;
-                padding: 10px;
-                color: #eee;
-            }
-        """)
+        self.srt_preview.setFont(fixed_font_11)
         self.result_tabs.addTab(self.srt_preview, "SRT 预览")
 
         # Tab 2: JSON 词级数据
         self.json_preview = QTextEdit()
         self.json_preview.setReadOnly(True)
-        self.json_preview.setFont(QFont("Courier New", 10))
+        self.json_preview.setFont(fixed_font_10)
         self.json_preview.setPlaceholderText("识别完成后，词级 JSON 数据将显示在此处...")
-        self.json_preview.setStyleSheet("""
-            QTextEdit {
-                background: rgba(0,0,0,0.2);
-                border: 1px solid #444;
-                border-radius: 8px;
-                padding: 10px;
-                color: #aaa;
-            }
-        """)
         self.result_tabs.addTab(self.json_preview, "词级数据 (JSON)")
 
         # Tab 3: 翻译预览
         self.trans_preview = QTextEdit()
         self.trans_preview.setReadOnly(True)
-        self.trans_preview.setFont(QFont("Courier New", 11))
+        self.trans_preview.setFont(fixed_font_11)
         self.trans_preview.setPlaceholderText("若启用自动翻译，翻译结果会显示在此处。")
-        self.trans_preview.setStyleSheet("""
-            QTextEdit {
-                background: rgba(0,0,0,0.15);
-                border: 1px solid #444;
-                border-radius: 8px;
-                padding: 10px;
-                color: #eee;
-            }
-        """)
         self.result_tabs.addTab(self.trans_preview, "翻译预览")
 
         layout.addWidget(self.result_tabs, 1)
 
         # ------- 统计信息 -------
         self.stats_label = QLabel("")
-        self.stats_label.setStyleSheet("color: #888; font-size: 11px;")
+        self.stats_label.setStyleSheet("color: palette(mid); font-size: 11px;")
         layout.addWidget(self.stats_label)
 
         return panel
+
+    def _open_global_settings(self):
+        from .settings_dialog import GlobalSettingsDialog
+        dialog = GlobalSettingsDialog(self)
+        dialog.exec()
+
+    def cleanup(self):
+        """窗口关闭时安全中止正在运行的语音识别或翻译线程。"""
+        if self._worker:
+            self._worker.cancel()
+        for t in (self._worker_thread, self._translate_thread):
+            if t is not None and t.isRunning():
+                t.quit()
+                if not t.wait(500):
+                    t.terminate()
+                    t.wait(200)
 
     # -----------------------------------------------------------------------
     # 事件处理
@@ -581,8 +586,9 @@ class WhisperWidget(QWidget):
             QMessageBox.warning(self, "请选择文件", "请先拖拽或浏览选择一个媒体文件。")
             return
 
-        # 从全局 QSettings 读取 API Key
-        api_key = self._gladia_settings.value("api_key", "").strip()
+        # 从环境变量或全局 QSettings 读取 API Key（环境变量优先级更高）
+        from ..utils import get_env_override
+        api_key = get_env_override(("PYMEDIA_GLADIA_API_KEY", "GLADIA_API_KEY")) or self._gladia_settings.value("api_key", "").strip()
         if not api_key:
             QMessageBox.warning(
                 self, "缺少 API Key",
@@ -675,7 +681,8 @@ class WhisperWidget(QWidget):
         """调用 TranslationManager 翻译 segments（使用 Groq API Key）。"""
         self.log_panel.append_log("🌍 正在调用翻译 API...")
         self.progress_bar.setVisible(True)
-        api_key = self._groq_settings.value("api_key", "").strip()
+        from ..utils import get_env_override
+        api_key = get_env_override(("PYMEDIA_GROQ_API_KEY", "GROQ_API_KEY")) or self._groq_settings.value("api_key", "").strip()
         target_lang = self.trans_lang_combo.currentData()
 
         self._translate_worker = TranslationWorker(

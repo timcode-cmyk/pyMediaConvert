@@ -8,6 +8,7 @@ from PySide6.QtGui import QFont
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 
 from .elevenlabs_widgets import SubtitlePreviewLabel
+from .elevenlabs_style_panel import SubtitleStylePanel
 from ..core.elevenlabs import (LibrarySearchWorker, LibraryAddWorker)
 
 class VoiceSettingsDialog(QDialog):
@@ -39,7 +40,10 @@ class VoiceSettingsDialog(QDialog):
         layout.setContentsMargins(20, 20, 20, 20)
         
         title_label = QLabel("调整语音生成参数")
-        title_label.setFont(QFont("Segoe UI", 12, QFont.Bold))
+        title_font = title_label.font()
+        title_font.setPointSize(12)
+        title_font.setBold(True)
+        title_label.setFont(title_font)
         layout.addWidget(title_label)
         
         grid_layout = QGridLayout()
@@ -201,7 +205,10 @@ class SubtitleSettingsDialog(QDialog):
         layout.setContentsMargins(15, 15, 15, 15)
         
         title_label = QLabel("字幕与样式设置")
-        title_label.setFont(QFont("Segoe UI", 14, QFont.Bold))
+        title_font = title_label.font()
+        title_font.setPointSize(14)
+        title_font.setBold(True)
+        title_label.setFont(title_font)
         layout.addWidget(title_label)
         
         self.tabs = QTabWidget()
@@ -232,17 +239,18 @@ class SubtitleSettingsDialog(QDialog):
         self.tabs.addTab(self.general_tab, "常规设置")
         
         # Style Tabs (Source, Translate, Highlight)
-        if self.parent_widget and hasattr(self.parent_widget, 'create_style_settings_panel'):
-            def wrap_with_scroll(widget):
-                scroll = QScrollArea()
-                scroll.setWidgetResizable(True)
-                scroll.setFrameShape(QFrame.NoFrame)
-                scroll.setWidget(widget)
-                return scroll
+        def wrap_with_scroll(widget):
+            scroll = QScrollArea()
+            scroll.setWidgetResizable(True)
+            scroll.setFrameShape(QFrame.NoFrame)
+            scroll.setWidget(widget)
+            return scroll
 
-            self.tabs.addTab(wrap_with_scroll(self.parent_widget.create_style_settings_panel('source')), "原文样式")
-            self.tabs.addTab(wrap_with_scroll(self.parent_widget.create_style_settings_panel('translate')), "翻译样式")
-            self.tabs.addTab(wrap_with_scroll(self.parent_widget.create_style_settings_panel('highlight')), "高亮样式")
+        for key, label in (("source", "原文样式"), ("translate", "翻译样式"), ("highlight", "高亮样式")):
+            if key in self.xml_styles:
+                panel = SubtitleStylePanel(key, self.xml_styles, self)
+                panel.style_changed.connect(self.refresh_style_preview)
+                self.tabs.addTab(wrap_with_scroll(panel), label)
         
         self.tabs.currentChanged.connect(self.on_tab_changed)
         layout.addWidget(self.tabs)
@@ -260,10 +268,19 @@ class SubtitleSettingsDialog(QDialog):
         button_box.rejected.connect(self.reject)
         layout.addWidget(button_box)
 
+    def refresh_style_preview(self, _style_type=None):
+        current_tab = self.tabs.currentIndex()
+        if 1 <= current_tab <= 3:
+            style_types = ["source", "translate", "highlight"]
+            style_type = style_types[current_tab - 1]
+            if style_type in self.xml_styles:
+                self.dialog_preview_label.update_style(self.xml_styles[style_type])
+        if self.parent_widget and hasattr(self.parent_widget, "update_preview"):
+            self.parent_widget.update_preview()
+
     def on_tab_changed(self, index):
         self.preview_group.setVisible(index > 0)
-        if self.parent_widget and hasattr(self.parent_widget, 'update_preview'):
-            self.parent_widget.update_preview()
+        self.refresh_style_preview()
             
     def save_and_accept(self):
         # Save Groq settings to QSettings

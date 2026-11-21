@@ -1,6 +1,9 @@
 import requests
+from ..logging_config import get_logger
 
-def check_latest_release(repo="secure-artifacts/pyMediaTools", current_version="1.0.0"):
+logger = get_logger(__name__)
+
+def check_latest_release(repo="timcode-cmyk/pyMediaConvert", current_version="1.0.0"):
     """
     使用 Requests 获取 GitHub 最新 Release 信息
     """
@@ -38,7 +41,7 @@ def check_latest_release(repo="secure-artifacts/pyMediaTools", current_version="
                 "assets": data.get("assets", [])
             }
     except Exception as e:
-        print(f"Update check failed: {e}")
+        logger.warning(f"Update check failed: {e}")
     
     return {
         "has_update": False,

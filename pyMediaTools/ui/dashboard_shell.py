@@ -1,8 +1,8 @@
 import os
 import sys
 from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
-                               QPushButton, QLabel, QStackedWidget, QLineEdit, QSpacerItem, 
-                               QSizePolicy, QDialog, QTextEdit, QFrame)
+                               QPushButton, QLabel, QStackedWidget, QSpacerItem, 
+                               QSizePolicy, QDialog, QTextEdit)
 from PySide6.QtCore import Qt, QSize, QPoint, QThread, Signal, Slot, QUrl
 from PySide6.QtGui import QFont, QIcon, QDesktopServices
 from pyMediaTools.core.update import check_latest_release
@@ -11,14 +11,15 @@ class UpdateCheckWorker(QThread):
     """异步检测 GitHub Release 更新"""
     finished = Signal(dict)
 
-    def __init__(self, current_version):
-        super().__init__()
+    def __init__(self, current_version, parent=None):
+        super().__init__(parent)
         self.current_version = current_version
 
     def run(self):
         # 调用核心逻辑
         info = check_latest_release(current_version=self.current_version)
-        self.finished.emit(info)
+        if not self.isInterruptionRequested():
+            self.finished.emit(info)
 
 class UpdateDialog(QDialog):
     """更新检测子窗口"""
@@ -238,61 +239,13 @@ class DashboardWindow(QMainWindow):
 
         self.header_title = QLabel("Dashboard")
         self.header_title.setObjectName("HeaderTitleText")
-        self.header_title.setFont(QFont("Segoe UI", 16, QFont.Bold))
-        
-        # --- Search Bar with Icon Styling ---
-        self.search_container = QFrame()
-        self.search_container.setObjectName("SearchContainer")
-        self.search_container.setAttribute(Qt.WA_StyledBackground, True)
-        self.search_container.setFixedWidth(320)
-        search_layout = QHBoxLayout(self.search_container)
-        search_layout.setContentsMargins(10, 0, 10, 0)
-        search_layout.setSpacing(5)
-        
-        search_icon = QLabel("Q")
-        search_icon.setStyleSheet("color: #718096; font-size: 14px;")
-        
-        self.search_bar = QLineEdit()
-        self.search_bar.setObjectName("HeaderSearch")
-        self.search_bar.setPlaceholderText("关键词查找工具...")
-        self.search_bar.setFrame(False)
-        self.search_bar.setStyleSheet("background: transparent; border: none; padding: 5px;")
-        
-        search_layout.addWidget(search_icon)
-        search_layout.addWidget(self.search_bar)
-
-        # --- Header Action Icons ---
-        actions_layout = QHBoxLayout()
-        actions_layout.setSpacing(15)
-        
-        btn_feedback = QPushButton("💬")
-        btn_feedback.setToolTip("反馈建议")
-        btn_notif = QPushButton("🔔")
-        btn_notif.setToolTip("通知中心")
-        btn_user = QPushButton("👤")
-        btn_user.setToolTip("用户中心")
-        
-        for b in [btn_feedback, btn_notif, btn_user]:
-            b.setFixedSize(32, 32)
-            b.setCursor(Qt.PointingHandCursor)
-            b.setStyleSheet("""
-                QPushButton {
-                    background-color: transparent;
-                    border-radius: 16px;
-                    font-size: 16px;
-                    color: #4A5568;
-                }
-                QPushButton:hover {
-                    background-color: rgba(0, 0, 0, 0.05);
-                }
-            """)
-            actions_layout.addWidget(b)
+        title_font = self.header_title.font()
+        title_font.setPointSize(16)
+        title_font.setBold(True)
+        self.header_title.setFont(title_font)
 
         header_layout.addWidget(self.header_title)
         header_layout.addStretch()
-        header_layout.addWidget(self.search_container)
-        header_layout.addSpacing(10)
-        header_layout.addLayout(actions_layout)
         
         # --- Windows 风格控制按钮 (放在 Header 右侧) ---
         if sys.platform != "darwin":
@@ -408,7 +361,10 @@ class DashboardWindow(QMainWindow):
 
     def check_for_updates(self):
         """启动后台更新检测"""
-        self.update_worker = UpdateCheckWorker(self.version)
+        existing = getattr(self, "update_worker", None)
+        if existing is not None and existing.isRunning():
+            return
+        self.update_worker = UpdateCheckWorker(self.version, self)
         self.update_worker.finished.connect(self.on_update_checked)
         self.update_worker.start()
 
@@ -432,7 +388,33 @@ class DashboardWindow(QMainWindow):
         """弹出全局设置面板"""
         from pyMediaTools.ui.settings_dialog import GlobalSettingsDialog
         dialog = GlobalSettingsDialog(self)
+        dialog.settings_saved.connect(self.on_settings_saved)
         dialog.exec()
+
+    def on_settings_saved(self):
+        """全局设置变更后热通知各业务模块刷新配置"""
+        for _, widget in self.modules:
+            if hasattr(widget, "reload_settings") and callable(widget.reload_settings):
+                widget.reload_settings()
+
+    def closeEvent(self, event):
+        """安全释放后台更新检测线程及模块资源"""
+        worker = getattr(self, "update_worker", None)
+        if worker is not None and worker.isRunning():
+            worker.requestInterruption()
+            try:
+                worker.finished.disconnect(self.on_update_checked)
+            except (RuntimeError, TypeError):
+                pass
+            if not worker.wait(500):
+                worker.terminate()
+                worker.wait(200)
+
+        for _, widget in self.modules:
+            if hasattr(widget, "cleanup") and callable(widget.cleanup):
+                widget.cleanup()
+
+        super().closeEvent(event)
 
     def init_stylesheet_listener(self):
         from PySide6.QtGui import QGuiApplication
@@ -446,8 +428,15 @@ class DashboardWindow(QMainWindow):
     def apply_stylesheet(self, scheme=None):
         from PySide6.QtCore import Qt
         from .qss_resources import DARK_STYLE, LIGHT_STYLE
-        
+        from .styles import apply_common_style
+
         if scheme == Qt.ColorScheme.Dark:
             self.setStyleSheet(DARK_STYLE)
         else:
             self.setStyleSheet(LIGHT_STYLE)
+
+        for _, widget in getattr(self, "modules", []):
+            if hasattr(widget, "apply_styles") and callable(widget.apply_styles):
+                widget.apply_styles()
+            else:
+                apply_common_style(widget)

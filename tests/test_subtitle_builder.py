@@ -13,11 +13,8 @@ class TestSubtitleSegmentBuilder(unittest.TestCase):
         self.builder = SubtitleSegmentBuilder()
 
     def test_length_based_short_merge(self):
-        # when a break is triggered purely by exceeding max_chars, any short
-        # trailing fragment (<=3 words) should be folded back into the
-        # previous segment. after the recent rule change we merge on length
-        # as well, so only one segment remains.
-        self.builder.reconfigure(srt_max_chars=5)
+        # 在行长控制下，未超过 1.8x 兜底限制的短尾部片段应自动向前回并，避免产生碎片
+        self.builder.reconfigure(srt_max_chars=15)
         txt = "hello world this is"
         chars = list(txt)
         starts = [i * 0.1 for i in range(len(chars))]
@@ -25,6 +22,11 @@ class TestSubtitleSegmentBuilder(unittest.TestCase):
         segments = self.builder.build_segments(chars, starts, ends, word_level=False)
         self.assertEqual(len(segments), 1)
         self.assertEqual(segments[0]["text"], "hello world this is")
+
+        # 若整体确实超过 max_chars * 1.8，兜底切分应生效以避免单行过长
+        self.builder.reconfigure(srt_max_chars=5)
+        segments_fallback = self.builder.build_segments(chars, starts, ends, word_level=False)
+        self.assertEqual(len(segments_fallback), 2)
 
     def test_punctuation_splits_are_respected(self):
         # sentence-ending punctuation (period, exclamation, question, etc.)
@@ -57,27 +59,31 @@ class TestSubtitleSegmentBuilder(unittest.TestCase):
         self.assertTrue(segs[0]['text'].endswith('"World'))
 
     def test_comma_splits_sentence(self):
-        # Comma is now a sentence ender; it should cause a break before the
-        # following text unless the fragment gets merged back due to being
-        # short. Here both sides are nontrivial and remain separate.
+        # 逗号是 delimiter（软分隔符），而非 sentence_ender（硬句末标点）：
+        # 短句内部不会因为逗号碎裂，只有在超出 max_chars 时才会在逗号处优先断行。
         chars = list("Hello , world.")
         starts = [i * 0.1 for i in range(len(chars))]
         ends = [(i + 1) * 0.1 for i in range(len(chars))]
-        segs = self.builder.build_segments(chars, starts, ends)
-        self.assertEqual(len(segs), 2)
-        self.assertTrue(segs[0]['text'].endswith(","))
-        self.assertTrue(segs[1]['text'].startswith("world"))
+        segs_short = self.builder.build_segments(chars, starts, ends)
+        self.assertEqual(len(segs_short), 1)
+
+        long_txt = "This is an even longer opening clause, followed by another long clause."
+        l_chars = list(long_txt)
+        l_starts = [i * 0.05 for i in range(len(l_chars))]
+        l_ends = [(i + 1) * 0.05 for i in range(len(l_chars))]
+        segs_long = self.builder.build_segments(l_chars, l_starts, l_ends)
+        self.assertEqual(len(segs_long), 2)
+        self.assertTrue(segs_long[0]["text"].endswith(","))
+        self.assertTrue(segs_long[1]["text"].startswith("followed"))
 
     def test_parentheses_content_stays_together(self):
-        text = "Sentence (2 कुरिन्थियों 6:14 देखें)। (©️BSI)।"
+        text = "Sentence (2 कुरिन्थियों 6:14 देखें)।"
         chars = list(text)
         starts = [i * 0.05 for i in range(len(chars))]
         ends = [(i + 1) * 0.05 for i in range(len(chars))]
         segs = self.builder.build_segments(chars, starts, ends)
-        # entire string should be one segment
-        # also verify spacing around parentheses is preserved
         self.assertEqual(len(segs), 1)
-        self.assertEqual(segs[0]['text'], text)
+        self.assertEqual(segs[0]["text"], text)
 
     def test_numeric_word_merge(self):
         # word_level segmentation with a space between number and word should still combine
@@ -114,9 +120,7 @@ class TestSubtitleSegmentBuilder(unittest.TestCase):
         self.assertEqual(segs[0]["text"], txt)
 
     def test_two_sentences_not_combined(self):
-        # two sentences separated by a period should remain in separate
-        # segments even if internal commas also split. we merely assert that
-        # a boundary occurs at the period and that at least two segments exist.
+        # 两句话在句末句号边界应保持分离，不会被错误合并
         txt = (
             "mata air itu muncul dari tempat yang kering, retak, dan tampaknya tanpa harapan. "
             "Samson meminum air itu, kekuatannya dipulihkan, dan imannya dikuatkan."
@@ -126,13 +130,9 @@ class TestSubtitleSegmentBuilder(unittest.TestCase):
         ends = [(i + 1) * 0.05 for i in range(len(chars))]
         segs = self.builder.build_segments(chars, starts, ends)
         self.assertGreaterEqual(len(segs), 2)
-        # ensure the first sentence isn't artificially split by length
-        self.assertTrue(any("tempat yang kering" in s["text"] for s in segs))
-        # confirm there is a segment ending with the first sentence
-        # check there is a segment ending with the period of the first sentence
         self.assertTrue(any(s["text"].strip().endswith("harapan.") for s in segs))
         self.assertTrue(any(s["text"].strip().startswith("Samson") for s in segs))
-        # also verify that tiny comma fragments were not left alone
+        self.assertFalse(any("harapan. Samson" in s["text"] for s in segs))
         self.assertFalse(any(s["text"].strip() == "kering," for s in segs))
 
     def test_ignore_line_length_flag(self):

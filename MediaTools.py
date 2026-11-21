@@ -2,7 +2,7 @@
 项目名称: pyMediaTools
 创建日期: 2025-12-20
 作者: timcode-cmyk
-版本: v1.16.4
+版本: v1.16.5
 描述: 基于 Python 和 PySide6 的专业媒体工具包，提供视频编辑、音频处理等一系列实用工具。
 许可证: GPL License
 
@@ -36,12 +36,16 @@
 #     nuitka-project: --include-data-files={MAIN_DIRECTORY}/bin/ffprobe=bin/ffprobe
 """
 
-__version__ = "1.16.4"
+__version__ = "1.16.5"
 __author__ = "timcode-cmyk"
 __description__ = "A professional media toolkit built with Python and PySide6, offering a suite of utilities for video editing, audio processing, and more."
 __license__ = "GPL License"
 
+import os
 import sys
+
+# 抑制 macOS Qt 字体数据库探测无害日志（如 script 12/16 OpenType support missing）
+os.environ.setdefault("QT_LOGGING_RULES", "qt.text.font.db=false")
 
 # --- 2. 编码修复 ---
 if sys.stdout and hasattr(sys.stdout, 'reconfigure'):
